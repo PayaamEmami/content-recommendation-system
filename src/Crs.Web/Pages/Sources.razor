@@ -151,12 +151,17 @@
         <div class="import-export-form">
           <p class="bulk-hint">Download your current sources as a JSON file you can keep or import later.</p>
 
+          @if (!string.IsNullOrEmpty(_loadSourcesError))
+          {
+            <div class="error-message">Can't export until your sources load successfully. @_loadSourcesError</div>
+          }
+
           @if (!string.IsNullOrEmpty(_exportSuccessMessage))
           {
             <div class="success-message">@_exportSuccessMessage</div>
           }
 
-          <button @onclick="HandleExport" class="btn-primary" disabled="@_isExporting || _sources == null || !_sources.Any()">
+          <button @onclick="HandleExport" class="btn-primary" disabled="@_isExporting || _isLoadingSources || !string.IsNullOrEmpty(_loadSourcesError) || _sources == null || !_sources.Any()">
             @(_isExporting ? "Exporting..." : "Export")
           </button>
         </div>
@@ -166,14 +171,25 @@
 
   <!-- Sources List -->
   <div class="sources-container">
-    @if (_sources == null)
+    @if (_isLoadingSources && _sources == null)
     {
       <div class="sources-loading">Loading sources...</div>
+    }
+    else if (!string.IsNullOrEmpty(_loadSourcesError))
+    {
+      <div class="sources-empty">
+        <span class="empty-icon">⚠️</span>
+        <p>Couldn't load your sources</p>
+        <span class="empty-hint">@_loadSourcesError</span>
+        <div style="margin-top: 1rem;">
+          <button class="btn-secondary" @onclick="LoadSources" disabled="@_isLoadingSources">Retry</button>
+        </div>
+      </div>
     }
     else if (!_filteredSources.Any())
     {
       <div class="sources-empty">
-        @if (!_sources.Any())
+        @if (_sources is { Count: 0 })
         {
           <span class="empty-icon">📚</span>
           <p>No sources yet</p>
@@ -301,6 +317,8 @@
   private ImportResultModel? _importResult;
   private bool _isExporting;
   private string? _exportSuccessMessage;
+  private bool _isLoadingSources;
+  private string? _loadSourcesError;
 
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
@@ -332,9 +350,21 @@
 
   private async Task LoadSources()
   {
-    _sources = await SourceService.GetUserSourcesAsync();
-    ApplyFilter();
-    StateHasChanged();
+    _isLoadingSources = true;
+    _loadSourcesError = null;
+
+    try
+    {
+      var result = await SourceService.GetUserSourcesResultAsync();
+      _sources = result.Sources;
+      _loadSourcesError = result.IsSuccess ? null : result.ErrorMessage;
+      ApplyFilter();
+    }
+    finally
+    {
+      _isLoadingSources = false;
+      StateHasChanged();
+    }
   }
 
   private void ApplyFilter()

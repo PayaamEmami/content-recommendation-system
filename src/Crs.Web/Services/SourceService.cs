@@ -82,20 +82,26 @@ public class SourceService
 
     public async Task<List<SourceItem>> GetUserSourcesAsync()
     {
+        var result = await GetUserSourcesResultAsync();
+        return result.Sources;
+    }
+
+    public async Task<SourceLoadResult> GetUserSourcesResultAsync()
+    {
         try
         {
             var response = await SendAuthorizedAsync(() => _httpClient.GetAsync("/api/v1/sources"));
             if (response == null)
             {
                 _logger.LogWarning("User not authenticated, cannot fetch sources");
-                return new List<SourceItem>();
+                return SourceLoadResult.Failure("Your session expired. Please sign in again.");
             }
 
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
                 _logger.LogWarning("Failed to fetch sources: {StatusCode} - {Error}", response.StatusCode, errorContent);
-                return new List<SourceItem>();
+                return SourceLoadResult.Failure("Couldn't load your sources right now. Please try again.");
             }
 
             var sources = await response.Content.ReadFromJsonAsync<List<SourceResponse>>(JsonOptions);
@@ -103,12 +109,12 @@ public class SourceService
             if (sources == null)
             {
                 _logger.LogWarning("Sources response was null");
-                return new List<SourceItem>();
+                return SourceLoadResult.Failure("Received an empty response while loading sources.");
             }
 
             _logger.LogInformation("Successfully fetched {Count} sources from API", sources.Count);
 
-            return sources.Select(s => new SourceItem
+            return SourceLoadResult.Success(sources.Select(s => new SourceItem
             {
                 Id = s.Id,
                 UserId = s.UserId,
@@ -120,12 +126,12 @@ public class SourceService
                 CreatedAt = s.CreatedAt,
                 LastFetchedAt = s.LastFetchedAt,
                 ContentCount = s.ContentCount
-            }).OrderBy(s => s.Name).ToList();
+            }).OrderBy(s => s.Name).ToList());
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching sources");
-            return new List<SourceItem>();
+            return SourceLoadResult.Failure("Couldn't load your sources right now. Please try again.");
         }
     }
 
@@ -458,6 +464,26 @@ public class SourceExportItem
     public string Url { get; set; } = string.Empty;
     public ContentType Category { get; set; }
     public string? Description { get; set; }
+}
+
+public sealed class SourceLoadResult
+{
+    public required bool IsSuccess { get; init; }
+    public required List<SourceItem> Sources { get; init; }
+    public string? ErrorMessage { get; init; }
+
+    public static SourceLoadResult Success(List<SourceItem> sources) => new()
+    {
+        IsSuccess = true,
+        Sources = sources
+    };
+
+    public static SourceLoadResult Failure(string errorMessage) => new()
+    {
+        IsSuccess = false,
+        Sources = new List<SourceItem>(),
+        ErrorMessage = errorMessage
+    };
 }
 
 internal sealed class NoOpJsRuntime : IJSRuntime

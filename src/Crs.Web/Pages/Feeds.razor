@@ -23,6 +23,19 @@
             {
                 <p>Checking your sources...</p>
             }
+            else if (!string.IsNullOrEmpty(_sourcesLoadError))
+            {
+                <div class="empty-state" style="text-align: center; padding: 3rem 1rem;">
+                    <h2 style="margin-bottom: 1rem; color: var(--text-primary);">Couldn't Load Your Sources</h2>
+                    <p style="margin-bottom: 0.5rem; color: var(--text-secondary);">
+                        @_sourcesLoadError
+                    </p>
+                    <p style="margin-bottom: 2rem; color: var(--text-secondary);">
+                        Once your sources load successfully, we'll be able to show the right next step here.
+                    </p>
+                    <a href="/sources" class="btn-primary">Go To Sources</a>
+                </div>
+            }
             else if (!_sources.Any())
             {
                 <div class="empty-state" style="text-align: center; padding: 3rem 1rem;">
@@ -222,6 +235,7 @@
 @code {
     private List<ContentItem>? _content;
     private List<SourceItem>? _sources;
+    private string? _sourcesLoadError;
     private Dictionary<ContentType, List<ContentItem>> _contentByType = new();
     private Dictionary<Guid, VoteType> _userVotes = new();
     private readonly Dictionary<Guid, VoteType> _serverVotes = new();
@@ -456,7 +470,13 @@
         // Only check for sources if we have no content to show appropriate message
         if (_content == null || !_content.Any())
         {
-            _sources = await SourceService.GetUserSourcesAsync();
+            var sourcesResult = await SourceService.GetUserSourcesResultAsync();
+            _sources = sourcesResult.Sources;
+            _sourcesLoadError = sourcesResult.IsSuccess ? null : sourcesResult.ErrorMessage;
+        }
+        else
+        {
+            _sourcesLoadError = null;
         }
 
         StateHasChanged();
