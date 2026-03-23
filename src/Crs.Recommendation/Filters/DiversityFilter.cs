@@ -18,6 +18,7 @@ public class DiversityFilter : IRecommendationFilter
     {
         var sourceCounts = new Dictionary<Guid, int>();
         var diversified = new List<ScoredContent>();
+        var overflowCandidates = new List<ScoredContent>();
 
         // Sort by score descending (best first)
         var sortedCandidates = candidates.OrderByDescending(sr => sr.FinalScore).ToList();
@@ -33,17 +34,11 @@ public class DiversityFilter : IRecommendationFilter
                 // Check if source is at max count
                 if (currentCount >= MaxPerSource)
                 {
-                    continue; // Skip this content
+                    overflowCandidates.Add(candidate);
+                    continue;
                 }
 
-                // Add this content
-                diversified.Add(candidate);
-                sourceCounts[sourceId] = currentCount + 1;
-
-                // Apply small diversity penalty to score (for transparency)
-                var diversityPenalty = CalculateDiversityPenalty(currentCount);
-                candidate.Scores["diversity_penalty"] = diversityPenalty;
-                candidate.FinalScore -= diversityPenalty;
+                AddCandidate(candidate, sourceCounts, diversified);
             }
             else
             {
@@ -52,10 +47,43 @@ public class DiversityFilter : IRecommendationFilter
             }
         }
 
+        // If the diversity pass underfills the feed, backfill with the best
+        // remaining candidates rather than returning a short feed.
+        foreach (var candidate in overflowCandidates)
+        {
+            if (diversified.Count >= context.Count)
+            {
+                break;
+            }
+
+            AddCandidate(candidate, sourceCounts, diversified);
+        }
+
         return Task.FromResult(diversified);
     }
 
-    private double CalculateDiversityPenalty(int currentCount)
+    private static void AddCandidate(
+        ScoredContent candidate,
+        IDictionary<Guid, int> sourceCounts,
+        ICollection<ScoredContent> diversified)
+    {
+        if (candidate.Content.SourceId.HasValue)
+        {
+            var sourceId = candidate.Content.SourceId.Value;
+            var currentCount = sourceCounts.TryGetValue(sourceId, out var existingCount)
+                ? existingCount
+                : 0;
+            var diversityPenalty = CalculateDiversityPenalty(currentCount);
+
+            candidate.Scores["diversity_penalty"] = diversityPenalty;
+            candidate.FinalScore -= diversityPenalty;
+            sourceCounts[sourceId] = currentCount + 1;
+        }
+
+        diversified.Add(candidate);
+    }
+
+    private static double CalculateDiversityPenalty(int currentCount)
     {
         // Penalize sources that are becoming overrepresented
         return currentCount switch
@@ -67,4 +95,3 @@ public class DiversityFilter : IRecommendationFilter
         };
     }
 }
-
