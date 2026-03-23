@@ -54,7 +54,7 @@ public class XApiClientTests
             ""access_token"": ""test-access-token"",
             ""refresh_token"": ""test-refresh-token"",
             ""expires_in"": 7200,
-            ""scope"": ""users.read offline.access"",
+            ""scope"": ""tweet.read users.read follows.read offline.access"",
             ""token_type"": ""bearer""
         }";
 
@@ -80,7 +80,7 @@ public class XApiClientTests
         Assert.AreEqual("test-access-token", result.AccessToken);
         Assert.AreEqual("test-refresh-token", result.RefreshToken);
         Assert.AreEqual(7200, result.ExpiresIn);
-        Assert.AreEqual("users.read offline.access", result.Scope);
+        Assert.AreEqual("tweet.read users.read follows.read offline.access", result.Scope);
         Assert.AreEqual("bearer", result.TokenType);
     }
 
@@ -126,7 +126,7 @@ public class XApiClientTests
             ""access_token"": ""new-access-token"",
             ""refresh_token"": ""new-refresh-token"",
             ""expires_in"": 7200,
-            ""scope"": ""users.read offline.access"",
+            ""scope"": ""tweet.read users.read follows.read offline.access"",
             ""token_type"": ""bearer""
         }";
 

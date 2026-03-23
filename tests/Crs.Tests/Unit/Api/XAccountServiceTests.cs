@@ -83,6 +83,7 @@ public sealed class XAccountServiceTests
         Assert.IsTrue(url.StartsWith("https://x.com/oauth2?", StringComparison.Ordinal));
         Assert.IsTrue(url.Contains("client_id=client", StringComparison.Ordinal));
         Assert.IsTrue(url.Contains("redirect_uri=https%3A%2F%2Fapp.example.com%2Fcallback", StringComparison.Ordinal));
+        Assert.IsTrue(url.Contains("scope=tweet.read%20users.read%20follows.read%20offline.access", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -138,7 +139,7 @@ public sealed class XAccountServiceTests
                 AccessToken = "access",
                 RefreshToken = "refresh",
                 ExpiresIn = 3600,
-                Scope = "users.read"
+                Scope = "tweet.read users.read follows.read offline.access"
             });
         xApiClient.Setup(client => client.GetCurrentUserAsync("access", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new XUserProfile { XUserId = "x-user", Handle = "handle", DisplayName = "Name" });
@@ -154,6 +155,47 @@ public sealed class XAccountServiceTests
 
         Assert.IsNotNull(storedConnection);
         Assert.AreEqual(userId, storedConnection!.UserId);
+    }
+
+    [TestMethod]
+    public async Task HandleCallbackAsync_WhenTokenMissingTweetRead_ThrowsHelpfulError()
+    {
+        var settings = new XApiSettings
+        {
+            ClientId = "client",
+            RedirectUri = "https://app.example.com/callback",
+            AuthorizationUrl = "https://x.com/oauth2"
+        };
+
+        XAuthState? capturedState = null;
+        var authStateRepo = new Mock<IXAuthStateRepository>(MockBehavior.Strict);
+        authStateRepo.Setup(x => x.RemoveExpiredAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        authStateRepo.Setup(x => x.AddAsync(It.IsAny<XAuthState>(), It.IsAny<CancellationToken>()))
+            .Callback<XAuthState, CancellationToken>((s, _) => capturedState = s)
+            .Returns(Task.CompletedTask);
+        authStateRepo.Setup(x => x.GetAndRemoveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string state, CancellationToken _) =>
+                capturedState != null && capturedState.State == state ? capturedState : null);
+
+        var service = CreateService(settings, out _, out _, out _, out _, out var xApiClient, authStateRepo);
+        var userId = Guid.NewGuid();
+
+        var url = await service.CreateConnectUrlAsync(userId, null, CancellationToken.None);
+        var state = ExtractQueryValue(url, "state");
+
+        xApiClient.Setup(client => client.ExchangeCodeAsync("code", It.IsAny<string>(), settings.RedirectUri, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new XTokenResponse
+            {
+                AccessToken = "access",
+                RefreshToken = "refresh",
+                ExpiresIn = 3600,
+                Scope = "users.read follows.read offline.access"
+            });
+
+        var ex = await TestAssert.ThrowsAsync<InvalidOperationException>(() =>
+            service.HandleCallbackAsync(userId, "code", state, CancellationToken.None));
+
+        StringAssert.Contains(ex.Message, "tweet.read");
     }
 
     [TestMethod]

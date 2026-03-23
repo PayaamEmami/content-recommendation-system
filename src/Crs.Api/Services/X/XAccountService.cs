@@ -13,6 +13,9 @@ namespace Crs.Api.Services;
 /// </summary>
 public class XAccountService : IXAccountService
 {
+    private static readonly string[] RequiredConnectionScopes = ["tweet.read", "users.read"];
+    private static readonly string[] RequiredFollowScopes = ["tweet.read", "users.read", "follows.read"];
+
     private readonly IXConnectionRepository _connectionRepository;
     private readonly IXAuthStateRepository _authStateRepository;
     private readonly IXFollowedAccountRepository _followedAccountRepository;
@@ -106,6 +109,7 @@ public class XAccountService : IXAccountService
             _logger.LogInformation("X OAuth token scopes: {Scopes}", token.Scope);
         }
 
+        EnsureRequiredScopes(token.Scope, RequiredConnectionScopes, "retrieve the authenticated user profile");
         _logger.LogInformation("Fetching current X profile for user {UserId}", userId);
         var profile = await _xApiClient.GetCurrentUserAsync(token.AccessToken, cancellationToken);
 
@@ -208,6 +212,7 @@ public class XAccountService : IXAccountService
             await _connectionRepository.UpsertAsync(connection, cancellationToken);
         }
 
+        EnsureRequiredScopes(connection.Scopes, RequiredFollowScopes, "read followed X accounts");
         return new ValidConnection
         {
             XUserId = connection.XUserId,
@@ -250,6 +255,29 @@ public class XAccountService : IXAccountService
     {
         return string.Join("&", parameters.Select(kvp =>
             $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
+    }
+
+    private void EnsureRequiredScopes(string? grantedScopes, IEnumerable<string> requiredScopes, string operation)
+    {
+        var granted = new HashSet<string>(
+            (grantedScopes ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            StringComparer.Ordinal);
+        var missing = requiredScopes.Where(scope => !granted.Contains(scope)).ToArray();
+        if (missing.Length == 0)
+        {
+            return;
+        }
+
+        var grantedDisplay = string.IsNullOrWhiteSpace(grantedScopes) ? "<none>" : grantedScopes;
+        _logger.LogError(
+            "X OAuth token is missing required scopes for {Operation}. Missing: {MissingScopes}. Granted: {GrantedScopes}",
+            operation,
+            string.Join(", ", missing),
+            grantedDisplay);
+
+        throw new InvalidOperationException(
+            $"X OAuth token is missing required scope(s) for {operation}: {string.Join(", ", missing)}. " +
+            $"Granted scopes: {grantedDisplay}. Update the X app scopes and reconnect the account.");
     }
 
     private class ValidConnection
