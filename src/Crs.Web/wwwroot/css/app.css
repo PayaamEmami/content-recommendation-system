@@ -928,14 +928,53 @@ textarea.form-input {
     margin-bottom: 1rem;
 }
 
-.import-upload-row {
+.import-section {
     margin-bottom: 1rem;
+}
+
+.import-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.35rem;
+}
+
+.import-section-title {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.import-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1rem 0;
+    color: var(--text-tertiary);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.import-divider::before,
+.import-divider::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    background-color: var(--border-color);
 }
 
 .file-input {
     display: block;
     width: 100%;
     margin-bottom: 0.5rem;
+}
+
+.import-file-status {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
 }
 
 .import-results {

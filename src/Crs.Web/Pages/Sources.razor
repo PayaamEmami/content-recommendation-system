@@ -4,7 +4,6 @@
 @inject SourceService SourceService
 @inject ThemeService ThemeService
 @inject NavigationManager Navigation
-@inject IJSRuntime JSRuntime
 @implements IDisposable
 
 <PageTitle>My Sources - CRS</PageTitle>
@@ -75,23 +74,31 @@
     else if (_activeTab == "import")
     {
       <div class="import-export-form">
-          <p class="bulk-hint">Paste a JSON object containing a <code>sources</code> array. <button type="button" class="link-btn"
-              @onclick="() => _showJsonExample = !_showJsonExample">@(_showJsonExample ? "Hide" : "Show") format</button>
-          </p>
-
-          <div class="import-upload-row">
-            <label for="source-import-file" class="bulk-hint">Or choose a JSON file</label>
+          <div class="import-section">
+            <label for="source-import-file" class="import-section-title">Upload JSON File</label>
+            <p class="bulk-hint">Choose a CRS export file or another JSON file with a <code>sources</code> array.</p>
             <InputFile id="source-import-file" OnChange="HandleImportFileSelected" accept=".json,application/json" class="file-input" />
             @if (!string.IsNullOrEmpty(_importFileName))
             {
-              <div class="bulk-hint">Loaded file: @_importFileName</div>
+              <div class="import-file-status">Loaded file: @_importFileName</div>
             }
           </div>
 
-          @if (_showJsonExample)
-          {
-            <pre class="json-example">@ImportJsonExample</pre>
-          }
+          <div class="import-divider">or paste JSON</div>
+
+          <div class="import-section">
+            <div class="import-section-header">
+              <label for="source-import-json" class="import-section-title">Paste JSON</label>
+              <button type="button" class="link-btn"
+                @onclick="() => _showJsonExample = !_showJsonExample">@(_showJsonExample ? "Hide" : "Show") format</button>
+            </div>
+            <p class="bulk-hint">Paste a JSON object containing a <code>sources</code> array.</p>
+
+            @if (_showJsonExample)
+            {
+              <pre class="json-example">@ImportJsonExample</pre>
+            }
+          </div>
 
           @if (!string.IsNullOrEmpty(_importError))
           {
@@ -102,7 +109,7 @@
             <div class="success-message">@_importSuccess</div>
           }
 
-          <textarea @bind="_importJson" class="form-input bulk-textarea" rows="6"
+          <textarea id="source-import-json" @bind="_importJson" class="form-input bulk-textarea" rows="8"
             placeholder="@ImportJsonExample"></textarea>
 
           <button @onclick="HandleImport" class="btn-primary" disabled="@_isImporting">
@@ -320,56 +327,45 @@
   private string? _exportSuccessMessage;
   private bool _isLoadingSources = true;
   private string? _loadSourcesError;
-  private int _renderCount;
   private bool HasLoadedSources => _sources != null && _sources.Count > 0;
   private bool CanExport => !_isExporting && HasLoadedSources;
 
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
-    _renderCount++;
-
     if (firstRender)
     {
       await ThemeService.InitializeAsync();
     }
-
-    await LogDebugAsync($"OnAfterRenderAsync(firstRender={firstRender})");
   }
 
   protected override async Task OnInitializedAsync()
   {
-    await LogDebugAsync("OnInitializedAsync:start");
     await AuthService.InitializeAsync();
 
     if (!AuthService.CurrentState.IsAuthenticated)
     {
-      await LogDebugAsync("OnInitializedAsync:not-authenticated");
       Navigation.NavigateTo("/login");
       return;
     }
 
     AuthService.OnAuthStateChanged += HandleAuthStateChanged;
     await LoadSources();
-    await LogDebugAsync("OnInitializedAsync:completed");
   }
 
   private async Task LoadSources()
   {
     _isLoadingSources = true;
     _loadSourcesError = null;
-    await LogDebugAsync("LoadSources:start");
 
     try
     {
       var result = await SourceService.GetUserSourcesResultAsync();
       _sources = result.Sources;
       _loadSourcesError = result.IsSuccess ? null : result.ErrorMessage;
-      await LogDebugAsync($"LoadSources:result isSuccess={result.IsSuccess}");
     }
     finally
     {
       _isLoadingSources = false;
-      await LogDebugAsync("LoadSources:before-StateHasChanged");
       StateHasChanged();
     }
   }
@@ -478,7 +474,11 @@
       {
         _importSuccess = $"Imported {result.Imported} source(s)";
         await LoadSources();
-        if (result.Failed == 0) _importJson = "";
+        if (result.Failed == 0)
+        {
+          _importJson = "";
+          _importFileName = null;
+        }
       }
 
       if (result.Failed > 0)
@@ -529,11 +529,8 @@
 
   private async Task HandleExport()
   {
-    await LogDebugAsync("HandleExport:clicked");
-
     if (!HasLoadedSources || _sources == null)
     {
-      await LogDebugAsync("HandleExport:blocked");
       return;
     }
 
@@ -561,11 +558,7 @@
 
   private void SetTabSingle() => _activeTab = "single";
   private void SetTabImport() => _activeTab = "import";
-  private void SetTabExport()
-  {
-    _activeTab = "export";
-    _ = LogDebugAsync("SetTabExport");
-  }
+  private void SetTabExport() => _activeTab = "export";
 
   private static string GetContentTypeDisplay(ContentType type) => type switch
   {
@@ -598,15 +591,6 @@
     if (span.TotalDays < 1) return $"{(int)span.TotalHours}h ago";
     if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
     return date.ToString("MMM d");
-  }
-
-  private ValueTask LogDebugAsync(string scope)
-  {
-    var sourceCount = _sources?.Count ?? 0;
-    var message =
-      $"[SourcesDebug] {scope} | renderCount={_renderCount} | activeTab={_activeTab} | sourceCount={sourceCount} | hasLoadedSources={HasLoadedSources} | canExport={CanExport} | isLoadingSources={_isLoadingSources} | isExporting={_isExporting} | loadSourcesError={_loadSourcesError ?? "<null>"}";
-
-    return JSRuntime.InvokeVoidAsync("console.debug", message);
   }
 
   public void Dispose()
