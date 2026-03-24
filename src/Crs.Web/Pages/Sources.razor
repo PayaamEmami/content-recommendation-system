@@ -4,6 +4,7 @@
 @inject SourceService SourceService
 @inject ThemeService ThemeService
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 @implements IDisposable
 
 <PageTitle>My Sources - CRS</PageTitle>
@@ -12,7 +13,7 @@
   <div class="add-source-panel">
     <div class="add-source-tabs">
       <button type="button" class="tab-btn @(_activeTab == "single" ? "active" : "")" @onclick="SetTabSingle">
-        Single Source
+        Add Source
       </button>
       <button type="button" class="tab-btn @(_activeTab == "import" ? "active" : "")" @onclick="SetTabImport">
         Import
@@ -319,45 +320,56 @@
   private string? _exportSuccessMessage;
   private bool _isLoadingSources = true;
   private string? _loadSourcesError;
+  private int _renderCount;
   private bool HasLoadedSources => _sources != null && _sources.Count > 0;
   private bool CanExport => !_isExporting && HasLoadedSources;
 
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
+    _renderCount++;
+
     if (firstRender)
     {
       await ThemeService.InitializeAsync();
     }
+
+    await LogDebugAsync($"OnAfterRenderAsync(firstRender={firstRender})");
   }
 
   protected override async Task OnInitializedAsync()
   {
+    await LogDebugAsync("OnInitializedAsync:start");
     await AuthService.InitializeAsync();
 
     if (!AuthService.CurrentState.IsAuthenticated)
     {
+      await LogDebugAsync("OnInitializedAsync:not-authenticated");
       Navigation.NavigateTo("/login");
       return;
     }
 
     AuthService.OnAuthStateChanged += HandleAuthStateChanged;
     await LoadSources();
+    await LogDebugAsync("OnInitializedAsync:completed");
   }
 
   private async Task LoadSources()
   {
     _isLoadingSources = true;
     _loadSourcesError = null;
+    await LogDebugAsync("LoadSources:start");
 
     try
     {
       var result = await SourceService.GetUserSourcesResultAsync();
       _sources = result.Sources;
       _loadSourcesError = result.IsSuccess ? null : result.ErrorMessage;
+      await LogDebugAsync($"LoadSources:result isSuccess={result.IsSuccess}");
     }
     finally
     {
       _isLoadingSources = false;
+      await LogDebugAsync("LoadSources:before-StateHasChanged");
       StateHasChanged();
     }
   }
@@ -517,8 +529,11 @@
 
   private async Task HandleExport()
   {
+    await LogDebugAsync("HandleExport:clicked");
+
     if (!HasLoadedSources || _sources == null)
     {
+      await LogDebugAsync("HandleExport:blocked");
       return;
     }
 
@@ -546,7 +561,11 @@
 
   private void SetTabSingle() => _activeTab = "single";
   private void SetTabImport() => _activeTab = "import";
-  private void SetTabExport() => _activeTab = "export";
+  private void SetTabExport()
+  {
+    _activeTab = "export";
+    _ = LogDebugAsync("SetTabExport");
+  }
 
   private static string GetContentTypeDisplay(ContentType type) => type switch
   {
@@ -579,6 +598,15 @@
     if (span.TotalDays < 1) return $"{(int)span.TotalHours}h ago";
     if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
     return date.ToString("MMM d");
+  }
+
+  private ValueTask LogDebugAsync(string scope)
+  {
+    var sourceCount = _sources?.Count ?? 0;
+    var message =
+      $"[SourcesDebug] {scope} | renderCount={_renderCount} | activeTab={_activeTab} | sourceCount={sourceCount} | hasLoadedSources={HasLoadedSources} | canExport={CanExport} | isLoadingSources={_isLoadingSources} | isExporting={_isExporting} | loadSourcesError={_loadSourcesError ?? "<null>"}";
+
+    return JSRuntime.InvokeVoidAsync("console.debug", message);
   }
 
   public void Dispose()
