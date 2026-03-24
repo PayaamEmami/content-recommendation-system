@@ -9,90 +9,71 @@
 <PageTitle>My Sources - CRS</PageTitle>
 
 <div class="page-container">
-  <div class="sources-toolbar">
-    <button type="button" class="manage-sources-btn" @onclick="() => _showAddForm = !_showAddForm"
-      aria-expanded="@_showAddForm">
-      @if (_showAddForm)
-      {
-        <span>Close</span>
-        <UiSvgIcon Kind="SvgIconKind.Close" Class="manage-sources-btn__icon" />
-      }
-      else
-      {
-        <span>Manage Sources</span>
-        <UiSvgIcon Kind="SvgIconKind.ChevronDown" Class="manage-sources-btn__icon manage-sources-btn__chevron" />
-      }
-    </button>
-  </div>
+  <div class="add-source-panel">
+    <div class="add-source-tabs">
+      <button type="button" class="tab-btn @(_activeTab == "single" ? "active" : "")" @onclick="SetTabSingle">
+        Single Source
+      </button>
+      <button type="button" class="tab-btn @(_activeTab == "import" ? "active" : "")" @onclick="SetTabImport">
+        Import
+      </button>
+      <button type="button" class="tab-btn @(_activeTab == "export" ? "active" : "")" @onclick="SetTabExport">
+        Export
+      </button>
+    </div>
 
-  <!-- Add Source Panel (collapsible) -->
-  @if (_showAddForm)
-  {
-    <div class="add-source-panel">
-      <div class="add-source-tabs">
-        <button class="tab-btn @(_activeTab == "single" ? "active" : "")" @onclick="SetTabSingle">
-          Single Source
-        </button>
-        <button class="tab-btn @(_activeTab == "import" ? "active" : "")" @onclick="SetTabImport">
-          Import
-        </button>
-        <button class="tab-btn @(_activeTab == "export" ? "active" : "")" @onclick="SetTabExport">
-          Export
-        </button>
-      </div>
+    @if (_activeTab == "single")
+    {
+      <div class="add-source-form">
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+          <div class="error-message">@_errorMessage</div>
+        }
+        @if (!string.IsNullOrEmpty(_successMessage))
+        {
+          <div class="success-message">@_successMessage</div>
+        }
 
-      @if (_activeTab == "single")
-      {
-        <div class="add-source-form">
-          @if (!string.IsNullOrEmpty(_errorMessage))
-          {
-            <div class="error-message">@_errorMessage</div>
-          }
-          @if (!string.IsNullOrEmpty(_successMessage))
-          {
-            <div class="success-message">@_successMessage</div>
-          }
-
-          <EditForm Model="@_newSource" OnValidSubmit="HandleAddSource">
-            <DataAnnotationsValidator />
-            <div class="form-grid">
-              <div class="form-group">
-                <label for="name">Name</label>
-                <InputText id="name" @bind-Value="_newSource.Name" class="form-input" placeholder="e.g. ArXiv AI Papers" />
-                <ValidationMessage For="@(() => _newSource.Name)" />
-              </div>
-              <div class="form-group">
-                <label for="category">Category</label>
-                <InputSelect id="category" @bind-Value="_newSource.Category" class="form-input">
-                  <option value="">Select...</option>
-                  @foreach (var type in Enum.GetValues<ContentType>())
-                  {
-                    <option value="@type">@GetContentTypeDisplay(type)</option>
-                  }
-                </InputSelect>
-                <ValidationMessage For="@(() => _newSource.Category)" />
-              </div>
-              <div class="form-group form-group-wide">
-                <label for="url">URL</label>
-                <InputText id="url" @bind-Value="_newSource.Url" class="form-input"
-                  placeholder="https://example.com/feed" />
-                <ValidationMessage For="@(() => _newSource.Url)" />
-              </div>
-              <div class="form-group form-group-wide">
-                <label for="description">Description <span class="optional">(optional)</span></label>
-                <InputText id="description" @bind-Value="_newSource.Description" class="form-input"
-                  placeholder="Brief description" />
-              </div>
+        <EditForm Model="@_newSource" OnValidSubmit="HandleAddSource">
+          <DataAnnotationsValidator />
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="name">Name</label>
+              <InputText id="name" @bind-Value="_newSource.Name" class="form-input" placeholder="e.g. ArXiv AI Papers" />
+              <ValidationMessage For="@(() => _newSource.Name)" />
             </div>
-            <button type="submit" class="btn-primary" disabled="@_isLoading">
-              @(_isLoading ? "Adding..." : "Add Source")
-            </button>
-          </EditForm>
-        </div>
-      }
-      else if (_activeTab == "import")
-      {
-        <div class="import-export-form">
+            <div class="form-group">
+              <label for="category">Category</label>
+              <InputSelect id="category" @bind-Value="_newSource.Category" class="form-input">
+                <option value="">Select...</option>
+                @foreach (var type in Enum.GetValues<ContentType>())
+                {
+                  <option value="@type">@GetContentTypeDisplay(type)</option>
+                }
+              </InputSelect>
+              <ValidationMessage For="@(() => _newSource.Category)" />
+            </div>
+            <div class="form-group form-group-wide">
+              <label for="url">URL</label>
+              <InputText id="url" @bind-Value="_newSource.Url" class="form-input"
+                placeholder="https://example.com/feed" />
+              <ValidationMessage For="@(() => _newSource.Url)" />
+            </div>
+            <div class="form-group form-group-wide">
+              <label for="description">Description <span class="optional">(optional)</span></label>
+              <InputText id="description" @bind-Value="_newSource.Description" class="form-input"
+                placeholder="Brief description" />
+            </div>
+          </div>
+          <button type="submit" class="btn-primary" disabled="@_isLoading">
+            @(_isLoading ? "Adding..." : "Add Source")
+          </button>
+        </EditForm>
+      </div>
+    }
+    else if (_activeTab == "import")
+    {
+      <div class="import-export-form">
           <p class="bulk-hint">Paste JSON array of sources. <button type="button" class="link-btn"
               @onclick="() => _showJsonExample = !_showJsonExample">@(_showJsonExample ? "Hide" : "Show") format</button>
           </p>
@@ -158,7 +139,6 @@
         </div>
       }
     </div>
-  }
 
   <!-- Sources List -->
   <div class="sources-container">
@@ -189,10 +169,10 @@
         <span class="empty-hint">Add your first source to get started</span>
       </div>
     }
-    else
+    else if (_sources != null && _sources.Count > 0)
     {
       <div class="sources-table">
-        @foreach (var source in _sources!)
+        @foreach (var source in _sources)
         {
           <div class="source-row @(source.IsActive ? "" : "inactive") @(_editingSourceId == source.Id ? "editing" : "")">
             @if (_editingSourceId == source.Id)
@@ -286,6 +266,10 @@
         }
       </div>
     }
+    else
+    {
+      <div class="sources-loading">Loading sources...</div>
+    }
   </div>
 </div>
 
@@ -298,7 +282,6 @@
   private string? _editErrorMessage;
   private bool _isLoading;
   private Guid? _editingSourceId;
-  private bool _showAddForm;
   private string _activeTab = "single";
   private bool _showJsonExample;
 
@@ -310,7 +293,7 @@
   private ImportResultModel? _importResult;
   private bool _isExporting;
   private string? _exportSuccessMessage;
-  private bool _isLoadingSources;
+  private bool _isLoadingSources = true;
   private string? _loadSourcesError;
 
   protected override async Task OnAfterRenderAsync(bool firstRender)

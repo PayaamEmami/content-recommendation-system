@@ -816,43 +816,6 @@ textarea.form-input {
    Sources Page - Clean Design
    ============================================ */
 
-.sources-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 1.5rem;
-}
-
-.manage-sources-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    background-color: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.manage-sources-btn:hover {
-    background-color: var(--bg-tertiary);
-    border-color: var(--text-tertiary);
-}
-
-.manage-sources-btn__icon {
-    width: 1.125rem;
-    height: 1.125rem;
-    flex-shrink: 0;
-    color: var(--text-secondary);
-}
-
-.manage-sources-btn:hover .manage-sources-btn__icon {
-    color: var(--text-primary);
-}
-
 .ui-svg {
     display: block;
 }
@@ -1219,15 +1182,6 @@ textarea.form-input {
 
 /* Responsive */
 @media (max-width: 768px) {
-    .sources-toolbar {
-        justify-content: stretch;
-    }
-
-    .manage-sources-btn {
-        width: 100%;
-        justify-content: center;
-    }
-
     .add-source-form .form-grid {
         grid-template-columns: 1fr;
     }
