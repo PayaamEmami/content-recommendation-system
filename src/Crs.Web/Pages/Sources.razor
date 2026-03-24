@@ -78,6 +78,15 @@
               @onclick="() => _showJsonExample = !_showJsonExample">@(_showJsonExample ? "Hide" : "Show") format</button>
           </p>
 
+          <div class="import-upload-row">
+            <label for="source-import-file" class="bulk-hint">Or choose a JSON file</label>
+            <InputFile id="source-import-file" OnChange="HandleImportFileSelected" accept=".json,application/json" class="file-input" />
+            @if (!string.IsNullOrEmpty(_importFileName))
+            {
+              <div class="bulk-hint">Loaded file: @_importFileName</div>
+            }
+          </div>
+
           @if (_showJsonExample)
           {
             <pre class="json-example">@ImportJsonExample</pre>
@@ -120,7 +129,7 @@
         <div class="import-export-form">
           <p class="bulk-hint">Download your current sources as a JSON file you can keep or import later.</p>
 
-          @if (!string.IsNullOrEmpty(_loadSourcesError))
+          @if (!HasLoadedSources && !string.IsNullOrEmpty(_loadSourcesError))
           {
             <div class="error-message">Can't export until your sources load successfully. @_loadSourcesError</div>
           }
@@ -130,7 +139,7 @@
             <div class="success-message">@_exportSuccessMessage</div>
           }
 
-          <button @onclick="HandleExport" class="btn-primary" disabled="@_isExporting || _sources == null || !_sources.Any()">
+          <button type="button" @onclick="HandleExport" class="btn-primary" disabled="@(!CanExport)">
             @(_isExporting ? "Exporting..." : "Export")
           </button>
         </div>
@@ -166,10 +175,10 @@
         <span class="empty-hint">Add your first source to get started</span>
       </div>
     }
-    else if (_sources != null && _sources.Count > 0)
+    else if (HasLoadedSources)
     {
       <div class="sources-table">
-        @foreach (var source in _sources)
+        @foreach (var source in _sources!)
         {
           <div class="source-row @(source.IsActive ? "" : "inactive") @(_editingSourceId == source.Id ? "editing" : "")">
             @if (_editingSourceId == source.Id)
@@ -297,17 +306,21 @@
   private Guid? _editingSourceId;
   private string _activeTab = "single";
   private bool _showJsonExample;
+  private const long MaxImportFileSizeBytes = 1024 * 1024;
 
   // Import fields
   private string _importJson = "";
   private string? _importError;
   private string? _importSuccess;
+  private string? _importFileName;
   private bool _isImporting;
   private ImportResultModel? _importResult;
   private bool _isExporting;
   private string? _exportSuccessMessage;
   private bool _isLoadingSources = true;
   private string? _loadSourcesError;
+  private bool HasLoadedSources => _sources != null && _sources.Count > 0;
+  private bool CanExport => !_isExporting && HasLoadedSources;
 
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
@@ -471,9 +484,40 @@
     }
   }
 
+  private async Task HandleImportFileSelected(InputFileChangeEventArgs e)
+  {
+    _importError = null;
+    _importSuccess = null;
+
+    var file = e.File;
+    if (file == null)
+    {
+      _importFileName = null;
+      return;
+    }
+
+    try
+    {
+      await using var stream = file.OpenReadStream(MaxImportFileSizeBytes);
+      using var reader = new System.IO.StreamReader(stream);
+      _importJson = await reader.ReadToEndAsync();
+      _importFileName = file.Name;
+    }
+    catch (IOException)
+    {
+      _importFileName = null;
+      _importError = $"File is too large. Please keep import files under {MaxImportFileSizeBytes / 1024 / 1024} MB.";
+    }
+    catch (Exception ex)
+    {
+      _importFileName = null;
+      _importError = $"Couldn't read file: {ex.Message}";
+    }
+  }
+
   private async Task HandleExport()
   {
-    if (_sources == null || !_sources.Any())
+    if (!HasLoadedSources || _sources == null)
     {
       return;
     }

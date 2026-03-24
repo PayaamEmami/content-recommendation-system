@@ -928,6 +928,16 @@ textarea.form-input {
     margin-bottom: 1rem;
 }
 
+.import-upload-row {
+    margin-bottom: 1rem;
+}
+
+.file-input {
+    display: block;
+    width: 100%;
+    margin-bottom: 0.5rem;
+}
+
 .import-results {
     display: flex;
     gap: 1rem;
