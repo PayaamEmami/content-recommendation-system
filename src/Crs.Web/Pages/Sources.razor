@@ -74,16 +74,13 @@
     else if (_activeTab == "import")
     {
       <div class="import-export-form">
-          <p class="bulk-hint">Paste JSON array of sources. <button type="button" class="link-btn"
+          <p class="bulk-hint">Paste a JSON object containing a <code>sources</code> array. <button type="button" class="link-btn"
               @onclick="() => _showJsonExample = !_showJsonExample">@(_showJsonExample ? "Hide" : "Show") format</button>
           </p>
 
           @if (_showJsonExample)
           {
-            <pre class="json-example">[
-                                { "name": "ArXiv AI", "url": "https://arxiv.org/list/cs.AI/recent", "category": "Paper" },
-                                { "name": "3Blue1Brown", "url": "https://youtube.com/c/3blue1brown", "category": "Video" }
-                              ]</pre>
+            <pre class="json-example">@ImportJsonExample</pre>
           }
 
           @if (!string.IsNullOrEmpty(_importError))
@@ -96,7 +93,7 @@
           }
 
           <textarea @bind="_importJson" class="form-input bulk-textarea" rows="6"
-            placeholder='{"sources": [{"name": "...", "url": "...", "category": "Paper|Video|BlogPost"}]}'></textarea>
+            placeholder="@ImportJsonExample"></textarea>
 
           <button @onclick="HandleImport" class="btn-primary" disabled="@_isImporting">
             @(_isImporting ? "Importing..." : "Import")
@@ -280,6 +277,22 @@
   private string? _errorMessage;
   private string? _successMessage;
   private string? _editErrorMessage;
+  private const string ImportJsonExample = """
+{
+  "sources": [
+    {
+      "name": "ArXiv AI",
+      "url": "https://arxiv.org/list/cs.AI/recent",
+      "category": "Paper"
+    },
+    {
+      "name": "3Blue1Brown",
+      "url": "https://youtube.com/c/3blue1brown",
+      "category": "Video"
+    }
+  ]
+}
+""";
   private bool _isLoading;
   private Guid? _editingSourceId;
   private string _activeTab = "single";

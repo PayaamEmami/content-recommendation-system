@@ -361,16 +361,19 @@ public class SourceService
 
     public async Task ExportSourcesAsync(IEnumerable<SourceItem> sources)
     {
-        var exportPayload = sources
-            .OrderBy(s => s.Name)
-            .Select(s => new SourceExportItem
-            {
-                Name = s.Name,
-                Url = s.Url,
-                Category = s.Category,
-                Description = s.Description
-            })
-            .ToList();
+        var exportPayload = new SourceExportPayload
+        {
+            Sources = sources
+                .OrderBy(s => s.Name)
+                .Select(s => new SourceExportItem
+                {
+                    Name = s.Name,
+                    Url = s.Url,
+                    Category = s.Category,
+                    Description = s.Description
+                })
+                .ToList()
+        };
 
         var json = JsonSerializer.Serialize(exportPayload, new JsonSerializerOptions
         {
@@ -464,6 +467,11 @@ public class SourceExportItem
     public string Url { get; set; } = string.Empty;
     public ContentType Category { get; set; }
     public string? Description { get; set; }
+}
+
+public class SourceExportPayload
+{
+    public List<SourceExportItem> Sources { get; set; } = new();
 }
 
 public sealed class SourceLoadResult
