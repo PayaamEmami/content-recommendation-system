@@ -816,58 +816,54 @@ textarea.form-input {
    Sources Page - Clean Design
    ============================================ */
 
-.sources-filter-bar {
+.sources-toolbar {
     display: flex;
+    justify-content: flex-end;
+    margin-bottom: 1.5rem;
+}
+
+.manage-sources-btn {
+    display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
-}
-
-.filter-pill {
     padding: 0.5rem 1rem;
-    border-radius: 20px;
+    border-radius: 8px;
     font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--text-secondary);
+    font-weight: 600;
+    color: var(--text-primary);
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
-    text-decoration: none;
-    transition: all 0.15s ease;
-    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.filter-pill:hover {
+.manage-sources-btn:hover {
     background-color: var(--bg-tertiary);
+    border-color: var(--text-tertiary);
+}
+
+.manage-sources-btn__icon {
+    width: 1.125rem;
+    height: 1.125rem;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+.manage-sources-btn:hover .manage-sources-btn__icon {
     color: var(--text-primary);
 }
 
-.filter-pill.active {
-    background-color: var(--accent-color);
-    color: white;
-    border-color: var(--accent-color);
+.ui-svg {
+    display: block;
 }
 
-.filter-spacer {
-    flex: 1;
-}
-
-.add-source-btn {
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--accent-color);
-    background-color: transparent;
-    border: 1px dashed var(--accent-color);
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-.add-source-btn:hover {
-    background-color: var(--accent-color);
-    color: white;
-    border-style: solid;
+.import-result-icon {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.15em;
+    margin-right: 0.25rem;
+    color: inherit;
 }
 
 /* Add Source Panel */
@@ -1000,9 +996,15 @@ textarea.form-input {
 }
 
 .sources-empty .empty-icon {
-    font-size: 2.5rem;
-    display: block;
+    display: flex;
+    justify-content: center;
     margin-bottom: 0.75rem;
+    color: var(--text-tertiary);
+}
+
+.sources-empty .empty-icon .ui-svg {
+    width: 2.5rem;
+    height: 2.5rem;
 }
 
 .sources-empty p {
@@ -1049,9 +1051,14 @@ textarea.form-input {
 }
 
 .source-icon {
-    font-size: 1.25rem;
     padding-top: 0.125rem;
     flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+.source-icon .ui-svg {
+    width: 1.375rem;
+    height: 1.375rem;
 }
 
 .source-info {
@@ -1135,16 +1142,23 @@ textarea.form-input {
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    font-size: 0.9rem;
-    transition: background-color 0.15s ease;
+    color: var(--text-secondary);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.action-btn .ui-svg {
+    width: 1.125rem;
+    height: 1.125rem;
 }
 
 .action-btn:hover {
     background-color: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .action-btn.danger:hover {
     background-color: rgba(248, 81, 73, 0.15);
+    color: #f85149;
 }
 
 /* Source Edit Form */
@@ -1205,17 +1219,13 @@ textarea.form-input {
 
 /* Responsive */
 @media (max-width: 768px) {
-    .sources-filter-bar {
-        flex-wrap: wrap;
+    .sources-toolbar {
+        justify-content: stretch;
     }
 
-    .filter-spacer {
-        display: none;
-    }
-
-    .add-source-btn {
+    .manage-sources-btn {
         width: 100%;
-        margin-top: 0.5rem;
+        justify-content: center;
     }
 
     .add-source-form .form-grid {

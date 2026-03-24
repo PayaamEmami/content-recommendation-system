@@ -99,10 +99,10 @@ SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceNa
 
 Jobs run locally via **Windows Task Scheduler**, using `run-job.ps1` as a wrapper script that automatically starts Docker Desktop and the OpenSearch container if they aren't running.
 
-- **CRS - Ingestion**: Daily at 11:00 AM Pacific (`dotnet Crs.Jobs.dll ingestion`)
-- **CRS - X Ingestion**: Daily at 11:30 AM Pacific (`dotnet Crs.Jobs.dll x-ingestion`)
-- **CRS - Feed Generation**: Daily at 12:00 PM Pacific (`dotnet Crs.Jobs.dll feed`)
-- **CloudFront Cache Invalidation**: Daily at 1:00 PM Pacific (EventBridge Scheduler, `crs-cloudfront-invalidation`)
+- **CRS - Ingestion**: Daily at 12:00 PM Pacific (`dotnet Crs.Jobs.dll ingestion`)
+- **CRS - X Ingestion**: Daily at 12:30 PM Pacific (`dotnet Crs.Jobs.dll x-ingestion`)
+- **CRS - Feed Generation**: Daily at 1:00 PM Pacific (`dotnet Crs.Jobs.dll feed`)
+- **CloudFront Cache Invalidation**: Daily at 2:00 PM Pacific (EventBridge Scheduler, `crs-cloudfront-invalidation`)
 
 The CloudFront invalidation runs as an AWS EventBridge Scheduler (`crs-cloudfront-invalidation`) since it only needs AWS access, not the local environment.
 

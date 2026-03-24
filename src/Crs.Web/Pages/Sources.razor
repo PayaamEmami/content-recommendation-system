@@ -1,5 +1,4 @@
 @page "/sources"
-@page "/sources/{CategoryFilter}"
 @using Crs.Core.Enums
 @inject AuthService AuthService
 @inject SourceService SourceService
@@ -7,33 +6,21 @@
 @inject NavigationManager Navigation
 @implements IDisposable
 
-<PageTitle>@GetPageTitle() - CRS</PageTitle>
+<PageTitle>My Sources - CRS</PageTitle>
 
 <div class="page-container">
-  <!-- Category Filter Pills -->
-  <div class="sources-filter-bar">
-    <a href="/sources" class="filter-pill @(string.IsNullOrEmpty(CategoryFilter) ? "active" : "")">
-      All
-    </a>
-    @foreach (var type in Enum.GetValues<ContentType>())
-    {
-      var typeName = type.ToString().ToLower();
-      <a href="/sources/@typeName"
-        class="filter-pill @(CategoryFilter?.Equals(typeName, StringComparison.OrdinalIgnoreCase) == true ? "active" : "")">
-        @GetContentTypeIcon(type) @GetContentTypeDisplay(type)
-      </a>
-    }
-
-    <div class="filter-spacer"></div>
-
-    <button class="add-source-btn" @onclick="() => _showAddForm = !_showAddForm">
+  <div class="sources-toolbar">
+    <button type="button" class="manage-sources-btn" @onclick="() => _showAddForm = !_showAddForm"
+      aria-expanded="@_showAddForm">
       @if (_showAddForm)
       {
-        <span>✕ Close</span>
+        <span>Close</span>
+        <UiSvgIcon Kind="SvgIconKind.Close" Class="manage-sources-btn__icon" />
       }
       else
       {
-        <span>+ Add Source</span>
+        <span>Manage Sources</span>
+        <UiSvgIcon Kind="SvgIconKind.ChevronDown" Class="manage-sources-btn__icon manage-sources-btn__chevron" />
       }
     </button>
   </div>
@@ -137,10 +124,14 @@
           @if (_importResult != null)
           {
             <div class="import-results">
-              <span class="result-success">✓ @_importResult.Imported imported</span>
+              <span class="result-success">
+                <UiSvgIcon Kind="SvgIconKind.Check" Class="import-result-icon" /> @_importResult.Imported imported
+              </span>
               @if (_importResult.Failed > 0)
               {
-                <span class="result-fail">✗ @_importResult.Failed failed</span>
+                <span class="result-fail">
+                  <UiSvgIcon Kind="SvgIconKind.Cross" Class="import-result-icon" /> @_importResult.Failed failed
+                </span>
               }
             </div>
           }
@@ -178,7 +169,9 @@
     else if (!string.IsNullOrEmpty(_loadSourcesError))
     {
       <div class="sources-empty">
-        <span class="empty-icon">⚠️</span>
+        <span class="empty-icon" aria-hidden="true">
+          <UiSvgIcon Kind="SvgIconKind.Warning" />
+        </span>
         <p>Couldn't load your sources</p>
         <span class="empty-hint">@_loadSourcesError</span>
         <div style="margin-top: 1rem;">
@@ -186,27 +179,20 @@
         </div>
       </div>
     }
-    else if (!_filteredSources.Any())
+    else if (_sources is { Count: 0 })
     {
       <div class="sources-empty">
-        @if (_sources is { Count: 0 })
-        {
-          <span class="empty-icon">📚</span>
-          <p>No sources yet</p>
-          <span class="empty-hint">Add your first source to get started</span>
-        }
-        else
-        {
-          <span class="empty-icon">🔍</span>
-          <p>No sources in this category</p>
-          <span class="empty-hint">Try a different filter</span>
-        }
+        <span class="empty-icon" aria-hidden="true">
+          <UiSvgIcon Kind="SvgIconKind.Library" />
+        </span>
+        <p>No sources yet</p>
+        <span class="empty-hint">Add your first source to get started</span>
       </div>
     }
     else
     {
       <div class="sources-table">
-        @foreach (var source in _filteredSources)
+        @foreach (var source in _sources!)
         {
           <div class="source-row @(source.IsActive ? "" : "inactive") @(_editingSourceId == source.Id ? "editing" : "")">
             @if (_editingSourceId == source.Id)
@@ -250,7 +236,7 @@
             {
               <!-- View Mode -->
               <div class="source-icon">
-                @GetContentTypeIcon(source.Category)
+                <UiSvgIcon Kind="@CategoryToIcon(source.Category)" />
               </div>
               <div class="source-info">
                 <div class="source-name-row">
@@ -277,12 +263,23 @@
                 }
               </div>
               <div class="source-actions">
-                <button class="action-btn" @onclick="() => StartEdit(source)" title="Edit">✏️</button>
-                <button class="action-btn" @onclick="() => ToggleSource(source.Id)"
-                  title="@(source.IsActive ? "Pause" : "Activate")">
-                  @(source.IsActive ? "⏸️" : "▶️")
+                <button type="button" class="action-btn" @onclick="() => StartEdit(source)" title="Edit">
+                  <UiSvgIcon Kind="SvgIconKind.Edit" />
                 </button>
-                <button class="action-btn danger" @onclick="() => DeleteSource(source.Id)" title="Delete">🗑️</button>
+                <button type="button" class="action-btn" @onclick="() => ToggleSource(source.Id)"
+                  title="@(source.IsActive ? "Pause" : "Activate")">
+                  @if (source.IsActive)
+                  {
+                    <UiSvgIcon Kind="SvgIconKind.Pause" />
+                  }
+                  else
+                  {
+                    <UiSvgIcon Kind="SvgIconKind.Play" />
+                  }
+                </button>
+                <button type="button" class="action-btn danger" @onclick="() => DeleteSource(source.Id)" title="Delete">
+                  <UiSvgIcon Kind="SvgIconKind.Delete" />
+                </button>
               </div>
             }
           </div>
@@ -293,11 +290,7 @@
 </div>
 
 @code {
-  [Parameter]
-  public string? CategoryFilter { get; set; }
-
   private List<SourceItem>? _sources;
-  private List<SourceItem> _filteredSources = new();
   private AddSourceModel _newSource = new();
   private EditSourceModel _editModel = new();
   private string? _errorMessage;
@@ -342,12 +335,6 @@
     await LoadSources();
   }
 
-  protected override Task OnParametersSetAsync()
-  {
-    ApplyFilter();
-    return Task.CompletedTask;
-  }
-
   private async Task LoadSources()
   {
     _isLoadingSources = true;
@@ -358,34 +345,11 @@
       var result = await SourceService.GetUserSourcesResultAsync();
       _sources = result.Sources;
       _loadSourcesError = result.IsSuccess ? null : result.ErrorMessage;
-      ApplyFilter();
     }
     finally
     {
       _isLoadingSources = false;
       StateHasChanged();
-    }
-  }
-
-  private void ApplyFilter()
-  {
-    if (_sources == null)
-    {
-      _filteredSources = new();
-      return;
-    }
-
-    if (string.IsNullOrEmpty(CategoryFilter))
-    {
-      _filteredSources = _sources.ToList();
-    }
-    else if (Enum.TryParse<ContentType>(CategoryFilter, ignoreCase: true, out var parsedType))
-    {
-      _filteredSources = _sources.Where(s => s.Category == parsedType).ToList();
-    }
-    else
-    {
-      _filteredSources = _sources.ToList();
     }
   }
 
@@ -544,14 +508,6 @@
   private void SetTabImport() => _activeTab = "import";
   private void SetTabExport() => _activeTab = "export";
 
-  private string GetPageTitle()
-  {
-    if (string.IsNullOrEmpty(CategoryFilter)) return "My Sources";
-    if (Enum.TryParse<ContentType>(CategoryFilter, ignoreCase: true, out var type))
-      return $"{GetContentTypeDisplay(type)} Sources";
-    return "My Sources";
-  }
-
   private static string GetContentTypeDisplay(ContentType type) => type switch
   {
     ContentType.Paper => "Papers",
@@ -560,12 +516,12 @@
     _ => type.ToString()
   };
 
-  private static string GetContentTypeIcon(ContentType type) => type switch
+  private static SvgIconKind CategoryToIcon(ContentType type) => type switch
   {
-    ContentType.Paper => "📄",
-    ContentType.Video => "🎬",
-    ContentType.BlogPost => "📝",
-    _ => "📎"
+    ContentType.Paper => SvgIconKind.Paper,
+    ContentType.Video => SvgIconKind.Video,
+    ContentType.BlogPost => SvgIconKind.Blog,
+    _ => SvgIconKind.Attachment
   };
 
   private static string TruncateUrl(string url)
