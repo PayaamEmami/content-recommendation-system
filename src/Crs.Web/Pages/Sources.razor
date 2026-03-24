@@ -130,7 +130,7 @@
             <div class="success-message">@_exportSuccessMessage</div>
           }
 
-          <button @onclick="HandleExport" class="btn-primary" disabled="@_isExporting || _isLoadingSources || !string.IsNullOrEmpty(_loadSourcesError) || _sources == null || !_sources.Any()">
+          <button @onclick="HandleExport" class="btn-primary" disabled="@_isExporting || _sources == null || !_sources.Any()">
             @(_isExporting ? "Exporting..." : "Export")
           </button>
         </div>
