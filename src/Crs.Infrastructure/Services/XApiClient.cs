@@ -3,10 +3,13 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Diagnostics;
 using Crs.Core.Interfaces;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Crs.Core.Models;
+using Crs.Core.Observability;
 using Crs.Infrastructure.Configuration;
 
 namespace Crs.Infrastructure.Services;
@@ -19,17 +22,29 @@ public class XApiClient : IXApiClient
     private readonly HttpClient _httpClient;
     private readonly XApiSettings _settings;
     private readonly ILogger<XApiClient> _logger;
+    private readonly IObservabilityMetrics _metrics;
+    private readonly IHostEnvironment _environment;
+    private readonly ObservabilitySettings _observabilitySettings;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
-    public XApiClient(HttpClient httpClient, IOptions<XApiSettings> options, ILogger<XApiClient> logger)
+    public XApiClient(
+        HttpClient httpClient,
+        IOptions<XApiSettings> options,
+        ILogger<XApiClient> logger,
+        IObservabilityMetrics metrics,
+        IHostEnvironment environment,
+        IOptions<ObservabilitySettings> observabilityOptions)
     {
         _httpClient = httpClient;
         _settings = options.Value;
         _logger = logger;
+        _metrics = metrics;
+        _environment = environment;
+        _observabilitySettings = observabilityOptions.Value;
     }
 
     public async Task<XTokenResponse> ExchangeCodeAsync(string code, string codeVerifier, string redirectUri, CancellationToken cancellationToken = default)
@@ -286,6 +301,11 @@ public class XApiClient : IXApiClient
         string operation,
         CancellationToken cancellationToken)
     {
+        using var activity = CrsTelemetry.ActivitySource.StartActivity("xapi.request");
+        activity?.SetTag(CrsTelemetry.Tags.Dependency, "x");
+        activity?.SetTag("x.operation", operation);
+        var stopwatch = Stopwatch.StartNew();
+
         _logger.LogInformation(
             "Sending X API request for {Operation}: {Method} {RequestUri} using {AuthScheme} auth",
             operation,
@@ -297,6 +317,8 @@ public class XApiClient : IXApiClient
 
         if (response.IsSuccessStatusCode)
         {
+            stopwatch.Stop();
+            RecordMetric(operation, "success", stopwatch.Elapsed);
             _logger.LogInformation(
                 "X API request succeeded for {Operation}: {StatusCode} {Method} {RequestUri}",
                 operation,
@@ -308,6 +330,8 @@ public class XApiClient : IXApiClient
         }
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        stopwatch.Stop();
+        RecordMetric(operation, "failed", stopwatch.Elapsed);
         _logger.LogWarning(
             "X API request failed for {Operation}: {StatusCode} {ReasonPhrase} on {Method} {RequestUri}. Response headers: {ResponseHeaders}. Body: {ResponseBody}",
             operation,
@@ -316,7 +340,7 @@ public class XApiClient : IXApiClient
             request.Method,
             request.RequestUri,
             FormatResponseHeaders(response),
-            Truncate(body, 2048));
+            FormatResponseBody(body));
 
         return response;
     }
@@ -391,6 +415,34 @@ public class XApiClient : IXApiClient
         }
 
         return $"{value[..maxLength]}...";
+    }
+
+    private void RecordMetric(string operation, string outcome, TimeSpan duration)
+    {
+        var context = new MetricContext(
+            Dimensions: new Dictionary<string, string>
+            {
+                ["Dependency"] = "X",
+                ["Operation"] = operation,
+                ["Outcome"] = outcome
+            });
+
+        _metrics.Increment("dependency.call.count", context: context);
+        _metrics.RecordDuration("dependency.call.duration", duration, context);
+        if (outcome == "failed")
+        {
+            _metrics.Increment("dependency.failure.count", context: context);
+        }
+    }
+
+    private string FormatResponseBody(string body)
+    {
+        if (_observabilitySettings.EnableSensitiveBodyLogging || _environment.IsDevelopment())
+        {
+            return Truncate(body, 512);
+        }
+
+        return $"<suppressed length={body.Length}>";
     }
 
     private class XTokenApiResponse

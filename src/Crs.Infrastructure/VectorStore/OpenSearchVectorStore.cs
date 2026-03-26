@@ -1,4 +1,5 @@
 using Amazon;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenSearch.Client;
@@ -6,6 +7,7 @@ using OpenSearch.Net;
 using OpenSearch.Net.Auth.AwsSigV4;
 using Crs.Core.Interfaces;
 using Crs.Core.Models;
+using Crs.Core.Observability;
 using Crs.Infrastructure.Configuration;
 
 namespace Crs.Infrastructure.VectorStore;
@@ -18,13 +20,16 @@ public class OpenSearchVectorStore : IVectorStore
     private readonly OpenSearchClient _client;
     private readonly OpenSearchSettings _settings;
     private readonly ILogger<OpenSearchVectorStore> _logger;
+    private readonly IObservabilityMetrics _metrics;
 
     public OpenSearchVectorStore(
         IOptions<OpenSearchSettings> settings,
-        ILogger<OpenSearchVectorStore> logger)
+        ILogger<OpenSearchVectorStore> logger,
+        IObservabilityMetrics metrics)
     {
         _settings = settings.Value;
         _logger = logger;
+        _metrics = metrics;
 
         if (_settings.Mode == OpenSearchMode.Aws && string.IsNullOrWhiteSpace(_settings.Region))
         {
@@ -66,6 +71,9 @@ public class OpenSearchVectorStore : IVectorStore
     {
         try
         {
+            using var activity = CrsTelemetry.ActivitySource.StartActivity("opensearch.initialize");
+            activity?.SetTag(CrsTelemetry.Tags.Dependency, "opensearch");
+            var stopwatch = Stopwatch.StartNew();
             _logger.LogInformation("Initializing OpenSearch index: {IndexName}", _settings.IndexName);
 
             var indexExists = await _client.Indices.ExistsAsync(_settings.IndexName, ct: cancellationToken);
@@ -125,10 +133,14 @@ public class OpenSearchVectorStore : IVectorStore
             {
                 _logger.LogInformation("Index already exists: {IndexName}", _settings.IndexName);
             }
+
+            stopwatch.Stop();
+            RecordMetric("initialize", "success", stopwatch.Elapsed);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error initializing OpenSearch index");
+            RecordMetric("initialize", "failed", TimeSpan.Zero);
             throw;
         }
     }
@@ -153,6 +165,10 @@ public class OpenSearchVectorStore : IVectorStore
 
         try
         {
+            using var activity = CrsTelemetry.ActivitySource.StartActivity("opensearch.upsert");
+            activity?.SetTag(CrsTelemetry.Tags.Dependency, "opensearch");
+            activity?.SetTag(CrsTelemetry.Tags.ResultCount, documentsList.Count);
+            var stopwatch = Stopwatch.StartNew();
             var searchDocuments = documentsList.Select(ToSearchDocument).ToList();
             var contentIds = documentsList.Select(d => d.Id.ToString()).ToList();
 
@@ -200,10 +216,14 @@ public class OpenSearchVectorStore : IVectorStore
                     item.Id,
                     item.Error?.Reason);
             }
+
+            stopwatch.Stop();
+            RecordMetric("upsert", failureCount == 0 ? "success" : "partial_failure", stopwatch.Elapsed, documentsList.Count);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error upserting documents to vector store");
+            RecordMetric("upsert", "failed", TimeSpan.Zero, documentsList.Count);
             throw;
         }
     }
@@ -212,6 +232,9 @@ public class OpenSearchVectorStore : IVectorStore
     {
         try
         {
+            using var activity = CrsTelemetry.ActivitySource.StartActivity("opensearch.delete");
+            activity?.SetTag(CrsTelemetry.Tags.Dependency, "opensearch");
+            var stopwatch = Stopwatch.StartNew();
             var response = await _client.DeleteByQueryAsync<ContentSearchDocument>(d => d
                     .Index(_settings.IndexName)
                     .Query(q => q
@@ -231,10 +254,14 @@ public class OpenSearchVectorStore : IVectorStore
                 _logger.LogWarning("Failed to delete document {ContentId}: {Error}",
                     contentId, response.DebugInformation);
             }
+
+            stopwatch.Stop();
+            RecordMetric("delete", response.IsValid ? "success" : "failed", stopwatch.Elapsed);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting document {ContentId} from vector store", contentId);
+            RecordMetric("delete", "failed", TimeSpan.Zero);
             throw;
         }
     }
@@ -245,6 +272,10 @@ public class OpenSearchVectorStore : IVectorStore
     {
         try
         {
+            using var activity = CrsTelemetry.ActivitySource.StartActivity("opensearch.search");
+            activity?.SetTag(CrsTelemetry.Tags.Dependency, "opensearch");
+            activity?.SetTag(CrsTelemetry.Tags.FeedType, request.ContentType?.ToString());
+            var stopwatch = Stopwatch.StartNew();
             // Build filter queries
             var mustQueries = new List<Func<QueryContainerDescriptor<ContentSearchDocument>, QueryContainer>>();
             var mustNotQueries = new List<Func<QueryContainerDescriptor<ContentSearchDocument>, QueryContainer>>();
@@ -322,11 +353,15 @@ public class OpenSearchVectorStore : IVectorStore
                 results.Count,
                 request.TopK);
 
+            stopwatch.Stop();
+            RecordMetric("search", "success", stopwatch.Elapsed, results.Count);
+
             return results;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error performing vector search");
+            RecordMetric("search", "failed", TimeSpan.Zero);
             throw;
         }
     }
@@ -335,16 +370,21 @@ public class OpenSearchVectorStore : IVectorStore
     {
         try
         {
+            var stopwatch = Stopwatch.StartNew();
             var response = await _client.CountAsync<ContentSearchDocument>(c => c
                 .Index(_settings.IndexName),
                 cancellationToken
             );
+
+            stopwatch.Stop();
+            RecordMetric("count", "success", stopwatch.Elapsed);
 
             return response.Count;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting document count");
+            RecordMetric("count", "failed", TimeSpan.Zero);
             throw;
         }
     }
@@ -357,6 +397,7 @@ public class OpenSearchVectorStore : IVectorStore
 
         try
         {
+            var stopwatch = Stopwatch.StartNew();
             while (true)
             {
                 var response = await _client.SearchAsync<ContentSearchDocument>(s =>
@@ -405,12 +446,39 @@ public class OpenSearchVectorStore : IVectorStore
             }
 
             _logger.LogInformation("Loaded {Count} indexed document IDs from OpenSearch", documentIds.Count);
+            stopwatch.Stop();
+            RecordMetric("list_ids", "success", stopwatch.Elapsed, documentIds.Count);
             return documentIds;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error listing indexed document IDs");
+            RecordMetric("list_ids", "failed", TimeSpan.Zero);
             throw;
+        }
+    }
+
+    private void RecordMetric(string operation, string outcome, TimeSpan duration, int? count = null)
+    {
+        var context = new MetricContext(
+            Dimensions: new Dictionary<string, string>
+            {
+                ["Dependency"] = "OpenSearch",
+                ["Operation"] = operation,
+                ["Outcome"] = outcome
+            },
+            Properties: count.HasValue ? new Dictionary<string, object?> { ["Count"] = count.Value } : null);
+
+        _metrics.Increment("dependency.call.count", context: context);
+        _metrics.RecordDuration("dependency.call.duration", duration, context);
+        if (count.HasValue)
+        {
+            _metrics.RecordValue("opensearch.result.count", count.Value, "Count", context);
+        }
+
+        if (outcome is "failed" or "partial_failure")
+        {
+            _metrics.Increment("dependency.failure.count", context: context);
         }
     }
 

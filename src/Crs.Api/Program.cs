@@ -1,12 +1,23 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Crs.Api.Extensions;
+using Crs.Api.Health;
 using Crs.Api.Middleware;
 using Crs.Infrastructure;
+using Crs.Infrastructure.Observability;
 using Crs.Recommendation;
 using Crs.Llm;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.AddCrsLogging(builder.Environment);
+builder.Services.AddCrsObservability(builder.Configuration, builder.Environment, "crs-api");
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing => tracing.AddAspNetCoreInstrumentation(options =>
+    {
+        options.RecordException = true;
+        options.Filter = context => !context.Request.Path.StartsWithSegments("/health/live");
+    }));
 
 // Add services to the container
 builder.Services.AddControllers()
@@ -71,7 +82,8 @@ builder.Services.AddScoped<Crs.Api.Services.IXAccountService, Crs.Api.Services.X
 
 // Add health checks
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<Crs.Infrastructure.Data.CrsDbContext>();
+    .AddDbContextCheck<Crs.Infrastructure.Data.CrsDbContext>(tags: ["ready"])
+    .AddObservabilityChecks();
 
 // Configure Problem Details
 builder.Services.AddProblemDetails();
@@ -110,6 +122,7 @@ if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Produ
 // Configure the HTTP request pipeline
 app.UseCors("DefaultCorsPolicy");
 
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
@@ -126,7 +139,21 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResponseWriter = ObservabilityHealthChecks.WriteResponseAsync
+});
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = ObservabilityHealthChecks.WriteResponseAsync
+});
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = ObservabilityHealthChecks.WriteResponseAsync
+});
 
 app.Run();
 

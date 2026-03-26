@@ -8,12 +8,20 @@ set -e
 # Prevent Git Bash on Windows from converting paths
 export MSYS_NO_PATHCONV=1
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
 # Configuration
 REGION="${AWS_REGION:-us-west-2}"
 ENVIRONMENT="${ENVIRONMENT:-dev}"
 PREFIX="crs"
 PROJECT_TAG="CRS"
 ENABLE_OPENSEARCH="${ENABLE_OPENSEARCH:-false}"
+METRICS_NAMESPACE="${METRICS_NAMESPACE:-CRS/Application}"
+TRACE_SAMPLE_RATIO="${TRACE_SAMPLE_RATIO:-0.25}"
+API_SERVICE_NAME="${API_SERVICE_NAME:-crs-api}"
+JOBS_SERVICE_NAME="${JOBS_SERVICE_NAME:-crs-jobs}"
+ADOT_COLLECTOR_IMAGE="${ADOT_COLLECTOR_IMAGE:-public.ecr.aws/aws-observability/aws-otel-collector:latest}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -38,12 +46,40 @@ require_config_value() {
 }
 
 resolve_secrets_file() {
-    if [ -f "secrets.env" ]; then
-        echo "secrets.env"
-    elif [ -f "infrastructure/aws/secrets.env" ]; then
-        echo "infrastructure/aws/secrets.env"
+    if [ -f "${REPO_ROOT}/secrets.env" ]; then
+        echo "${REPO_ROOT}/secrets.env"
+    elif [ -f "${SCRIPT_DIR}/secrets.env" ]; then
+        echo "${SCRIPT_DIR}/secrets.env"
     else
-        echo "secrets.env"
+        echo "${REPO_ROOT}/secrets.env"
+    fi
+}
+
+ensure_inline_role_policy() {
+    local role_name="$1"
+    local policy_name="$2"
+    local policy_file="$3"
+
+    aws iam put-role-policy \
+        --role-name "$role_name" \
+        --policy-name "$policy_name" \
+        --policy-document "$(cat "$policy_file")" > /dev/null
+}
+
+ensure_managed_role_policy() {
+    local role_name="$1"
+    local policy_arn="$2"
+
+    local attached_policy
+    attached_policy=$(aws iam list-attached-role-policies \
+        --role-name "$role_name" \
+        --query "AttachedPolicies[?PolicyArn=='${policy_arn}'].PolicyArn | [0]" \
+        --output text 2>/dev/null || echo "")
+
+    if [ -z "$attached_policy" ] || [ "$attached_policy" = "None" ]; then
+        aws iam attach-role-policy \
+            --role-name "$role_name" \
+            --policy-arn "$policy_arn" > /dev/null
     fi
 }
 
@@ -406,7 +442,7 @@ create_cloudwatch_logs() {
 
     log_info "App Runner API logs are managed under /aws/apprunner/${PREFIX}-api/<service-id>/application"
 
-    for LOG_NAME in "jobs" "ingestion" "feed"; do
+    for LOG_NAME in "jobs" "ingestion" "feed" "otel-collector"; do
         LOG_GROUP="/crs/$LOG_NAME"
         EXISTING=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --region $REGION --query "logGroups[?logGroupName=='$LOG_GROUP'].logGroupName" --output text 2>/dev/null || echo "")
         if [ -z "$EXISTING" ]; then
@@ -427,70 +463,52 @@ create_iam_roles() {
     if ! aws iam get-role --role-name ${PREFIX}-apprunner-role &> /dev/null; then
         aws iam create-role \
             --role-name ${PREFIX}-apprunner-role \
-            --assume-role-policy-document "$(cat iam/apprunner-trust-policy.json)" \
+            --assume-role-policy-document "$(cat "${SCRIPT_DIR}/iam/apprunner-trust-policy.json")" \
             --tags Key=Project,Value=${PROJECT_TAG}
-
-        aws iam attach-role-policy \
-            --role-name ${PREFIX}-apprunner-role \
-            --policy-arn arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
-
-        # Attach custom policy for secrets and OpenSearch
-        aws iam put-role-policy \
-            --role-name ${PREFIX}-apprunner-role \
-            --policy-name ${PREFIX}-app-policy \
-            --policy-document "$(cat iam/app-policy.json)"
 
         log_info "Created App Runner role: ${PREFIX}-apprunner-role"
     fi
+
+    ensure_managed_role_policy "${PREFIX}-apprunner-role" "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess"
+    ensure_managed_role_policy "${PREFIX}-apprunner-role" "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+    ensure_inline_role_policy "${PREFIX}-apprunner-role" "${PREFIX}-app-policy" "${SCRIPT_DIR}/iam/app-policy.json"
 
     # ECS Task Execution Role
     if ! aws iam get-role --role-name ${PREFIX}-ecs-execution-role &> /dev/null; then
         aws iam create-role \
             --role-name ${PREFIX}-ecs-execution-role \
-            --assume-role-policy-document "$(cat iam/ecs-trust-policy.json)" \
+            --assume-role-policy-document "$(cat "${SCRIPT_DIR}/iam/ecs-trust-policy.json")" \
             --tags Key=Project,Value=${PROJECT_TAG}
-
-        aws iam attach-role-policy \
-            --role-name ${PREFIX}-ecs-execution-role \
-            --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-
-        aws iam put-role-policy \
-            --role-name ${PREFIX}-ecs-execution-role \
-            --policy-name ${PREFIX}-ecs-secrets-policy \
-            --policy-document "$(cat iam/ecs-secrets-policy.json)"
 
         log_info "Created ECS Execution role: ${PREFIX}-ecs-execution-role"
     fi
+
+    ensure_managed_role_policy "${PREFIX}-ecs-execution-role" "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+    ensure_inline_role_policy "${PREFIX}-ecs-execution-role" "${PREFIX}-ecs-secrets-policy" "${SCRIPT_DIR}/iam/ecs-secrets-policy.json"
 
     # ECS Task Role
     if ! aws iam get-role --role-name ${PREFIX}-ecs-task-role &> /dev/null; then
         aws iam create-role \
             --role-name ${PREFIX}-ecs-task-role \
-            --assume-role-policy-document "$(cat iam/ecs-trust-policy.json)" \
+            --assume-role-policy-document "$(cat "${SCRIPT_DIR}/iam/ecs-trust-policy.json")" \
             --tags Key=Project,Value=${PROJECT_TAG}
-
-        aws iam put-role-policy \
-            --role-name ${PREFIX}-ecs-task-role \
-            --policy-name ${PREFIX}-task-policy \
-            --policy-document "$(cat iam/app-policy.json)"
 
         log_info "Created ECS Task role: ${PREFIX}-ecs-task-role"
     fi
+
+    ensure_inline_role_policy "${PREFIX}-ecs-task-role" "${PREFIX}-task-policy" "${SCRIPT_DIR}/iam/app-policy.json"
 
     # EventBridge role for ECS
     if ! aws iam get-role --role-name ${PREFIX}-eventbridge-role &> /dev/null; then
         aws iam create-role \
             --role-name ${PREFIX}-eventbridge-role \
-            --assume-role-policy-document "$(cat iam/eventbridge-trust-policy.json)" \
+            --assume-role-policy-document "$(cat "${SCRIPT_DIR}/iam/eventbridge-trust-policy.json")" \
             --tags Key=Project,Value=${PROJECT_TAG}
-
-        aws iam put-role-policy \
-            --role-name ${PREFIX}-eventbridge-role \
-            --policy-name ${PREFIX}-eventbridge-ecs-policy \
-            --policy-document "$(cat iam/eventbridge-ecs-policy.json)"
 
         log_info "Created EventBridge role: ${PREFIX}-eventbridge-role"
     fi
+
+    ensure_inline_role_policy "${PREFIX}-eventbridge-role" "${PREFIX}-eventbridge-ecs-policy" "${SCRIPT_DIR}/iam/eventbridge-ecs-policy.json"
 }
 
 # Create ECS Cluster
@@ -600,6 +618,30 @@ create_opensearch() {
     export OPENSEARCH_ENDPOINT
 }
 
+create_apprunner_observability_configuration() {
+    log_info "Creating App Runner observability configuration..."
+
+    APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN=$(aws apprunner list-observability-configurations \
+        --region $REGION \
+        --query "ObservabilityConfigurationSummaryList[?ObservabilityConfigurationName=='${PREFIX}-xray'].ObservabilityConfigurationArn | [0]" \
+        --output text 2>/dev/null || echo "")
+
+    if [ -z "$APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN" ] || [ "$APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN" = "None" ]; then
+        APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN=$(aws apprunner create-observability-configuration \
+            --observability-configuration-name "${PREFIX}-xray" \
+            --trace-configuration '{"Vendor":"AWSXRAY"}' \
+            --tags Key=Project,Value=${PROJECT_TAG} \
+            --region $REGION \
+            --query 'ObservabilityConfiguration.ObservabilityConfigurationArn' \
+            --output text)
+        log_info "Created App Runner observability configuration: ${PREFIX}-xray"
+    else
+        log_info "App Runner observability configuration already exists: ${PREFIX}-xray"
+    fi
+
+    export APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN
+}
+
 # Create App Runner Service
 create_app_runner() {
     log_info "Creating App Runner service for API..."
@@ -607,6 +649,11 @@ create_app_runner() {
     # Check if service exists
     SERVICE_ARN=$(aws apprunner list-services --region $REGION --query "ServiceSummaryList[?ServiceName=='${PREFIX}-api'].ServiceArn" --output text 2>/dev/null || echo "")
     CONNECTION_STRING="Host=${RDS_ENDPOINT};Database=crsdb;Username=${DB_USERNAME};Password=${DB_PASSWORD}"
+    APP_RUNNER_INSTANCE_CONFIGURATION='{
+        "Cpu": "0.25 vCPU",
+        "Memory": "0.5 GB",
+        "InstanceRoleArn": "arn:aws:iam::'${ACCOUNT_ID}':role/'${PREFIX}'-apprunner-role"
+    }'
     APP_RUNNER_SOURCE_CONFIGURATION='{
         "AuthenticationConfiguration": {
             "AccessRoleArn": "arn:aws:iam::'${ACCOUNT_ID}':role/'${PREFIX}'-apprunner-role"
@@ -631,6 +678,17 @@ create_app_runner() {
                     "Cors__AllowedOrigins__0": "'"${WEB_URL}"'",
                     "Cors__AllowedOrigins__1": "'"${CF_URL:-$WEB_URL}"'",
                     "Registration__Enabled": "true",
+                    "Observability__Environment": "'"${ENVIRONMENT}"'",
+                    "Observability__ServiceName": "'"${API_SERVICE_NAME}"'",
+                    "Observability__ServiceNamespace": "crs",
+                    "Observability__MetricsNamespace": "'"${METRICS_NAMESPACE}"'",
+                    "Observability__TraceSampleRatio": "'"${TRACE_SAMPLE_RATIO}"'",
+                    "Observability__EnableSensitiveBodyLogging": "false",
+                    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+                    "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+                    "OTEL_METRICS_EXPORTER": "none",
+                    "OTEL_LOGS_EXPORTER": "none",
+                    "OTEL_PROPAGATORS": "xray",
                     "X__ClientId": "'"${X__ClientId}"'",
                     "X__ClientSecret": "'"${X__ClientSecret}"'",
                     "X__RedirectUri": "'"${X__RedirectUri}"'"
@@ -644,8 +702,9 @@ create_app_runner() {
         SERVICE_ARN=$(aws apprunner create-service \
             --service-name ${PREFIX}-api \
             --source-configuration "${APP_RUNNER_SOURCE_CONFIGURATION}" \
-            --instance-configuration '{"Cpu": "0.25 vCPU", "Memory": "0.5 GB"}' \
-            --health-check-configuration '{"Protocol": "HTTP", "Path": "/health", "Interval": 20, "Timeout": 5, "HealthyThreshold": 1, "UnhealthyThreshold": 5}' \
+            --instance-configuration "${APP_RUNNER_INSTANCE_CONFIGURATION}" \
+            --observability-configuration "ObservabilityEnabled=true,ObservabilityConfigurationArn=${APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN}" \
+            --health-check-configuration '{"Protocol": "HTTP", "Path": "/health/ready", "Interval": 20, "Timeout": 5, "HealthyThreshold": 1, "UnhealthyThreshold": 5}' \
             --tags Key=Project,Value=${PROJECT_TAG} \
             --region $REGION \
             --query 'Service.ServiceArn' \
@@ -670,8 +729,9 @@ create_app_runner() {
         aws apprunner update-service \
             --service-arn $SERVICE_ARN \
             --source-configuration "${APP_RUNNER_SOURCE_CONFIGURATION}" \
-            --instance-configuration '{"Cpu": "0.25 vCPU", "Memory": "0.5 GB"}' \
-            --health-check-configuration '{"Protocol": "HTTP", "Path": "/health", "Interval": 20, "Timeout": 5, "HealthyThreshold": 1, "UnhealthyThreshold": 5}' \
+            --instance-configuration "${APP_RUNNER_INSTANCE_CONFIGURATION}" \
+            --observability-configuration "ObservabilityEnabled=true,ObservabilityConfigurationArn=${APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN}" \
+            --health-check-configuration '{"Protocol": "HTTP", "Path": "/health/ready", "Interval": 20, "Timeout": 5, "HealthyThreshold": 1, "UnhealthyThreshold": 5}' \
             --region $REGION > /dev/null
 
         log_info "Updating App Runner service configuration..."
@@ -704,6 +764,7 @@ register_task_definitions() {
 
     # Build connection string
     CONNECTION_STRING="Host=${RDS_ENDPOINT};Database=crsdb;Username=${DB_USERNAME};Password=${DB_PASSWORD}"
+    ADOT_COLLECTOR_CONFIG='receivers:\n  otlp:\n    protocols:\n      grpc:\n      http:\nprocessors:\n  batch:\nexporters:\n  awsxray:\nservice:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      processors: [batch]\n      exporters: [awsxray]'
 
     # Register task definitions using inline JSON
     JOB_TASKS=()
@@ -712,46 +773,506 @@ register_task_definitions() {
     fi
 
     for TASK in "${JOB_TASKS[@]}"; do
+        TASK_DEFINITION_FILE=$(mktemp)
+        cat > "$TASK_DEFINITION_FILE" <<EOF
+[
+  {
+    "name": "${PREFIX}-${TASK}",
+    "image": "${ECR_URI}/crs-jobs:latest",
+    "essential": true,
+    "command": ["${TASK}"],
+    "dependsOn": [
+      {
+        "containerName": "aws-otel-collector",
+        "condition": "START"
+      }
+    ],
+    "environment": [
+      {"name": "ASPNETCORE_ENVIRONMENT", "value": "Production"},
+      {"name": "ConnectionStrings__DefaultConnection", "value": "${CONNECTION_STRING}"},
+      {"name": "Embedding__ModelName", "value": "text-embedding-3-small"},
+      {"name": "Embedding__Dimensions", "value": "1536"},
+      {"name": "OpenSearch__Endpoint", "value": "${OPENSEARCH_ENDPOINT}"},
+      {"name": "OpenSearch__IndexName", "value": "crs-content"},
+      {"name": "OpenSearch__EmbeddingDimensions", "value": "1536"},
+      {"name": "OpenAI__ApiKey", "value": "${OpenAI__ApiKey}"},
+      {"name": "OpenAI__Model", "value": "gpt-5-nano"},
+      {"name": "OpenAI__MaxTokens", "value": "16384"},
+      {"name": "Observability__Environment", "value": "${ENVIRONMENT}"},
+      {"name": "Observability__ServiceName", "value": "${JOBS_SERVICE_NAME}"},
+      {"name": "Observability__ServiceNamespace", "value": "crs"},
+      {"name": "Observability__MetricsNamespace", "value": "${METRICS_NAMESPACE}"},
+      {"name": "Observability__TraceSampleRatio", "value": "${TRACE_SAMPLE_RATIO}"},
+      {"name": "Observability__EnableSensitiveBodyLogging", "value": "false"},
+      {"name": "OTEL_EXPORTER_OTLP_ENDPOINT", "value": "http://127.0.0.1:4317"},
+      {"name": "OTEL_EXPORTER_OTLP_PROTOCOL", "value": "grpc"},
+      {"name": "OTEL_METRICS_EXPORTER", "value": "none"},
+      {"name": "OTEL_LOGS_EXPORTER", "value": "none"},
+      {"name": "OTEL_PROPAGATORS", "value": "xray"},
+      {"name": "X__ClientId", "value": "${X__ClientId}"},
+      {"name": "X__ClientSecret", "value": "${X__ClientSecret}"},
+      {"name": "X__RedirectUri", "value": "${X__RedirectUri}"}
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/crs/${TASK}",
+        "awslogs-region": "${REGION}",
+        "awslogs-stream-prefix": "ecs"
+      }
+    }
+  },
+  {
+    "name": "aws-otel-collector",
+    "image": "${ADOT_COLLECTOR_IMAGE}",
+    "essential": false,
+    "environment": [
+      {"name": "AOT_CONFIG_CONTENT", "value": "${ADOT_COLLECTOR_CONFIG}"}
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/crs/otel-collector",
+        "awslogs-region": "${REGION}",
+        "awslogs-stream-prefix": "${TASK}"
+      }
+    }
+  }
+]
+EOF
+
         aws ecs register-task-definition \
             --family "${PREFIX}-${TASK}-task" \
             --network-mode "awsvpc" \
             --requires-compatibilities "FARGATE" \
-            --cpu "256" \
-            --memory "512" \
+            --cpu "512" \
+            --memory "1024" \
             --execution-role-arn "arn:aws:iam::${ACCOUNT_ID}:role/${PREFIX}-ecs-execution-role" \
             --task-role-arn "arn:aws:iam::${ACCOUNT_ID}:role/${PREFIX}-ecs-task-role" \
-            --container-definitions '[{
-                "name": "'${PREFIX}'-'${TASK}'",
-                "image": "'${ECR_URI}'/crs-jobs:latest",
-                "essential": true,
-                "command": ["'${TASK}'"],
-                "environment": [
-                    {"name": "ASPNETCORE_ENVIRONMENT", "value": "Production"},
-                    {"name": "ConnectionStrings__DefaultConnection", "value": "'"${CONNECTION_STRING}"'"},
-                    {"name": "Embedding__ModelName", "value": "text-embedding-3-small"},
-                    {"name": "Embedding__Dimensions", "value": "1536"},
-                    {"name": "OpenSearch__Endpoint", "value": "'"${OPENSEARCH_ENDPOINT}"'"},
-                    {"name": "OpenSearch__IndexName", "value": "crs-content"},
-                    {"name": "OpenAI__ApiKey", "value": "'"${OpenAI__ApiKey}"'"},
-                    {"name": "OpenAI__Model", "value": "gpt-5-nano"},
-                    {"name": "OpenAI__MaxTokens", "value": "16384"},
-                    {"name": "X__ClientId", "value": "'"${X__ClientId}"'"},
-                    {"name": "X__ClientSecret", "value": "'"${X__ClientSecret}"'"},
-                    {"name": "X__RedirectUri", "value": "'"${X__RedirectUri}"'"}
-                ],
-                "logConfiguration": {
-                    "logDriver": "awslogs",
-                    "options": {
-                        "awslogs-group": "/crs/'${TASK}'",
-                        "awslogs-region": "'${REGION}'",
-                        "awslogs-stream-prefix": "ecs"
-                    }
-                }
-            }]' \
+            --container-definitions "file://${TASK_DEFINITION_FILE}" \
             --region $REGION > /dev/null
+
+        rm -f "$TASK_DEFINITION_FILE"
 
         log_info "Registered task definition: ${PREFIX}-${TASK}-task"
     done
+}
+
+create_cloudwatch_dashboards() {
+    log_info "Creating CloudWatch dashboards..."
+
+    API_DASHBOARD_BODY=$(cat <<EOF
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "API Request Volume",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stacked": false,
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "api.request.count", "Service", "${API_SERVICE_NAME}", "Environment", "${ENVIRONMENT}"]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "API Latency p50/p95",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "period": 300,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "api.request.duration", "Service", "${API_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", {"stat": "p50", "label": "p50"}],
+          [".", "api.request.duration", ".", ".", ".", ".", {"stat": "p95", "label": "p95"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 6,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "API 5xx Count",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "api.request.5xx.count", "Service", "${API_SERVICE_NAME}", "Environment", "${ENVIRONMENT}"]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 8,
+      "y": 6,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Auth Failure Count",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "auth.failure.count", "Service", "${API_SERVICE_NAME}", "Environment", "${ENVIRONMENT}"]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 16,
+      "y": 6,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Rate Limit Rejections",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "api.rate_limit.rejections", "Service", "${API_SERVICE_NAME}", "Environment", "${ENVIRONMENT}"]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Readiness Failures",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "api.request.count", "Service", "${API_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", "Operation", "/health/ready", "Outcome", "server_error"]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "API Dependency Failures",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "dependency.failure.count", "Service", "${API_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", "Dependency", "openai", {"label": "OpenAI"}],
+          [".", "dependency.failure.count", ".", ".", ".", ".", "Dependency", "opensearch", {"label": "OpenSearch"}],
+          [".", "dependency.failure.count", ".", ".", ".", ".", "Dependency", "x", {"label": "X"}]
+        ]
+      }
+    }
+  ]
+}
+EOF
+)
+
+    JOBS_DASHBOARD_BODY=$(cat <<EOF
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Job Success / Failure Counts",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 3600,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "job.success.count", "Service", "${JOBS_SERVICE_NAME}", "Environment", "${ENVIRONMENT}"],
+          [".", "job.failure.count", ".", ".", ".", ".", {"label": "Failures"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Ingestion / Feed Job Duration",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "period": 3600,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "job.duration", "Service", "${JOBS_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", "JobName", "ingestion", {"stat": "Maximum", "label": "Ingestion"}],
+          [".", "job.duration", ".", ".", ".", ".", "JobName", "feed", {"stat": "Maximum", "label": "Feed"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 6,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Items Saved / Indexed",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 3600,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "ingestion.items.saved", "Service", "${JOBS_SERVICE_NAME}", "Environment", "${ENVIRONMENT}"],
+          [".", "ingestion.items.indexed", ".", ".", ".", ".", {"label": "Indexed"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 8,
+      "y": 6,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Feed Generation Duration",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "period": 3600,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "feed.generation.duration", "Service", "${JOBS_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", {"stat": "p95"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 16,
+      "y": 6,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Recommendations Duration",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "period": 3600,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "recommendations.duration", "Service", "${JOBS_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", {"stat": "p95"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Job Dependency Failures",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 3600,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "dependency.failure.count", "Service", "${JOBS_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", "Dependency", "openai", {"label": "OpenAI"}],
+          [".", "dependency.failure.count", ".", ".", ".", ".", "Dependency", "opensearch", {"label": "OpenSearch"}],
+          [".", "dependency.failure.count", ".", ".", ".", ".", "Dependency", "x", {"label": "X"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Vector Search Latency",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "period": 3600,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "dependency.call.duration", "Service", "${JOBS_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", "Dependency", "opensearch", {"stat": "p95"}]
+        ]
+      }
+    }
+  ]
+}
+EOF
+)
+
+    aws cloudwatch put-dashboard \
+        --dashboard-name "${PREFIX}-api-observability" \
+        --dashboard-body "${API_DASHBOARD_BODY}" \
+        --region $REGION > /dev/null
+
+    aws cloudwatch put-dashboard \
+        --dashboard-name "${PREFIX}-jobs-observability" \
+        --dashboard-body "${JOBS_DASHBOARD_BODY}" \
+        --region $REGION > /dev/null
+
+    log_info "Created CloudWatch dashboards: ${PREFIX}-api-observability, ${PREFIX}-jobs-observability"
+}
+
+put_metric_alarm() {
+    local alarm_name="$1"
+    local metric_name="$2"
+    local statistic="$3"
+    local threshold="$4"
+    local comparison_operator="$5"
+    local period="$6"
+    local evaluation_periods="$7"
+    shift 7
+
+    aws cloudwatch put-metric-alarm \
+        --alarm-name "$alarm_name" \
+        --alarm-description "$alarm_name" \
+        --namespace "$METRICS_NAMESPACE" \
+        --metric-name "$metric_name" \
+        --statistic "$statistic" \
+        --threshold "$threshold" \
+        --comparison-operator "$comparison_operator" \
+        --period "$period" \
+        --evaluation-periods "$evaluation_periods" \
+        --treat-missing-data notBreaching \
+        --dimensions "$@" \
+        --region $REGION > /dev/null
+}
+
+put_extended_stat_alarm() {
+    local alarm_name="$1"
+    local metric_name="$2"
+    local extended_statistic="$3"
+    local threshold="$4"
+    local comparison_operator="$5"
+    local period="$6"
+    local evaluation_periods="$7"
+    shift 7
+
+    aws cloudwatch put-metric-alarm \
+        --alarm-name "$alarm_name" \
+        --alarm-description "$alarm_name" \
+        --namespace "$METRICS_NAMESPACE" \
+        --metric-name "$metric_name" \
+        --extended-statistic "$extended_statistic" \
+        --threshold "$threshold" \
+        --comparison-operator "$comparison_operator" \
+        --period "$period" \
+        --evaluation-periods "$evaluation_periods" \
+        --treat-missing-data notBreaching \
+        --dimensions "$@" \
+        --region $REGION > /dev/null
+}
+
+create_cloudwatch_alarms() {
+    log_info "Creating CloudWatch alarms..."
+
+    put_metric_alarm \
+        "${PREFIX}-api-5xx-spike" \
+        "api.request.5xx.count" \
+        "Sum" \
+        "5" \
+        "GreaterThanOrEqualToThreshold" \
+        "300" \
+        "1" \
+        "Name=Service,Value=${API_SERVICE_NAME}" \
+        "Name=Environment,Value=${ENVIRONMENT}"
+
+    put_extended_stat_alarm \
+        "${PREFIX}-api-p95-latency" \
+        "api.request.duration" \
+        "p95" \
+        "1500" \
+        "GreaterThanThreshold" \
+        "300" \
+        "2" \
+        "Name=Service,Value=${API_SERVICE_NAME}" \
+        "Name=Environment,Value=${ENVIRONMENT}"
+
+    put_metric_alarm \
+        "${PREFIX}-api-readiness-failures" \
+        "api.request.count" \
+        "Sum" \
+        "3" \
+        "GreaterThanOrEqualToThreshold" \
+        "300" \
+        "1" \
+        "Name=Service,Value=${API_SERVICE_NAME}" \
+        "Name=Environment,Value=${ENVIRONMENT}" \
+        "Name=Operation,Value=/health/ready" \
+        "Name=Outcome,Value=server_error"
+
+    put_metric_alarm \
+        "${PREFIX}-ingestion-job-failures" \
+        "job.failure.count" \
+        "Sum" \
+        "1" \
+        "GreaterThanOrEqualToThreshold" \
+        "3600" \
+        "1" \
+        "Name=Service,Value=${JOBS_SERVICE_NAME}" \
+        "Name=Environment,Value=${ENVIRONMENT}" \
+        "Name=JobName,Value=ingestion"
+
+    put_metric_alarm \
+        "${PREFIX}-feed-job-failures" \
+        "job.failure.count" \
+        "Sum" \
+        "1" \
+        "GreaterThanOrEqualToThreshold" \
+        "3600" \
+        "1" \
+        "Name=Service,Value=${JOBS_SERVICE_NAME}" \
+        "Name=Environment,Value=${ENVIRONMENT}" \
+        "Name=JobName,Value=feed"
+
+    put_metric_alarm \
+        "${PREFIX}-ingestion-duration-high" \
+        "job.duration" \
+        "Maximum" \
+        "1800000" \
+        "GreaterThanThreshold" \
+        "3600" \
+        "1" \
+        "Name=Service,Value=${JOBS_SERVICE_NAME}" \
+        "Name=Environment,Value=${ENVIRONMENT}" \
+        "Name=JobName,Value=ingestion"
+
+    for SERVICE_NAME in "${API_SERVICE_NAME}" "${JOBS_SERVICE_NAME}"; do
+        for DEPENDENCY in "openai" "opensearch" "x"; do
+            put_metric_alarm \
+                "${PREFIX}-${SERVICE_NAME}-${DEPENDENCY}-dependency-failures" \
+                "dependency.failure.count" \
+                "Sum" \
+                "3" \
+                "GreaterThanOrEqualToThreshold" \
+                "300" \
+                "1" \
+                "Name=Service,Value=${SERVICE_NAME}" \
+                "Name=Environment,Value=${ENVIRONMENT}" \
+                "Name=Dependency,Value=${DEPENDENCY}"
+        done
+    done
+
+    log_info "Created CloudWatch alarms for API, jobs, and dependency failure spikes"
 }
 
 # Create CloudFront invalidation schedule (runs daily at 1 PM Pacific, after the 12 PM feed job)
@@ -772,13 +1293,13 @@ create_cloudfront_invalidation_schedule() {
     if ! aws iam get-role --role-name ${PREFIX}-scheduler-role &> /dev/null; then
         aws iam create-role \
             --role-name ${PREFIX}-scheduler-role \
-            --assume-role-policy-document "$(cat iam/scheduler-trust-policy.json)" \
+            --assume-role-policy-document "$(cat "${SCRIPT_DIR}/iam/scheduler-trust-policy.json")" \
             --tags Key=Project,Value=${PROJECT_TAG}
 
         aws iam put-role-policy \
             --role-name ${PREFIX}-scheduler-role \
             --policy-name ${PREFIX}-scheduler-cloudfront-policy \
-            --policy-document "$(cat iam/scheduler-cloudfront-policy.json)"
+            --policy-document "$(cat "${SCRIPT_DIR}/iam/scheduler-cloudfront-policy.json")"
 
         log_info "Created Scheduler role: ${PREFIX}-scheduler-role"
         sleep 10
@@ -881,6 +1402,7 @@ print_summary() {
     echo "  - App Runner: ${PREFIX}-api"
     echo "  - URL: https://${API_URL}"
     echo "  - CloudWatch Logs: ${APP_RUNNER_APPLICATION_LOG_GROUP}"
+    echo "  - X-Ray Observability: ${APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN}"
     echo ""
     echo "Web (Static):"
     echo "  - S3 Bucket: ${BUCKET_NAME}"
@@ -902,6 +1424,12 @@ print_summary() {
         echo "  - None (AWS ingestion/feed schedules disabled)"
     fi
     echo "  - CloudFront invalidation: Daily at 10 AM Pacific"
+    echo ""
+    echo "Observability:"
+    echo "  - Metrics namespace: ${METRICS_NAMESPACE}"
+    echo "  - Dashboard: ${PREFIX}-api-observability"
+    echo "  - Dashboard: ${PREFIX}-jobs-observability"
+    echo "  - Collector logs: /crs/otel-collector"
     echo ""
     echo "=============================================="
     echo "Next Steps:"
@@ -934,10 +1462,13 @@ main() {
     create_s3_web
     create_ecs_cluster
     create_opensearch
+    create_apprunner_observability_configuration
     create_app_runner
     register_task_definitions
     create_eventbridge_rules
     create_cloudfront_invalidation_schedule
+    create_cloudwatch_dashboards
+    create_cloudwatch_alarms
     print_summary
 }
 

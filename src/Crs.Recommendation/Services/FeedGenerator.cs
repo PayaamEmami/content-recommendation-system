@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Crs.Core.Enums;
 using Crs.Core.Interfaces;
+using Crs.Core.Observability;
 using Crs.Recommendation.Engine;
 using Crs.Recommendation.Models;
 
@@ -16,19 +18,22 @@ public class FeedGenerator : IFeedGenerator
     private readonly IRecommendationRepository _recommendationRepository;
     private readonly IContentVoteRepository _voteRepository;
     private readonly ILogger<FeedGenerator> _logger;
+    private readonly IObservabilityMetrics _metrics;
 
     public FeedGenerator(
         IRecommendationEngine engine,
         IUserProfileService profileService,
         IRecommendationRepository recommendationRepository,
         IContentVoteRepository voteRepository,
-        ILogger<FeedGenerator> logger)
+        ILogger<FeedGenerator> logger,
+        IObservabilityMetrics metrics)
     {
         _engine = engine;
         _profileService = profileService;
         _recommendationRepository = recommendationRepository;
         _voteRepository = voteRepository;
         _logger = logger;
+        _metrics = metrics;
     }
 
     public async Task<List<Core.Entities.Recommendation>> GenerateFeedAsync(
@@ -38,6 +43,11 @@ public class FeedGenerator : IFeedGenerator
         int count = 5,
         CancellationToken cancellationToken = default)
     {
+        using var activity = CrsTelemetry.ActivitySource.StartActivity("feed.generate");
+        activity?.SetTag(CrsTelemetry.Tags.UserId, userId.ToString());
+        activity?.SetTag(CrsTelemetry.Tags.FeedType, feedType.ToString());
+        var stopwatch = Stopwatch.StartNew();
+
         _logger.LogInformation(
             "Generating feed for user {UserId}, type {FeedType}, date {Date}, count {Count}",
             userId, feedType, date, count);
@@ -52,6 +62,11 @@ public class FeedGenerator : IFeedGenerator
             _logger.LogInformation(
                 "Complete recommendations already exist for user {UserId}, feed {FeedType}, date {Date}",
                 userId, feedType, date);
+            stopwatch.Stop();
+            _metrics.RecordDuration(
+                "feed.generation.duration",
+                stopwatch.Elapsed,
+                BuildMetricContext(feedType, "cache_hit", existing.Count));
             return existing;
         }
 
@@ -98,6 +113,11 @@ public class FeedGenerator : IFeedGenerator
             _logger.LogWarning(
                 "No recommendations generated for user {UserId}, feed {FeedType}",
                 userId, feedType);
+            stopwatch.Stop();
+            _metrics.RecordDuration(
+                "feed.generation.duration",
+                stopwatch.Elapsed,
+                BuildMetricContext(feedType, "empty", 0));
             return new List<Core.Entities.Recommendation>();
         }
 
@@ -132,6 +152,12 @@ public class FeedGenerator : IFeedGenerator
         _logger.LogInformation(
             "Generated and saved {Count} recommendations for user {UserId}, feed {FeedType}",
             recommendations.Count, userId, feedType);
+        stopwatch.Stop();
+        activity?.SetTag(CrsTelemetry.Tags.ResultCount, recommendations.Count);
+        _metrics.RecordDuration(
+            "feed.generation.duration",
+            stopwatch.Elapsed,
+            BuildMetricContext(feedType, "success", recommendations.Count));
 
         return recommendations;
     }
@@ -180,5 +206,20 @@ public class FeedGenerator : IFeedGenerator
             allRecommendations.Count, userId);
 
         return allRecommendations;
+    }
+
+    private static MetricContext BuildMetricContext(ContentType feedType, string outcome, int count)
+    {
+        return new MetricContext(
+            Dimensions: new Dictionary<string, string>
+            {
+                ["FeedType"] = feedType.ToString(),
+                ["Operation"] = "feed.generate",
+                ["Outcome"] = outcome
+            },
+            Properties: new Dictionary<string, object?>
+            {
+                ["RecommendationCount"] = count
+            });
     }
 }

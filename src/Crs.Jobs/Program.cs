@@ -2,11 +2,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Crs.Infrastructure;
+using Crs.Infrastructure.Observability;
 using Crs.Jobs.Jobs;
 using Crs.Llm;
 using Crs.Recommendation;
 
 var builder = Host.CreateApplicationBuilder(args);
+builder.Logging.AddCrsLogging(builder.Environment);
+builder.Services.AddCrsObservability(builder.Configuration, builder.Environment, "crs-jobs");
 
 // Register services from other layers
 builder.Services.AddInfrastructure(builder.Configuration);

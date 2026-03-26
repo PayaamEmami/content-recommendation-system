@@ -6,6 +6,7 @@ using System.Linq;
 using Crs.Core.Entities;
 using Crs.Core.Interfaces;
 using Crs.Core.Models;
+using Crs.Core.Observability;
 using Crs.Llm.Services;
 using Crs.Jobs.Validation;
 
@@ -18,15 +19,18 @@ public class SourceIngestionJob
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<SourceIngestionJob> _logger;
+    private readonly IObservabilityMetrics _metrics;
     private const int BatchSize = 5;
     private static readonly TimeSpan PerSourceTimeout = TimeSpan.FromSeconds(120);
 
     public SourceIngestionJob(
         IServiceProvider serviceProvider,
-        ILogger<SourceIngestionJob> logger)
+        ILogger<SourceIngestionJob> logger,
+        IObservabilityMetrics metrics)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _metrics = metrics;
     }
 
     /// <summary>
@@ -34,6 +38,18 @@ public class SourceIngestionJob
     /// </summary>
     public async Task ExecuteAsync(CancellationToken cancellationToken = default)
     {
+        using var activity = CrsTelemetry.ActivitySource.StartActivity("job.source_ingestion");
+        activity?.SetTag(CrsTelemetry.Tags.JobName, "ingestion");
+
+        var startedAt = Stopwatch.StartNew();
+        var runId = Guid.NewGuid().ToString("n");
+        using var logScope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["job.name"] = "ingestion",
+            ["job.run_id"] = runId,
+            ["job.trigger"] = "manual"
+        });
+
         _logger.LogInformation("Starting source ingestion job");
 
         using var scope = _serviceProvider.CreateScope();
@@ -51,6 +67,8 @@ public class SourceIngestionJob
             if (!sourcesList.Any())
             {
                 _logger.LogInformation("No active sources to ingest");
+                startedAt.Stop();
+                _metrics.RecordDuration("job.duration", startedAt.Elapsed, BuildJobContext("ingestion", "empty"));
                 return;
             }
 
@@ -208,10 +226,18 @@ public class SourceIngestionJob
                 "Source ingestion job completed: {Ingested} content ingested, {Embedded} embedded",
                 totalIngested,
                 totalEmbedded);
+            startedAt.Stop();
+            _metrics.Increment("job.success.count", context: BuildJobContext("ingestion", "success"));
+            _metrics.RecordDuration("job.duration", startedAt.Elapsed, BuildJobContext("ingestion", "success"));
+            _metrics.RecordValue("ingestion.items.saved", totalIngested, "Count", BuildOperationContext("sources", "success"));
+            _metrics.RecordValue("ingestion.items.indexed", totalEmbedded, "Count", BuildOperationContext("sources", "success"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in source ingestion job");
+            startedAt.Stop();
+            _metrics.Increment("job.failure.count", context: BuildJobContext("ingestion", "failed"));
+            _metrics.RecordDuration("job.duration", startedAt.Elapsed, BuildJobContext("ingestion", "failed"));
             // Swallow to avoid tight retry loops; individual source errors are already handled.
             // The worker will log and retry on its normal schedule.
         }
@@ -254,10 +280,12 @@ public class SourceIngestionJob
             await vectorStore.UpsertDocumentsAsync(documents, cancellationToken);
 
             _logger.LogInformation("Embedded and indexed {Count} content", documents.Count);
+            _metrics.RecordValue("ingestion.items.indexed", documents.Count, "Count", BuildOperationContext("embedding", "success"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error embedding and indexing content");
+            _metrics.Increment("ingestion.failure.count", context: BuildOperationContext("embedding", "failed"));
             throw;
         }
     }
@@ -307,5 +335,27 @@ public class SourceIngestionJob
             },
             _ => throw new ArgumentException($"Unknown content type: {extracted.Type}")
         };
+    }
+
+    private static MetricContext BuildJobContext(string jobName, string outcome)
+    {
+        return new MetricContext(
+            Dimensions: new Dictionary<string, string>
+            {
+                ["JobName"] = jobName,
+                ["Operation"] = "job.run",
+                ["Outcome"] = outcome
+            });
+    }
+
+    private static MetricContext BuildOperationContext(string operation, string outcome)
+    {
+        return new MetricContext(
+            Dimensions: new Dictionary<string, string>
+            {
+                ["JobName"] = "ingestion",
+                ["Operation"] = operation,
+                ["Outcome"] = outcome
+            });
     }
 }

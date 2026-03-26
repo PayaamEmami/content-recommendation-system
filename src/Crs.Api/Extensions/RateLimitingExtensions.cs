@@ -1,4 +1,6 @@
 using System.Threading.RateLimiting;
+using Crs.Api.Observability;
+using Crs.Core.Observability;
 
 namespace Crs.Api.Extensions;
 
@@ -52,9 +54,34 @@ public static class RateLimitingExtensions
 
             // Return 429 Too Many Requests with Retry-After header
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.OnRejected = (context, _) =>
+            {
+                context.HttpContext.Items[HttpContextTelemetryKeys.RateLimitRejected] = true;
+
+                var metrics = context.HttpContext.RequestServices.GetRequiredService<IObservabilityMetrics>();
+                var route = context.HttpContext.GetEndpoint() is RouteEndpoint endpoint
+                    ? endpoint.RoutePattern.RawText ?? context.HttpContext.Request.Path.ToString()
+                    : context.HttpContext.Request.Path.ToString();
+
+                metrics.Increment(
+                    "api.rate_limit.rejections",
+                    context: new MetricContext(
+                        Dimensions: new Dictionary<string, string>
+                        {
+                            ["Operation"] = route,
+                            ["Outcome"] = "rate_limited",
+                            ["StatusClass"] = "4xx"
+                        },
+                        Properties: new Dictionary<string, object?>
+                        {
+                            ["Method"] = context.HttpContext.Request.Method,
+                            ["Route"] = route
+                }));
+
+                return ValueTask.CompletedTask;
+            };
         });
 
         return services;
     }
 }
-

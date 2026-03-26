@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Crs.Api.Configuration;
 using Crs.Api.DTOs.Auth.Requests;
 using Crs.Api.Services;
+using Crs.Core.Observability;
 using Crs.Tests.Unit.Infrastructure;
 
 namespace Crs.Tests.Unit.Api;
@@ -31,7 +32,8 @@ public sealed class AuthServiceTests
             new InMemoryRefreshTokenRepository(),
             CreateJwtSettings(),
             registrationSettings,
-            NullLogger<AuthService>.Instance);
+            NullLogger<AuthService>.Instance,
+            NullObservabilityMetrics.Instance);
 
         var request = new RegisterRequest
         {
@@ -57,7 +59,8 @@ public sealed class AuthServiceTests
             new InMemoryRefreshTokenRepository(),
             CreateJwtSettings(),
             registrationSettings,
-            NullLogger<AuthService>.Instance);
+            NullLogger<AuthService>.Instance,
+            NullObservabilityMetrics.Instance);
 
         var registerRequest = new RegisterRequest
         {
@@ -88,7 +91,8 @@ public sealed class AuthServiceTests
             new InMemoryRefreshTokenRepository(),
             CreateJwtSettings(),
             registrationSettings,
-            NullLogger<AuthService>.Instance);
+            NullLogger<AuthService>.Instance,
+            NullObservabilityMetrics.Instance);
 
         var registerRequest = new RegisterRequest
         {
@@ -123,7 +127,8 @@ public sealed class AuthServiceTests
             new InMemoryRefreshTokenRepository(),
             CreateJwtSettings(),
             registrationSettings,
-            NullLogger<AuthService>.Instance);
+            NullLogger<AuthService>.Instance,
+            NullObservabilityMetrics.Instance);
 
         var request = new RegisterRequest
         {

@@ -1,11 +1,14 @@
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Moq.Protected;
+using Crs.Core.Observability;
 using Crs.Infrastructure.Configuration;
 using Crs.Infrastructure.Services;
+using Crs.Tests.Infrastructure;
 
 namespace Crs.Tests.Unit.Infrastructure;
 
@@ -16,12 +19,16 @@ public class XApiClientTests
     private HttpClient _httpClient = null!;
     private XApiSettings _settings = null!;
     private XApiClient _client = null!;
+    private TestHostEnvironment _hostEnvironment = null!;
+    private IOptions<ObservabilitySettings> _observabilityOptions = null!;
 
     [TestInitialize]
     public void Setup()
     {
         _mockHttpMessageHandler = new Mock<HttpMessageHandler>();
         _httpClient = new HttpClient(_mockHttpMessageHandler.Object);
+        _hostEnvironment = new TestHostEnvironment();
+        _observabilityOptions = Options.Create(new ObservabilitySettings());
 
         _settings = new XApiSettings
         {
@@ -33,7 +40,13 @@ public class XApiClientTests
         };
 
         var options = Options.Create(_settings);
-        _client = new XApiClient(_httpClient, options, NullLogger<XApiClient>.Instance);
+        _client = new XApiClient(
+            _httpClient,
+            options,
+            NullLogger<XApiClient>.Instance,
+            NullObservabilityMetrics.Instance,
+            _hostEnvironment,
+            _observabilityOptions);
     }
 
     [TestCleanup]

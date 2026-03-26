@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
 using System.Text.Json;
+using System.Diagnostics;
 
 namespace Crs.Api.Middleware;
 
@@ -37,7 +38,14 @@ public class ExceptionHandlingMiddleware
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        _logger.LogError(exception, "An unhandled exception occurred");
+        var traceId = Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
+
+        _logger.LogError(
+            exception,
+            "Unhandled exception for {Method} {Path} trace {TraceId}",
+            context.Request.Method,
+            context.Request.Path,
+            traceId);
 
         var statusCode = exception switch
         {
@@ -62,6 +70,8 @@ public class ExceptionHandlingMiddleware
             problemDetails.Extensions["stackTrace"] = exception.StackTrace;
         }
 
+        problemDetails.Extensions["traceId"] = traceId;
+
         context.Response.ContentType = "application/problem+json";
         context.Response.StatusCode = (int)statusCode;
 
@@ -85,4 +95,3 @@ public class ExceptionHandlingMiddleware
         };
     }
 }
-

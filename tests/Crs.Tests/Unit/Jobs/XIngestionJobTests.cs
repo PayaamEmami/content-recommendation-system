@@ -5,6 +5,7 @@ using Moq;
 using Crs.Core.Entities;
 using Crs.Core.Interfaces;
 using Crs.Core.Models;
+using Crs.Core.Observability;
 using Crs.Jobs.Jobs;
 
 namespace Crs.Tests.Unit.Jobs;
@@ -31,7 +32,7 @@ public sealed class XIngestionJobTests
             xApiClient.Object,
             dataProtectionProvider);
 
-        var job = new XIngestionJob(provider, NullLogger<XIngestionJob>.Instance);
+        var job = new XIngestionJob(provider, NullLogger<XIngestionJob>.Instance, NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 
@@ -70,7 +71,7 @@ public sealed class XIngestionJobTests
             xApiClient.Object,
             dataProtectionProvider);
 
-        var job = new XIngestionJob(provider, NullLogger<XIngestionJob>.Instance);
+        var job = new XIngestionJob(provider, NullLogger<XIngestionJob>.Instance, NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 

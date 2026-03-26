@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Crs.Core.Entities;
 using Crs.Core.Interfaces;
 using Crs.Core.Models;
+using Crs.Core.Observability;
 using Crs.Recommendation.Filters;
 using Crs.Recommendation.Models;
 using Crs.Recommendation.Scorers;
@@ -19,25 +21,35 @@ public class RecommendationEngine : IRecommendationEngine
     private readonly CompositeScorer _compositeScorer;
     private readonly IEnumerable<IRecommendationFilter> _filters;
     private readonly ILogger<RecommendationEngine> _logger;
+    private readonly IObservabilityMetrics _metrics;
 
     public RecommendationEngine(
         IVectorStore vectorStore,
         IContentRepository contentRepository,
         CompositeScorer compositeScorer,
         IEnumerable<IRecommendationFilter> filters,
-        ILogger<RecommendationEngine> logger)
+        ILogger<RecommendationEngine> logger,
+        IObservabilityMetrics metrics)
     {
         _vectorStore = vectorStore;
         _contentRepository = contentRepository;
         _compositeScorer = compositeScorer;
         _filters = filters;
         _logger = logger;
+        _metrics = metrics;
     }
 
     public async Task<List<ScoredContent>> GenerateRecommendationsAsync(
         RecommendationContext context,
         CancellationToken cancellationToken = default)
     {
+        using var activity = CrsTelemetry.ActivitySource.StartActivity("recommendations.generate");
+        activity?.SetTag(CrsTelemetry.Tags.UserId, context.UserId.ToString());
+        activity?.SetTag(CrsTelemetry.Tags.FeedType, context.FeedType.ToString());
+
+        var startedAt = Stopwatch.StartNew();
+        var fallbackCount = 0;
+
         _logger.LogInformation(
             "Generating {Count} recommendations for user {UserId}, feed type {FeedType}, date {Date}",
             context.Count, context.UserId, context.FeedType, context.Date);
@@ -48,13 +60,22 @@ public class RecommendationEngine : IRecommendationEngine
         if (!scoredCandidates.Any())
         {
             _logger.LogWarning("No candidate content found for user {UserId}", context.UserId);
+            startedAt.Stop();
+            activity?.SetTag(CrsTelemetry.Tags.ResultCount, 0);
+            _metrics.RecordDuration(
+                "recommendations.duration",
+                startedAt.Elapsed,
+                BuildMetricContext(context.FeedType, "empty", 0, 0, 0));
             return new List<ScoredContent>();
         }
 
         var recommendations = await RankAndSelectAsync(scoredCandidates, context, cancellationToken);
+        var usedFallback = false;
 
         if (recommendations.Count < context.Count)
         {
+            usedFallback = true;
+            fallbackCount++;
             _logger.LogInformation(
                 "Primary recommendation pool produced {Count} items for user {UserId}. Trying older unseen content fallback.",
                 recommendations.Count,
@@ -71,6 +92,8 @@ public class RecommendationEngine : IRecommendationEngine
 
         if (recommendations.Count < context.Count)
         {
+            usedFallback = true;
+            fallbackCount++;
             _logger.LogInformation(
                 "Older-content fallback produced {Count} items for user {UserId}. Trying recent-repeat fallback.",
                 recommendations.Count,
@@ -88,6 +111,34 @@ public class RecommendationEngine : IRecommendationEngine
         _logger.LogInformation(
             "Generated {Count} recommendations for user {UserId}",
             recommendations.Count, context.UserId);
+        startedAt.Stop();
+        activity?.SetTag(CrsTelemetry.Tags.ResultCount, recommendations.Count);
+        activity?.SetTag("crs.fallback_count", fallbackCount);
+        _metrics.RecordDuration(
+            "recommendations.duration",
+            startedAt.Elapsed,
+            BuildMetricContext(
+                context.FeedType,
+                recommendations.Count > 0 ? "success" : "empty",
+                scoredCandidates.Count,
+                recommendations.Count,
+                usedFallback ? 1 : 0));
+        _metrics.RecordValue(
+            "recommendations.candidates_examined",
+            scoredCandidates.Count,
+            "Count",
+            BuildMetricContext(context.FeedType, "success", scoredCandidates.Count, recommendations.Count, usedFallback ? 1 : 0));
+        _metrics.RecordValue(
+            "recommendations.results_returned",
+            recommendations.Count,
+            "Count",
+            BuildMetricContext(context.FeedType, "success", scoredCandidates.Count, recommendations.Count, usedFallback ? 1 : 0));
+        if (usedFallback)
+        {
+            _metrics.Increment(
+                "recommendations.fallback.count",
+                context: BuildMetricContext(context.FeedType, "fallback", scoredCandidates.Count, recommendations.Count, fallbackCount));
+        }
 
         return recommendations;
     }
@@ -383,5 +434,27 @@ public class RecommendationEngine : IRecommendationEngine
         }
 
         return candidates;
+    }
+
+    private static MetricContext BuildMetricContext(
+        Core.Enums.ContentType feedType,
+        string outcome,
+        int candidates,
+        int results,
+        int fallbackCount)
+    {
+        return new MetricContext(
+            Dimensions: new Dictionary<string, string>
+            {
+                ["FeedType"] = feedType.ToString(),
+                ["Operation"] = "recommendations.generate",
+                ["Outcome"] = outcome
+            },
+            Properties: new Dictionary<string, object?>
+            {
+                ["Candidates"] = candidates,
+                ["Results"] = results,
+                ["FallbackCount"] = fallbackCount
+            });
     }
 }

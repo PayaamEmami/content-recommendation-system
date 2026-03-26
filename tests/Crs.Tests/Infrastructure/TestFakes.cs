@@ -2,6 +2,7 @@ using Crs.Core.Interfaces;
 using Crs.Core.Models;
 using Crs.Llm.Models;
 using Crs.Llm.Services;
+using Microsoft.Extensions.Hosting;
 
 namespace Crs.Tests.Infrastructure;
 
@@ -176,4 +177,13 @@ public sealed class FakeContentFetcherService : IContentFetcherService
             StatusCode = 200
         });
     }
+}
+
+public sealed class TestHostEnvironment : IHostEnvironment
+{
+    public string EnvironmentName { get; set; } = "Testing";
+    public string ApplicationName { get; set; } = "Crs.Tests";
+    public string ContentRootPath { get; set; } = string.Empty;
+    public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; }
+        = new Microsoft.Extensions.FileProviders.NullFileProvider();
 }

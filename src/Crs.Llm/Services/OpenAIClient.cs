@@ -1,8 +1,11 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Diagnostics;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Crs.Core.Observability;
 using Crs.Llm.Configuration;
 
 namespace Crs.Llm.Services;
@@ -15,15 +18,21 @@ public class OpenAIClient : ILlmClient
     private readonly HttpClient _httpClient;
     private readonly OpenAISettings _settings;
     private readonly ILogger<OpenAIClient> _logger;
+    private readonly IHostEnvironment _environment;
+    private readonly IObservabilityMetrics _metrics;
 
     public OpenAIClient(
         HttpClient httpClient,
         IOptions<OpenAISettings> settings,
-        ILogger<OpenAIClient> logger)
+        ILogger<OpenAIClient> logger,
+        IHostEnvironment environment,
+        IObservabilityMetrics metrics)
     {
         _httpClient = httpClient;
         _settings = settings.Value;
         _logger = logger;
+        _environment = environment;
+        _metrics = metrics;
 
         // Standard OpenAI configuration
         var baseUrl = _settings.BaseUrl ?? "https://api.openai.com/v1/";
@@ -76,6 +85,9 @@ public class OpenAIClient : ILlmClient
     {
         try
         {
+            using var activity = CrsTelemetry.ActivitySource.StartActivity("openai.chat_completions");
+            activity?.SetTag(CrsTelemetry.Tags.Dependency, "openai");
+            var stopwatch = Stopwatch.StartNew();
             // Some OpenAI models (e.g., gpt-5-nano) only accept the default temperature (1).
             var temperature = _settings.Temperature;
             if (string.Equals(_settings.Model, "gpt-5-nano", StringComparison.OrdinalIgnoreCase))
@@ -114,8 +126,12 @@ public class OpenAIClient : ILlmClient
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("OpenAI API request failed: {StatusCode} - {Content}",
-                    response.StatusCode, responseContent);
+                _logger.LogError(
+                    "OpenAI API request failed: {StatusCode}. Body: {Body}",
+                    response.StatusCode,
+                    FormatResponseBody(responseContent));
+                stopwatch.Stop();
+                RecordMetric("chat_completions", "failed", stopwatch.Elapsed);
                 throw new HttpRequestException($"OpenAI API request failed: {response.StatusCode}");
             }
 
@@ -149,6 +165,9 @@ public class OpenAIClient : ILlmClient
                     "OpenAI response truncated due to token limit. Completion tokens: {CompletionTokens}, Finish reason: {FinishReason}",
                     llmResponse.CompletionTokens, llmResponse.FinishReason);
             }
+
+            stopwatch.Stop();
+            RecordMetric("chat_completions", "success", stopwatch.Elapsed, llmResponse.TotalTokens ?? 0);
 
             // Check if there are tool calls
             if (message.TryGetProperty("tool_calls", out var toolCalls))
@@ -186,4 +205,35 @@ public class OpenAIClient : ILlmClient
         }
     }
 
+    private void RecordMetric(string operation, string outcome, TimeSpan duration, int tokenCount = 0)
+    {
+        var context = new MetricContext(
+            Dimensions: new Dictionary<string, string>
+            {
+                ["Dependency"] = "OpenAI",
+                ["Operation"] = operation,
+                ["Outcome"] = outcome
+            },
+            Properties: new Dictionary<string, object?>
+            {
+                ["TokenCount"] = tokenCount
+            });
+
+        _metrics.Increment("dependency.call.count", context: context);
+        _metrics.RecordDuration("dependency.call.duration", duration, context);
+        if (outcome == "failed")
+        {
+            _metrics.Increment("dependency.failure.count", context: context);
+        }
+    }
+
+    private string FormatResponseBody(string responseContent)
+    {
+        if (_environment.IsDevelopment())
+        {
+            return responseContent.Length <= 512 ? responseContent : $"{responseContent[..512]}...";
+        }
+
+        return $"<suppressed length={responseContent.Length}>";
+    }
 }

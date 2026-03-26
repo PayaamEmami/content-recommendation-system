@@ -60,7 +60,7 @@ public class AuthController : ControllerBase
         [FromBody] LoginRequest request,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Login attempt for email: {Email}", request.Email);
+        _logger.LogInformation("Login attempt submitted");
 
         var response = await _authService.LoginAsync(request, cancellationToken);
         return Ok(response);
@@ -90,7 +90,7 @@ public class AuthController : ControllerBase
                 detail: _registrationSettings.DisabledMessage);
         }
 
-        _logger.LogInformation("Registration attempt for email: {Email}", request.Email);
+        _logger.LogInformation("Registration attempt submitted");
 
         var response = await _authService.RegisterAsync(request, cancellationToken);
         return Ok(response);
@@ -113,4 +113,3 @@ public class AuthController : ControllerBase
         return Ok(response);
     }
 }
-

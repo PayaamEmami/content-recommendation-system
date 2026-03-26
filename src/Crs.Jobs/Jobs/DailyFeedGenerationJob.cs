@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Crs.Core.Enums;
 using Crs.Core.Interfaces;
+using Crs.Core.Observability;
 using Crs.Recommendation.Services;
 
 namespace Crs.Jobs.Jobs;
@@ -13,13 +15,16 @@ public class DailyFeedGenerationJob
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<DailyFeedGenerationJob> _logger;
+    private readonly IObservabilityMetrics _metrics;
 
     public DailyFeedGenerationJob(
         IServiceProvider serviceProvider,
-        ILogger<DailyFeedGenerationJob> logger)
+        ILogger<DailyFeedGenerationJob> logger,
+        IObservabilityMetrics metrics)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _metrics = metrics;
     }
 
     /// <summary>
@@ -27,6 +32,17 @@ public class DailyFeedGenerationJob
     /// </summary>
     public async Task ExecuteAsync(CancellationToken cancellationToken = default)
     {
+        using var activity = CrsTelemetry.ActivitySource.StartActivity("job.feed_generation");
+        activity?.SetTag(CrsTelemetry.Tags.JobName, "feed");
+        var stopwatch = Stopwatch.StartNew();
+        var runId = Guid.NewGuid().ToString("n");
+        using var logScope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["job.name"] = "feed",
+            ["job.run_id"] = runId,
+            ["job.trigger"] = "manual"
+        });
+
         _logger.LogInformation("Starting daily feed generation job");
 
         using var scope = _serviceProvider.CreateScope();
@@ -42,6 +58,8 @@ public class DailyFeedGenerationJob
             if (!usersList.Any())
             {
                 _logger.LogInformation("No users found");
+                stopwatch.Stop();
+                _metrics.RecordDuration("job.duration", stopwatch.Elapsed, BuildContext("feed", "empty"));
                 return;
             }
 
@@ -61,7 +79,7 @@ public class DailyFeedGenerationJob
 
                 try
                 {
-                    _logger.LogInformation("Generating feeds for user: {Email}", user.Email);
+                    _logger.LogInformation("Generating feeds for user {UserId}", user.Id);
 
                     // Generate feeds for all content types
                     var feedTypes = Enum.GetValues<ContentType>();
@@ -84,7 +102,7 @@ public class DailyFeedGenerationJob
                             _logger.LogDebug(
                                 "Generated {Count} recommendations for user {Email}, feed type {FeedType}",
                                 recommendations.Count,
-                                user.Email,
+                                user.Id,
                                 feedType);
                         }
                         catch (Exception ex)
@@ -99,8 +117,8 @@ public class DailyFeedGenerationJob
 
                     usersProcessed++;
                     _logger.LogInformation(
-                        "Completed feed generation for user {Email}: {Count} total recommendations",
-                        user.Email,
+                        "Completed feed generation for user {UserId}: {Count} total recommendations",
+                        user.Id,
                         userFeedCount);
                 }
                 catch (Exception ex)
@@ -113,10 +131,16 @@ public class DailyFeedGenerationJob
                 "Daily feed generation job completed: {UsersProcessed} users processed, {TotalFeeds} recommendations generated",
                 usersProcessed,
                 totalFeedsGenerated);
+            stopwatch.Stop();
+            _metrics.Increment("job.success.count", context: BuildContext("feed", "success"));
+            _metrics.RecordDuration("job.duration", stopwatch.Elapsed, BuildContext("feed", "success"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in daily feed generation job");
+            stopwatch.Stop();
+            _metrics.Increment("job.failure.count", context: BuildContext("feed", "failed"));
+            _metrics.RecordDuration("job.duration", stopwatch.Elapsed, BuildContext("feed", "failed"));
             throw;
         }
     }
@@ -130,6 +154,8 @@ public class DailyFeedGenerationJob
         DateOnly? date = null,
         CancellationToken cancellationToken = default)
     {
+        using var activity = CrsTelemetry.ActivitySource.StartActivity("job.feed_generation_for_user");
+        activity?.SetTag(CrsTelemetry.Tags.UserId, userId.ToString());
         _logger.LogInformation("Starting feed generation for user {UserId}", userId);
 
         using var scope = _serviceProvider.CreateScope();
@@ -153,5 +179,16 @@ public class DailyFeedGenerationJob
             _logger.LogError(ex, "Error generating feeds for user {UserId}", userId);
             throw;
         }
+    }
+
+    private static MetricContext BuildContext(string jobName, string outcome)
+    {
+        return new MetricContext(
+            Dimensions: new Dictionary<string, string>
+            {
+                ["JobName"] = jobName,
+                ["Operation"] = "job.run",
+                ["Outcome"] = outcome
+            });
     }
 }

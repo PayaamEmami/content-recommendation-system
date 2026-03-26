@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.DataProtection;
 using Crs.Core.Entities;
 using Crs.Core.Interfaces;
+using Crs.Core.Observability;
 
 namespace Crs.Jobs.Jobs;
 
@@ -15,15 +17,31 @@ public class XIngestionJob
     private const int KeepPerAccount = 200;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<XIngestionJob> _logger;
+    private readonly IObservabilityMetrics _metrics;
 
-    public XIngestionJob(IServiceProvider serviceProvider, ILogger<XIngestionJob> logger)
+    public XIngestionJob(
+        IServiceProvider serviceProvider,
+        ILogger<XIngestionJob> logger,
+        IObservabilityMetrics metrics)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _metrics = metrics;
     }
 
     public async Task ExecuteAsync(CancellationToken cancellationToken = default)
     {
+        using var activity = CrsTelemetry.ActivitySource.StartActivity("job.x_ingestion");
+        activity?.SetTag(CrsTelemetry.Tags.JobName, "x-ingestion");
+        var stopwatch = Stopwatch.StartNew();
+        var runId = Guid.NewGuid().ToString("n");
+        using var logScope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["job.name"] = "x-ingestion",
+            ["job.run_id"] = runId,
+            ["job.trigger"] = "manual"
+        });
+
         _logger.LogInformation("Starting X ingestion job");
 
         using var scope = _serviceProvider.CreateScope();
@@ -39,6 +57,8 @@ public class XIngestionJob
         if (!connections.Any())
         {
             _logger.LogInformation("No X connections found");
+            stopwatch.Stop();
+            _metrics.RecordDuration("job.duration", stopwatch.Elapsed, BuildContext("x-ingestion", "empty"));
             return;
         }
 
@@ -126,6 +146,9 @@ public class XIngestionJob
         }
 
         _logger.LogInformation("X ingestion job completed");
+        stopwatch.Stop();
+        _metrics.Increment("job.success.count", context: BuildContext("x-ingestion", "success"));
+        _metrics.RecordDuration("job.duration", stopwatch.Elapsed, BuildContext("x-ingestion", "success"));
     }
 
     private static string Protect(IDataProtector protector, string value)
@@ -136,5 +159,16 @@ public class XIngestionJob
     private static string Unprotect(IDataProtector protector, string value)
     {
         return string.IsNullOrEmpty(value) ? string.Empty : protector.Unprotect(value);
+    }
+
+    private static MetricContext BuildContext(string jobName, string outcome)
+    {
+        return new MetricContext(
+            Dimensions: new Dictionary<string, string>
+            {
+                ["JobName"] = jobName,
+                ["Operation"] = "job.run",
+                ["Outcome"] = outcome
+            });
     }
 }

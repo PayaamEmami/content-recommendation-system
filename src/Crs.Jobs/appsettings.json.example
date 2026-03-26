@@ -6,6 +6,12 @@
       "Crs": "Debug"
     }
   },
+  "Observability": {
+    "ServiceNamespace": "crs",
+    "TraceSampleRatio": 1.0,
+    "MetricsNamespace": "CRS/Application",
+    "EnableSensitiveBodyLogging": false
+  },
   "ConnectionStrings": {
     "DefaultConnection": "Host=localhost;Database=crsdb;Username=crsadmin;Password=your-password"
   },

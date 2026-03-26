@@ -3,6 +3,7 @@ using Moq;
 using Crs.Core.Entities;
 using Crs.Core.Enums;
 using Crs.Core.Interfaces;
+using Crs.Core.Observability;
 using Crs.Recommendation.Engine;
 using Crs.Recommendation.Models;
 using Crs.Recommendation.Services;
@@ -161,6 +162,7 @@ public sealed class FeedGeneratorTests
             profileService.Object,
             recommendationRepository.Object,
             voteRepository.Object,
-            NullLogger<FeedGenerator>.Instance);
+            NullLogger<FeedGenerator>.Instance,
+            NullObservabilityMetrics.Instance);
     }
 }

@@ -3,6 +3,7 @@ using Moq;
 using Crs.Core.Entities;
 using Crs.Core.Enums;
 using Crs.Core.Interfaces;
+using Crs.Core.Observability;
 using Crs.Recommendation.Engine;
 using Crs.Recommendation.Filters;
 using Crs.Recommendation.Models;
@@ -94,7 +95,8 @@ public sealed class RecommendationEngineTests
                 new SeenContentFilter(),
                 new DiversityFilter()
             },
-            NullLogger<RecommendationEngine>.Instance);
+            NullLogger<RecommendationEngine>.Instance,
+            NullObservabilityMetrics.Instance);
     }
 
     private static RecommendationContext BuildContext()

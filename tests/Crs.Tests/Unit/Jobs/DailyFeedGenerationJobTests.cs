@@ -4,6 +4,7 @@ using Moq;
 using Crs.Core.Entities;
 using Crs.Core.Enums;
 using Crs.Core.Interfaces;
+using Crs.Core.Observability;
 using Crs.Jobs.Jobs;
 using Crs.Recommendation.Services;
 using RecommendationEntity = Crs.Core.Entities.Recommendation;
@@ -23,7 +24,7 @@ public sealed class DailyFeedGenerationJobTests
             .ReturnsAsync(Array.Empty<User>());
 
         var provider = BuildProvider(userRepository.Object, feedGenerator.Object);
-        var job = new DailyFeedGenerationJob(provider, NullLogger<DailyFeedGenerationJob>.Instance);
+        var job = new DailyFeedGenerationJob(provider, NullLogger<DailyFeedGenerationJob>.Instance, NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 
@@ -48,7 +49,7 @@ public sealed class DailyFeedGenerationJobTests
             .ReturnsAsync(new List<RecommendationEntity> { new() });
 
         var provider = BuildProvider(userRepository.Object, feedGenerator.Object);
-        var job = new DailyFeedGenerationJob(provider, NullLogger<DailyFeedGenerationJob>.Instance);
+        var job = new DailyFeedGenerationJob(provider, NullLogger<DailyFeedGenerationJob>.Instance, NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 
@@ -72,7 +73,7 @@ public sealed class DailyFeedGenerationJobTests
             .ReturnsAsync(new List<RecommendationEntity>());
 
         var provider = BuildProvider(userRepository.Object, feedGenerator.Object);
-        var job = new DailyFeedGenerationJob(provider, NullLogger<DailyFeedGenerationJob>.Instance);
+        var job = new DailyFeedGenerationJob(provider, NullLogger<DailyFeedGenerationJob>.Instance, NullObservabilityMetrics.Instance);
 
         await job.ExecuteForUserAsync(userId, targetDate, CancellationToken.None);
 

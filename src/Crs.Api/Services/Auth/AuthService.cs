@@ -10,6 +10,7 @@ using Crs.Api.DTOs.Auth.Responses;
 using Crs.Api.DTOs.Users.Responses;
 using Crs.Core.Entities;
 using Crs.Core.Interfaces;
+using Crs.Core.Observability;
 
 namespace Crs.Api.Services;
 
@@ -23,6 +24,7 @@ public class AuthService : IAuthService
     private readonly JwtSettings _jwtSettings;
     private readonly RegistrationSettings _registrationSettings;
     private readonly ILogger<AuthService> _logger;
+    private readonly IObservabilityMetrics _metrics;
     private readonly PasswordHasher<User> _passwordHasher;
 
     public AuthService(
@@ -30,13 +32,15 @@ public class AuthService : IAuthService
         IRefreshTokenRepository refreshTokenRepository,
         JwtSettings jwtSettings,
         RegistrationSettings registrationSettings,
-        ILogger<AuthService> logger)
+        ILogger<AuthService> logger,
+        IObservabilityMetrics metrics)
     {
         _userRepository = userRepository;
         _refreshTokenRepository = refreshTokenRepository;
         _jwtSettings = jwtSettings;
         _registrationSettings = registrationSettings;
         _logger = logger;
+        _metrics = metrics;
         _passwordHasher = new PasswordHasher<User>();
     }
 
@@ -46,6 +50,7 @@ public class AuthService : IAuthService
         var user = await _userRepository.GetByEmailAsync(request.Email, cancellationToken);
         if (user == null)
         {
+            RecordAuthFailure("login", "user_not_found");
             throw new UnauthorizedAccessException("Invalid email or password");
         }
 
@@ -53,6 +58,7 @@ public class AuthService : IAuthService
         var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
         if (verificationResult == PasswordVerificationResult.Failed)
         {
+            RecordAuthFailure("login", "invalid_password");
             throw new UnauthorizedAccessException("Invalid email or password");
         }
 
@@ -104,7 +110,7 @@ public class AuthService : IAuthService
 
         await _userRepository.CreateAsync(user, cancellationToken);
 
-        _logger.LogInformation("New user registered: {Email}", user.Email);
+        _logger.LogInformation("New user registered");
 
         // Generate tokens
         var accessToken = GenerateAccessToken(user);
@@ -128,17 +134,20 @@ public class AuthService : IAuthService
         var tokenEntity = await _refreshTokenRepository.GetAndRemoveAsync(request.RefreshToken, cancellationToken);
         if (tokenEntity == null)
         {
+            RecordAuthFailure("refresh", "invalid_refresh_token");
             throw new UnauthorizedAccessException("Invalid refresh token");
         }
 
         if (tokenEntity.ExpiresAt < DateTime.UtcNow)
         {
+            RecordAuthFailure("refresh", "expired_refresh_token");
             throw new UnauthorizedAccessException("Refresh token has expired");
         }
 
         var user = await _userRepository.GetByIdAsync(tokenEntity.UserId, cancellationToken);
         if (user == null)
         {
+            RecordAuthFailure("refresh", "user_not_found");
             throw new UnauthorizedAccessException("User not found");
         }
 
@@ -240,6 +249,19 @@ public class AuthService : IAuthService
             CreatedAt = user.CreatedAt,
             LastLoginAt = user.LastLoginAt
         };
+    }
+
+    private void RecordAuthFailure(string operation, string outcome)
+    {
+        _metrics.Increment(
+            "auth.failure.count",
+            context: new MetricContext(
+                Dimensions: new Dictionary<string, string>
+                {
+                    ["Operation"] = operation,
+                    ["Outcome"] = outcome,
+                    ["StatusClass"] = "4xx"
+                }));
     }
 }
 

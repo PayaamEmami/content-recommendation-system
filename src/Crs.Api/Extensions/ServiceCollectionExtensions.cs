@@ -3,6 +3,7 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Crs.Api.Configuration;
+using Crs.Core.Observability;
 
 namespace Crs.Api.Extensions;
 
@@ -30,6 +31,43 @@ public static class ServiceCollectionExtensions
         })
         .AddJwtBearer(options =>
         {
+            options.Events = new JwtBearerEvents
+            {
+                OnAuthenticationFailed = context =>
+                {
+                    var metrics = context.HttpContext.RequestServices.GetRequiredService<IObservabilityMetrics>();
+                    metrics.Increment(
+                        "auth.failure.count",
+                        context: new MetricContext(
+                            Dimensions: new Dictionary<string, string>
+                            {
+                                ["Operation"] = "jwt",
+                                ["Outcome"] = "authentication_failed",
+                                ["StatusClass"] = "4xx"
+                            },
+                            Properties: new Dictionary<string, object?>
+                            {
+                                ["Error"] = context.Exception.GetType().Name
+                            }));
+
+                    return Task.CompletedTask;
+                },
+                OnChallenge = context =>
+                {
+                    var metrics = context.HttpContext.RequestServices.GetRequiredService<IObservabilityMetrics>();
+                    metrics.Increment(
+                        "auth.failure.count",
+                        context: new MetricContext(
+                            Dimensions: new Dictionary<string, string>
+                            {
+                                ["Operation"] = "jwt",
+                                ["Outcome"] = "challenge",
+                                ["StatusClass"] = "4xx"
+                            }));
+
+                    return Task.CompletedTask;
+                }
+            };
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
@@ -116,4 +154,3 @@ public static class ServiceCollectionExtensions
         return services;
     }
 }
-

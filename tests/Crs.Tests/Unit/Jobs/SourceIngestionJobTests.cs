@@ -4,6 +4,7 @@ using Moq;
 using Crs.Core.Entities;
 using Crs.Core.Interfaces;
 using Crs.Core.Models;
+using Crs.Core.Observability;
 using Crs.Jobs.Jobs;
 using Crs.Llm.Models;
 using Crs.Llm.Services;
@@ -32,7 +33,7 @@ public sealed class SourceIngestionJobTests
             embeddingService.Object,
             vectorStore.Object);
 
-        var job = new SourceIngestionJob(provider, NullLogger<SourceIngestionJob>.Instance);
+        var job = new SourceIngestionJob(provider, NullLogger<SourceIngestionJob>.Instance, NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 
@@ -64,7 +65,7 @@ public sealed class SourceIngestionJobTests
             embeddingService.Object,
             vectorStore.Object);
 
-        var job = new SourceIngestionJob(provider, NullLogger<SourceIngestionJob>.Instance);
+        var job = new SourceIngestionJob(provider, NullLogger<SourceIngestionJob>.Instance, NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 

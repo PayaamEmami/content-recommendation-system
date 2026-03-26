@@ -1,12 +1,15 @@
 using System.Net;
 using System.Text;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Moq.Protected;
 using Crs.Infrastructure.Configuration;
 using Crs.Infrastructure.Services;
+using Crs.Core.Observability;
+using Crs.Tests.Infrastructure;
 
 namespace Crs.Tests.Unit.Infrastructure;
 
@@ -19,6 +22,8 @@ public class OpenAIEmbeddingServiceTests
     private Mock<IConfiguration> _mockConfiguration = null!;
     private EmbeddingSettings _settings = null!;
     private OpenAIEmbeddingService _service = null!;
+    private TestHostEnvironment _hostEnvironment = null!;
+    private IOptions<ObservabilitySettings> _observabilityOptions = null!;
 
     [TestInitialize]
     public void Setup()
@@ -27,6 +32,8 @@ public class OpenAIEmbeddingServiceTests
         _httpClient = new HttpClient(_mockHttpMessageHandler.Object);
         _mockLogger = new Mock<ILogger<OpenAIEmbeddingService>>();
         _mockConfiguration = new Mock<IConfiguration>();
+        _hostEnvironment = new TestHostEnvironment();
+        _observabilityOptions = Options.Create(new ObservabilitySettings());
 
         // Mock the OpenAI API key from configuration
         _mockConfiguration.Setup(c => c["OpenAI:ApiKey"]).Returns("test-api-key");
@@ -39,7 +46,14 @@ public class OpenAIEmbeddingServiceTests
         };
 
         var options = Options.Create(_settings);
-        _service = new OpenAIEmbeddingService(_httpClient, options, _mockConfiguration.Object, _mockLogger.Object);
+        _service = new OpenAIEmbeddingService(
+            _httpClient,
+            options,
+            _mockConfiguration.Object,
+            _mockLogger.Object,
+            NullObservabilityMetrics.Instance,
+            _hostEnvironment,
+            _observabilityOptions);
     }
 
     [TestCleanup]
@@ -237,7 +251,14 @@ public class OpenAIEmbeddingServiceTests
         var batchSize = 2;
         _settings.MaxBatchSize = batchSize;
         var options = Options.Create(_settings);
-        _service = new OpenAIEmbeddingService(_httpClient, options, _mockConfiguration.Object, _mockLogger.Object);
+        _service = new OpenAIEmbeddingService(
+            _httpClient,
+            options,
+            _mockConfiguration.Object,
+            _mockLogger.Object,
+            NullObservabilityMetrics.Instance,
+            _hostEnvironment,
+            _observabilityOptions);
 
         var texts = new List<string> { "Text 1", "Text 2", "Text 3", "Text 4", "Text 5" };
 

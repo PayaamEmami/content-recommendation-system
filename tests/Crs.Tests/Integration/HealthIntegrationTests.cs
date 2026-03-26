@@ -40,4 +40,20 @@ public sealed class HealthIntegrationTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
     }
+
+    [TestMethod]
+    public async Task HealthLive_ReturnsOk()
+    {
+        var response = await _client.GetAsync("/health/live");
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task HealthReady_ReturnsOk()
+    {
+        var response = await _client.GetAsync("/health/ready");
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+    }
 }
