@@ -117,7 +117,13 @@
 
                     @if (_isLoading)
                     {
-                        <p>Loading content...</p>
+                        <div class="feed-loading-state" role="status" aria-live="polite">
+                            <div class="feed-loading-spinner" aria-hidden="true"></div>
+                            <div class="feed-loading-copy">
+                                <span class="feed-loading-title">Loading saved content</span>
+                                <span class="feed-loading-subtitle">Gathering the examples you have already rated so you can review them here.</span>
+                            </div>
+                        </div>
                     }
                     else if (!_content.Any())
                     {

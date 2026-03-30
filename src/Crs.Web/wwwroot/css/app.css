@@ -253,6 +253,58 @@ a:hover {
     margin-bottom: 1.5rem;
 }
 
+.feed-loading-state {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--bg-primary), var(--bg-secondary));
+    box-shadow: 0 2px 6px var(--shadow);
+}
+
+.x-loading-state {
+    margin-bottom: 0.5rem;
+}
+
+.feed-loading-spinner {
+    width: 2.5rem;
+    height: 2.5rem;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-color);
+    box-shadow: 0 0 0 4px var(--bg-secondary);
+    animation: feed-loading-spin 0.85s linear infinite;
+}
+
+.feed-loading-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.feed-loading-title {
+    color: var(--text-primary);
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.feed-loading-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+
+@keyframes feed-loading-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 /* ============================================
    X Feed
    ============================================ */
@@ -435,7 +487,29 @@ a:hover {
     display: flex;
     gap: 1rem;
     overflow-x: auto;
-    padding-bottom: 0.5rem;
+    padding-bottom: 0.75rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-color) var(--bg-secondary);
+    overscroll-behavior-x: contain;
+}
+
+.x-post-carousel::-webkit-scrollbar {
+    height: 10px;
+}
+
+.x-post-carousel::-webkit-scrollbar-track {
+    background-color: var(--bg-secondary);
+    border-radius: 999px;
+}
+
+.x-post-carousel::-webkit-scrollbar-thumb {
+    background: linear-gradient(90deg, var(--accent-color), var(--accent-hover));
+    border-radius: 999px;
+    border: 2px solid var(--bg-secondary);
+}
+
+.x-post-carousel::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-hover);
 }
 
 .x-post-card {

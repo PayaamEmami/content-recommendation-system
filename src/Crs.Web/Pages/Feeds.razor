@@ -15,7 +15,13 @@
     <div class="feed-container">
         @if (_content == null)
         {
-            <p>Loading feed...</p>
+            <div class="feed-loading-state" role="status" aria-live="polite">
+                <div class="feed-loading-spinner" aria-hidden="true"></div>
+                <div class="feed-loading-copy">
+                    <span class="feed-loading-title">Building your feed</span>
+                    <span class="feed-loading-subtitle">Pulling in recommendations and recent activity for you.</span>
+                </div>
+            </div>
         }
         else if (!_content.Any())
         {
@@ -137,7 +143,13 @@
 
                     @if (_xLoading)
                     {
-                        <p>Loading X feed...</p>
+                        <div class="feed-loading-state x-loading-state" role="status" aria-live="polite">
+                            <div class="feed-loading-spinner" aria-hidden="true"></div>
+                            <div class="feed-loading-copy">
+                                <span class="feed-loading-title">Loading X feed</span>
+                                <span class="feed-loading-subtitle">Fetching the latest posts from the accounts you follow.</span>
+                            </div>
+                        </div>
                     }
                     else if (!_followedAccounts.Any())
                     {

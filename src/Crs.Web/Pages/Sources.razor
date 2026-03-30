@@ -158,7 +158,13 @@
   <div class="sources-container">
     @if (_isLoadingSources && _sources == null)
     {
-      <div class="sources-loading">Loading sources...</div>
+      <div class="feed-loading-state" role="status" aria-live="polite">
+        <div class="feed-loading-spinner" aria-hidden="true"></div>
+        <div class="feed-loading-copy">
+          <span class="feed-loading-title">Loading sources</span>
+          <span class="feed-loading-subtitle">Pulling together the sources you have connected so you can manage them here.</span>
+        </div>
+      </div>
     }
     else if (!string.IsNullOrEmpty(_loadSourcesError))
     {
@@ -282,7 +288,13 @@
     }
     else
     {
-      <div class="sources-loading">Loading sources...</div>
+      <div class="feed-loading-state" role="status" aria-live="polite">
+        <div class="feed-loading-spinner" aria-hidden="true"></div>
+        <div class="feed-loading-copy">
+          <span class="feed-loading-title">Loading sources</span>
+          <span class="feed-loading-subtitle">Pulling together the sources you have connected so you can manage them here.</span>
+        </div>
+      </div>
     }
   </div>
 </div>
