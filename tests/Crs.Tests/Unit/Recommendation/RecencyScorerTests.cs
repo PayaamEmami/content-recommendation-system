@@ -86,7 +86,6 @@ public sealed class RecencyScorerTests
 
         var score = await scorer.ScoreAsync(content, context);
 
-        Assert.IsGreaterThanOrEqualTo(score, 0.15);
-        Assert.IsLessThan(score, 0.16);
+        Assert.AreEqual(0.15, score, 0.0001);
     }
 }
