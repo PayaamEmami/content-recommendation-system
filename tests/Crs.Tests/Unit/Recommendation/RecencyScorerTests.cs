@@ -58,7 +58,35 @@ public sealed class RecencyScorerTests
 
         var score = await scorer.ScoreAsync(content, context);
 
-        var expected = Math.Exp(-30.0 / 30.0);
+        var expected = 0.15 + (0.85 * Math.Exp(-30.0 / 14.0));
         Assert.AreEqual(expected, score, 0.0001);
+    }
+
+    [TestMethod]
+    public async Task ScoreAsync_WhenContentIsVeryOld_RetainsFloorScore()
+    {
+        var scorer = new RecencyScorer();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var createdAt = today.AddDays(-365).ToDateTime(TimeOnly.MinValue);
+        var content = new BlogPost
+        {
+            Id = Guid.NewGuid(),
+            Title = "Very old",
+            Url = "https://example.com/very-old",
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt
+        };
+
+        var context = new RecommendationContext
+        {
+            UserId = Guid.NewGuid(),
+            FeedType = ContentType.BlogPost,
+            Date = today
+        };
+
+        var score = await scorer.ScoreAsync(content, context);
+
+        Assert.IsGreaterThanOrEqualTo(score, 0.15);
+        Assert.IsLessThan(score, 0.16);
     }
 }

@@ -24,7 +24,7 @@ This file is a quick orientation guide for AI coding agents working in this repo
    - **Optional AWS runtime**: ECS task definitions + EventBridge rules created by `infrastructure/aws/deploy.sh` when enabled
 4. **Crs.Core** - Domain entities, interfaces
 5. **Crs.Infrastructure** - Data access, AWS integrations, HTML fetching
-6. **Crs.Recommendation** - Hybrid engine (70% vector, 30% heuristics)
+6. **Crs.Recommendation** - Hybrid engine (70% vector, 30% heuristics with recency dominant inside heuristics)
 7. **Crs.Llm** - Content ingestion (ChatGPT extracts from HTML)
 
 ### AWS Resources
@@ -189,7 +189,7 @@ aws logs tail /aws/apprunner/crs-api/$SERVICE_ID/application --follow --region u
 
 ## Key Decisions
 
-- **Hybrid Recommendations**: 70% vector similarity, 30% heuristics
+- **Hybrid Recommendations**: 70% vector similarity, 30% heuristics with recency dominant inside heuristics
 - **HTML-First Ingestion**: Fetch HTML ourselves, send to ChatGPT
 - **Chat Completion API**: Standard API
 - **Clean Architecture**: Core -> Infrastructure -> API/Web/Jobs

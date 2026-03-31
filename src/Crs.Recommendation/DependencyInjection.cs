@@ -17,9 +17,8 @@ public static class DependencyInjection
     public static IServiceCollection AddRecommendationEngine(this IServiceCollection services)
     {
         // Scorers
-        services.AddScoped<IContentScorer, SourceScorer>();
         services.AddScoped<IContentScorer, RecencyScorer>();
-        services.AddScoped<IContentScorer, VoteHistoryScorer>();
+        services.AddScoped<IContentScorer, SourceAffinityScorer>();
         services.AddScoped<CompositeScorer>();
 
         // Filters
@@ -34,4 +33,3 @@ public static class DependencyInjection
         return services;
     }
 }
-

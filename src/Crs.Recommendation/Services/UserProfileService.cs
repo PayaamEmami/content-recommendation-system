@@ -7,7 +7,7 @@ using Crs.Recommendation.Models;
 namespace Crs.Recommendation.Services;
 
 /// <summary>
-/// Builds user interest profiles from voting history using embeddings and source preferences.
+/// Builds user interest profiles from votes and manual feedback using embeddings.
 /// </summary>
 public class UserProfileService : IUserProfileService
 {
@@ -53,9 +53,6 @@ public class UserProfileService : IUserProfileService
 
         // Build user embedding from voted content and manual preference entries.
         await BuildUserEmbeddingAsync(profile, votesList, manualFeedback, cancellationToken);
-
-        // Calculate source scores based on votes (legacy, kept for hybrid scoring)
-        BuildSourceScores(profile, votesList);
 
         _logger.LogInformation(
             "Built profile for user {UserId} with {Interactions} interactions, embedding dimensions: {Dimensions}",
@@ -158,50 +155,4 @@ public class UserProfileService : IUserProfileService
         public float Weight { get; set; }
     }
 
-    /// <summary>
-    /// Build source preference scores (legacy method, kept for hybrid scoring).
-    /// </summary>
-    private void BuildSourceScores(UserInterestProfile profile, List<Core.Entities.ContentVote> votes)
-    {
-        var sourceScores = new Dictionary<Guid, double>();
-
-        foreach (var vote in votes)
-        {
-            var weight = vote.VoteType == VoteType.Upvote ? 1.0 : -0.5;
-
-            // If content has a source, track score for that source
-            if (vote.Content.SourceId.HasValue)
-            {
-                var sourceId = vote.Content.SourceId.Value;
-
-                if (!sourceScores.ContainsKey(sourceId))
-                {
-                    sourceScores[sourceId] = 0;
-                }
-
-                sourceScores[sourceId] += weight;
-            }
-        }
-
-        // Normalize scores to 0.0 - 1.0 range
-        if (sourceScores.Any())
-        {
-            var maxScore = sourceScores.Values.Max();
-            var minScore = sourceScores.Values.Min();
-            var range = maxScore - minScore;
-
-            foreach (var sourceId in sourceScores.Keys)
-            {
-                if (range > 0)
-                {
-                    var normalizedScore = (sourceScores[sourceId] - minScore) / range;
-                    profile.SetTopicScore(sourceId, normalizedScore);
-                }
-                else
-                {
-                    profile.SetTopicScore(sourceId, 0.5);
-                }
-            }
-        }
-    }
 }

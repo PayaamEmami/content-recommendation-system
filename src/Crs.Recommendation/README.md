@@ -12,14 +12,15 @@ This project contains the core recommendation logic that generates personalized 
 
 The system uses a **hybrid recommendation approach** combining semantic similarity with traditional content-based signals:
 
-```
-User Embedding (from upvotes) → Vector Search → Heuristic Scoring → Filtering → Ranked Recommendations
-                                      ↓
+```text
+User Embedding (from upvotes) -> Vector Search -> Heuristic Scoring -> Filtering -> Ranked Recommendations
+                                      |
+                                      v
                             OpenSearch (Vector DB)
 ```
 
 **Primary Signal (70% weight)**: Vector similarity using embeddings
-**Secondary Signals (30% weight)**: Recency, source preferences, vote history
+**Secondary Signals (30% weight)**: Heuristics, with recency as the dominant heuristic signal
 
 ### Components
 
@@ -27,7 +28,6 @@ User Embedding (from upvotes) → Vector Search → Heuristic Scoring → Filter
 
 - `UserInterestProfile` - User preference representation
   - `UserEmbedding` - Aggregated embedding vector from upvoted content (primary)
-  - `TopicScores` - Source preference scores (legacy, used by heuristic scorers)
 - `ScoredContent` - Content with calculated recommendation scores
 - `RecommendationContext` - Context for generating recommendations
 
@@ -35,15 +35,14 @@ User Embedding (from upvotes) → Vector Search → Heuristic Scoring → Filter
 
 - `RecommendationEngine` - Main orchestrator:
   1. **Vector Search Phase**: Get candidates via semantic similarity using user embedding
-  2. **Heuristic Scoring Phase**: Apply traditional signals (recency, source, votes)
+  2. **Heuristic Scoring Phase**: Apply traditional signals (recency and source affinity)
   3. **Filtering Phase**: Remove duplicates, ensure diversity
   4. **Ranking Phase**: Combine scores (70% vector + 30% heuristic) and sort
 
 #### 3. **Scorers** (Heuristic Signals)
 
-- `SourceScorer` (50% of heuristic weight) - Matches content to user's preferred sources
-- `RecencyScorer` (30% of heuristic weight) - Exponential decay favoring newer content
-- `VoteHistoryScorer` (20% of heuristic weight) - Scores based on voting patterns
+- `RecencyScorer` (80% of heuristic weight) - Faster freshness decay with a non-zero floor for older content
+- `SourceAffinityScorer` (20% of heuristic weight) - Uses smoothed source-level vote history to boost or soften candidates from that source
 - `CompositeScorer` - Combines heuristic scorers into weighted score
 
 #### 4. **Filters**
@@ -55,7 +54,6 @@ User Embedding (from upvotes) → Vector Search → Heuristic Scoring → Filter
 
 - `UserProfileService` - Builds user profiles:
   - Generates user embedding by averaging embeddings of upvoted content
-  - Calculates source preference scores for legacy scorers
 - `FeedGenerator` - Generates and persists daily recommendation feeds
 
 ## How It Works
@@ -63,16 +61,14 @@ User Embedding (from upvotes) → Vector Search → Heuristic Scoring → Filter
 ### Daily Feed Generation
 
 1. **Build User Profile**:
-   - Aggregate embeddings of all upvoted content → User embedding vector
-   - Calculate source preference scores from voting history (for heuristic scorers)
+   - Aggregate embeddings of all upvoted content -> User embedding vector
 2. **Vector Search**: Query OpenSearch for semantically similar content
    - Uses user embedding as query vector
    - Applies filters: content type, recency (90 days), exclude seen/recommended
    - Returns top candidates with similarity scores
 3. **Heuristic Scoring**: Apply traditional signals to vector candidates
-   - Recency: Exponential decay favoring newer content
-   - Source preference: Boost content from user's preferred sources
-   - Vote history: Consider patterns in user's voting behavior
+   - Recency: Faster decay favoring newer content while keeping older items eligible
+   - Source affinity: Use smoothed source-level vote history to boost or soften candidates from that source
 4. **Combine Scores**: Hybrid ranking
    - 70% weight on vector similarity
    - 30% weight on combined heuristic signals
@@ -84,16 +80,15 @@ User Embedding (from upvotes) → Vector Search → Heuristic Scoring → Filter
 
 Each content receives a hybrid score:
 
-```
-Final Score = (VectorSimilarity × 0.7) + (HeuristicScore × 0.3)
+```text
+Final Score = (VectorSimilarity x 0.70) + (HeuristicScore x 0.30)
 
-where HeuristicScore = (SourceScore × 0.5) + (RecencyScore × 0.3) + (VoteHistoryScore × 0.2)
+where HeuristicScore = (RecencyScore x 0.8) + (SourceAffinityScore x 0.2)
 ```
 
 - **VectorSimilarity**: Cosine similarity between user embedding and content embedding
-- **SourceScore**: User's preference for the content's source
-- **RecencyScore**: Exponential decay (e^(-age/30 days))
-- **VoteHistoryScore**: Based on voting patterns for similar sources
+- **RecencyScore**: Exponential decay with a floor (`0.15 + 0.85 x e^(-age/14 days)`)
+- **SourceAffinityScore**: Smoothed source sentiment from historical votes for that source
 
 ## Usage
 
@@ -148,7 +143,8 @@ Default settings:
 - Candidate window: Last 90 days
 - Diversity limit: Max 3 content per source
 - Recent recommendations window: Last 7 days
-- Recency half-life: 30 days
+- Recency decay window: 14 days
+- Minimum recency score: 0.15
 
 These can be adjusted in the respective scorer/filter implementations.
 

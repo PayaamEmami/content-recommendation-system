@@ -79,9 +79,34 @@ public sealed class RecommendationEngineTests
         contentRepository.Verify(repo => repo.GetByTypeAsync(ContentType.BlogPost, It.IsAny<CancellationToken>()), Times.Exactly(3));
     }
 
+    [TestMethod]
+    public async Task GenerateRecommendationsAsync_WhenCandidatesHaveSimilarRelevance_RanksNewerContentFirst()
+    {
+        var engine = CreateEngine(
+            out var vectorStore,
+            out var contentRepository,
+            new IContentScorer[] { new RecencyScorer() });
+
+        var newest = BuildContent(daysOld: 1);
+        var older = BuildContent(daysOld: 45);
+        var context = BuildContext();
+        context.Count = 2;
+
+        contentRepository.Setup(repo => repo.GetByTypeAsync(ContentType.BlogPost, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { older, newest });
+
+        var results = await engine.GenerateRecommendationsAsync(context, CancellationToken.None);
+
+        Assert.HasCount(2, results);
+        Assert.AreEqual(newest.Id, results[0].Content.Id);
+        Assert.AreEqual(older.Id, results[1].Content.Id);
+        vectorStore.VerifyNoOtherCalls();
+    }
+
     private static RecommendationEngine CreateEngine(
         out Mock<IVectorStore> vectorStore,
-        out Mock<IContentRepository> contentRepository)
+        out Mock<IContentRepository> contentRepository,
+        IEnumerable<IContentScorer>? scorers = null)
     {
         vectorStore = new Mock<IVectorStore>(MockBehavior.Strict);
         contentRepository = new Mock<IContentRepository>(MockBehavior.Strict);
@@ -89,7 +114,7 @@ public sealed class RecommendationEngineTests
         return new RecommendationEngine(
             vectorStore.Object,
             contentRepository.Object,
-            new CompositeScorer(Array.Empty<IContentScorer>()),
+            new CompositeScorer(scorers ?? Array.Empty<IContentScorer>()),
             new IRecommendationFilter[]
             {
                 new SeenContentFilter(),

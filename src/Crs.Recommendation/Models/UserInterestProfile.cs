@@ -2,7 +2,7 @@ namespace Crs.Recommendation.Models;
 
 /// <summary>
 /// Represents a user's interest profile based on their interaction history.
-/// Used to score content based on topic alignment and semantic similarity.
+/// Used primarily for semantic similarity matching.
 /// </summary>
 public class UserInterestProfile
 {
@@ -10,13 +10,6 @@ public class UserInterestProfile
     /// User ID this profile belongs to.
     /// </summary>
     public Guid UserId { get; set; }
-
-    /// <summary>
-    /// Topic scores - higher values indicate stronger interest.
-    /// Key: Topic ID, Value: Interest score (0.0 - 1.0)
-    /// (Kept for backward compatibility, used by legacy scorers)
-    /// </summary>
-    public Dictionary<Guid, double> TopicScores { get; set; } = new();
 
     /// <summary>
     /// User preference embedding vector built from aggregating embeddings of liked content.
@@ -34,21 +27,5 @@ public class UserInterestProfile
     /// </summary>
     public int TotalInteractions { get; set; }
 
-    /// <summary>
-    /// Get interest score for a specific topic (0.0 if not found).
-    /// </summary>
-    public double GetTopicScore(Guid topicId)
-    {
-        return TopicScores.TryGetValue(topicId, out var score) ? score : 0.0;
-    }
-
-    /// <summary>
-    /// Add or update a topic score.
-    /// </summary>
-    public void SetTopicScore(Guid topicId, double score)
-    {
-        TopicScores[topicId] = Math.Clamp(score, 0.0, 1.0);
-    }
 }
-
 

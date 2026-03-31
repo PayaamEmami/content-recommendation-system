@@ -48,7 +48,7 @@ CRS provides:
 - **Vector Embeddings** (text-embedding-3-small via OpenAI API)
 - **Semantic Search** via AWS OpenSearch Serverless
 - **LLM Agents** with function calling (GPT-5-nano via OpenAI API)
-- **Hybrid Recommendation Engine** (70% vector similarity, 30% heuristics)
+- **Hybrid Recommendation Engine** (70% vector similarity, 30% heuristics with recency dominant inside heuristics)
 
 ### DevOps & Deployment
 
@@ -105,8 +105,8 @@ At a high level, CRS is composed of:
     - Semantic similarity matching via AWS OpenSearch Serverless vector database
   - **Heuristic signals** (secondary signals, 30% weight)
     - Recency (exponential decay favoring newer content)
-    - Source preferences (from configured sources and voting history)
-    - Feedback patterns (upvotes/downvotes)
+    - Source affinity from historical votes on that source
+    - Recency carries most of the heuristic influence
 - Filters for diversity, deduplication, and personalization
 
 ### 🧠 LLM Orchestration Layer

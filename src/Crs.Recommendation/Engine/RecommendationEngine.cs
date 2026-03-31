@@ -16,6 +16,9 @@ namespace Crs.Recommendation.Engine;
 /// </summary>
 public class RecommendationEngine : IRecommendationEngine
 {
+    private const double VectorSimilarityWeight = 0.70;
+    private const double HeuristicWeight = 0.30;
+
     private readonly IVectorStore _vectorStore;
     private readonly IContentRepository _contentRepository;
     private readonly CompositeScorer _compositeScorer;
@@ -399,14 +402,14 @@ public class RecommendationEngine : IRecommendationEngine
     }
 
     /// <summary>
-    /// Apply additional heuristic scoring (recency, source preferences, vote history) on top of vector similarity.
+    /// Apply additional heuristic scoring (recency and source affinity) on top of vector similarity.
     /// </summary>
     private async Task<List<ScoredContent>> ApplyHeuristicScoringAsync(
         List<ScoredContent> candidates,
         RecommendationContext context,
         CancellationToken cancellationToken)
     {
-        // Score each content using the composite scorer (recency, source, vote history)
+        // Score each content using the composite scorer (recency and source affinity)
         var heuristicScored = await _compositeScorer.ScoreContentAsync(
             candidates.Select(c => c.Content).ToList(),
             context,
@@ -425,11 +428,14 @@ public class RecommendationEngine : IRecommendationEngine
                     candidate.Scores[kvp.Key] = kvp.Value;
                 }
 
-                // Combine vector similarity (70%) with heuristic signals (30%)
+                // Keep semantic relevance primary while letting the heuristic blend
+                // strongly favor freshness through the recency scorer itself.
                 var vectorScore = candidate.Scores.TryGetValue("vector_similarity", out var vs) ? vs : 0.5;
                 var heuristicFinalScore = heuristicScore.FinalScore;
 
-                candidate.FinalScore = (vectorScore * 0.7) + (heuristicFinalScore * 0.3);
+                candidate.FinalScore =
+                    (vectorScore * VectorSimilarityWeight) +
+                    (heuristicFinalScore * HeuristicWeight);
             }
         }
 
