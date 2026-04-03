@@ -159,5 +159,24 @@ public class UsersController : ControllerBase
         var votes = await _voteService.GetUserVotesAsync(userId.Value, cancellationToken);
         return Ok(votes);
     }
-}
 
+    /// <summary>
+    /// Gets the current user's vote history with content details.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>List of vote history items.</returns>
+    [HttpGet("me/vote-history")]
+    [ProducesResponseType(typeof(List<VoteHistoryItemResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetCurrentUserVoteHistory(CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        if (userId == null)
+        {
+            return Unauthorized();
+        }
+
+        var history = await _voteService.GetUserVoteHistoryAsync(userId.Value, cancellationToken);
+        return Ok(history);
+    }
+}

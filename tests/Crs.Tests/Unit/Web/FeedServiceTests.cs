@@ -96,6 +96,59 @@ public sealed class FeedServiceTests
         Assert.AreEqual("Newer", result[0].Title);
     }
 
+    [TestMethod]
+    public async Task GetVoteHistoryAsync_WhenSuccess_ReturnsMappedHistory()
+    {
+        var localStorage = new Mock<ILocalStorageService>(MockBehavior.Strict);
+        localStorage.Setup(store => store.GetItemAsync<AuthState>(It.IsAny<string>()))
+            .ReturnsAsync(new AuthState
+            {
+                IsAuthenticated = true,
+                AccessToken = "access",
+                ExpiresAt = DateTime.UtcNow.AddMinutes(5)
+            });
+
+        var authService = CreateAuthService(localStorage);
+        await authService.InitializeAsync();
+
+        var contentId = Guid.NewGuid();
+        var payload = new List<VoteHistoryApiResponse>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                UserId = Guid.NewGuid(),
+                ContentId = contentId,
+                VoteType = VoteType.Upvote,
+                CreatedAt = DateTime.UtcNow.AddDays(-1),
+                UpdatedAt = DateTime.UtcNow,
+                Title = "History item",
+                Description = "A description",
+                Url = "https://example.com/history",
+                Type = ContentType.BlogPost,
+                ContentDate = DateTime.UtcNow.AddDays(-2)
+            }
+        };
+
+        var handler = new HttpTestHandler(_ =>
+        {
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json)
+            };
+        });
+
+        var service = new FeedService(new HttpClient(handler) { BaseAddress = new Uri("https://example.com") }, authService, NullLogger<FeedService>.Instance);
+
+        var result = await service.GetVoteHistoryAsync();
+
+        Assert.HasCount(1, result);
+        Assert.AreEqual(contentId, result[0].ContentId);
+        Assert.AreEqual(VoteType.Upvote, result[0].VoteType);
+        Assert.AreEqual("History item", result[0].Title);
+    }
+
     private static AuthService CreateAuthService(Mock<ILocalStorageService> localStorage)
     {
         var configuration = new ConfigurationBuilder().Build();

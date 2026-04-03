@@ -24,6 +24,11 @@ public interface IVoteService
     Task<List<VoteResponse>> GetUserVotesAsync(Guid userId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets the user's current vote history joined with content details.
+    /// </summary>
+    Task<List<VoteHistoryItemResponse>> GetUserVoteHistoryAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets a user's vote on a specific content item.
     /// </summary>
     Task<VoteResponse?> GetUserVoteOnContentAsync(Guid userId, Guid contentId, CancellationToken cancellationToken = default);

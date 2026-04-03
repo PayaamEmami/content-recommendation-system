@@ -104,6 +104,17 @@ public class VoteService : IVoteService
         return votes.Select(MapToVoteResponse).ToList();
     }
 
+    public async Task<List<VoteHistoryItemResponse>> GetUserVoteHistoryAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var votes = await _voteRepository.GetByUserAsync(userId, cancellationToken);
+
+        return votes
+            .Where(vote => vote.Content != null)
+            .OrderByDescending(vote => vote.UpdatedAt ?? vote.CreatedAt)
+            .Select(MapToVoteHistoryItemResponse)
+            .ToList();
+    }
+
     public async Task<VoteResponse?> GetUserVoteOnContentAsync(
         Guid userId,
         Guid contentId,
@@ -126,5 +137,24 @@ public class VoteService : IVoteService
             UpdatedAt = vote.UpdatedAt
         };
     }
-}
 
+    private static VoteHistoryItemResponse MapToVoteHistoryItemResponse(ContentVote vote)
+    {
+        var content = vote.Content ?? throw new InvalidOperationException("Vote history content was not loaded.");
+
+        return new VoteHistoryItemResponse
+        {
+            Id = vote.Id,
+            UserId = vote.UserId,
+            ContentId = vote.ContentId,
+            VoteType = vote.VoteType,
+            CreatedAt = vote.CreatedAt,
+            UpdatedAt = vote.UpdatedAt,
+            Title = content.Title,
+            Description = content.Description,
+            Url = content.Url,
+            Type = content.Type,
+            ContentDate = content.CreatedAt
+        };
+    }
+}

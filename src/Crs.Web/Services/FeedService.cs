@@ -150,6 +150,45 @@ public class FeedService
         }
     }
 
+    public async Task<List<VoteHistoryItem>> GetVoteHistoryAsync()
+    {
+        try
+        {
+            var response = await SendAuthorizedAsync(() => _httpClient.GetAsync("/api/v1/users/me/vote-history"));
+            if (response == null)
+            {
+                return new List<VoteHistoryItem>();
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Failed to fetch vote history: {StatusCode}", response.StatusCode);
+                return new List<VoteHistoryItem>();
+            }
+
+            var history = await response.Content.ReadFromJsonAsync<List<VoteHistoryApiResponse>>(JsonOptions);
+            return history?.Select(item => new VoteHistoryItem
+            {
+                Id = item.Id,
+                UserId = item.UserId,
+                ContentId = item.ContentId,
+                VoteType = item.VoteType,
+                VoteCreatedAt = item.CreatedAt,
+                VoteUpdatedAt = item.UpdatedAt,
+                Title = item.Title,
+                Description = item.Description,
+                Url = item.Url,
+                Type = item.Type,
+                ContentDate = item.ContentDate
+            }).ToList() ?? new List<VoteHistoryItem>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching vote history");
+            return new List<VoteHistoryItem>();
+        }
+    }
+
     public async Task<VoteItem?> VoteAsync(Guid contentId, VoteType voteType)
     {
         try
@@ -227,6 +266,21 @@ public class VoteItem
     public DateTime? UpdatedAt { get; set; }
 }
 
+public class VoteHistoryItem
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid ContentId { get; set; }
+    public VoteType? VoteType { get; set; }
+    public DateTime VoteCreatedAt { get; set; }
+    public DateTime? VoteUpdatedAt { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string Url { get; set; } = string.Empty;
+    public ContentType Type { get; set; }
+    public DateTime ContentDate { get; set; }
+}
+
 // API Response DTOs
 public class FeedRecommendationsResponse
 {
@@ -254,4 +308,19 @@ public class ContentItemResponse
     public ContentType Type { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+public class VoteHistoryApiResponse
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid ContentId { get; set; }
+    public VoteType VoteType { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string Url { get; set; } = string.Empty;
+    public ContentType Type { get; set; }
+    public DateTime ContentDate { get; set; }
 }

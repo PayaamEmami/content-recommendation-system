@@ -34,6 +34,11 @@ public class ContentResponse
     public ContentType Type { get; set; }
 
     /// <summary>
+    /// When the content was originally published, if available.
+    /// </summary>
+    public DateTime? PublishedDate { get; set; }
+
+    /// <summary>
     /// When the content was added to the system.
     /// </summary>
     public DateTime CreatedAt { get; set; }
@@ -48,4 +53,3 @@ public class ContentResponse
     /// </summary>
     public SourceResponse? SourceInfo { get; set; }
 }
-

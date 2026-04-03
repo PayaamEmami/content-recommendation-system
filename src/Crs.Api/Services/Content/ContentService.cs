@@ -192,6 +192,7 @@ public class ContentService : IContentService
             Description = content.Description,
             Url = content.Url,
             Type = content.Type,
+            PublishedDate = null,
             CreatedAt = content.CreatedAt,
             UpdatedAt = content.UpdatedAt,
             SourceInfo = content.Source != null ? new SourceResponse
@@ -210,4 +211,3 @@ public class ContentService : IContentService
         };
     }
 }
-

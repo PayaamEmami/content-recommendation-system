@@ -193,4 +193,37 @@ public sealed class UsersControllerTests
         Assert.IsNotNull(ok);
         Assert.AreSame(votes, ok.Value);
     }
+
+    [TestMethod]
+    public async Task GetCurrentUserVoteHistory_WhenMissingUser_ReturnsUnauthorized()
+    {
+        var controller = CreateController(out _, out _);
+        ControllerTestHelpers.SetUser(controller, null);
+
+        var result = await controller.GetCurrentUserVoteHistory(CancellationToken.None);
+
+        Assert.IsInstanceOfType<UnauthorizedResult>(result);
+    }
+
+    [TestMethod]
+    public async Task GetCurrentUserVoteHistory_ReturnsOk()
+    {
+        var controller = CreateController(out _, out var voteService);
+        var userId = Guid.NewGuid();
+        ControllerTestHelpers.SetUser(controller, userId);
+
+        var history = new List<VoteHistoryItemResponse>
+        {
+            new() { Id = Guid.NewGuid(), UserId = userId, ContentId = Guid.NewGuid(), Title = "Voted content" }
+        };
+
+        voteService.Setup(service => service.GetUserVoteHistoryAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(history);
+
+        var result = await controller.GetCurrentUserVoteHistory(CancellationToken.None);
+
+        var ok = result as OkObjectResult;
+        Assert.IsNotNull(ok);
+        Assert.AreSame(history, ok.Value);
+    }
 }

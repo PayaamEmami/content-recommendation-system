@@ -84,6 +84,7 @@ public class RecommendationService : IRecommendationService
                 Description = r.Content.Description,
                 Url = r.Content.Url,
                 Type = r.Content.Type,
+                PublishedDate = null,
                 CreatedAt = r.Content.CreatedAt,
                 UpdatedAt = r.Content.UpdatedAt,
                 SourceInfo = r.Content.Source != null ? new SourceResponse
@@ -174,6 +175,7 @@ public class RecommendationService : IRecommendationService
                     Description = r.Content.Description,
                     Url = r.Content.Url,
                     Type = r.Content.Type,
+                    PublishedDate = null,
                     CreatedAt = r.Content.CreatedAt,
                     UpdatedAt = r.Content.UpdatedAt,
                     SourceInfo = r.Content.Source != null ? new SourceResponse

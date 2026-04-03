@@ -144,6 +144,61 @@ public sealed class VoteServiceTests
     }
 
     [TestMethod]
+    public async Task GetUserVoteHistoryAsync_ReturnsSortedMappedHistory()
+    {
+        var service = CreateService(out var voteRepository, out _, out _);
+        var userId = Guid.NewGuid();
+        var olderContentId = Guid.NewGuid();
+        var newerContentId = Guid.NewGuid();
+        var olderDate = DateTime.UtcNow.AddDays(-4);
+        var newerDate = DateTime.UtcNow.AddDays(-1);
+
+        voteRepository.Setup(repo => repo.GetByUserAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ContentVote>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    ContentId = olderContentId,
+                    VoteType = VoteType.Upvote,
+                    CreatedAt = olderDate,
+                    Content = new BlogPost
+                    {
+                        Id = olderContentId,
+                        Title = "Older vote",
+                        Url = "https://example.com/older",
+                        CreatedAt = olderDate
+                    }
+                },
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    ContentId = newerContentId,
+                    VoteType = VoteType.Downvote,
+                    CreatedAt = olderDate,
+                    UpdatedAt = newerDate,
+                    Content = new Video
+                    {
+                        Id = newerContentId,
+                        Title = "Newer vote",
+                        Url = "https://example.com/newer",
+                        CreatedAt = olderDate
+                    }
+                }
+            });
+
+        var result = await service.GetUserVoteHistoryAsync(userId, CancellationToken.None);
+
+        Assert.HasCount(2, result);
+        Assert.AreEqual("Newer vote", result[0].Title);
+        Assert.AreEqual(VoteType.Downvote, result[0].VoteType);
+        Assert.AreEqual(olderDate, result[0].ContentDate);
+        Assert.AreEqual("Older vote", result[1].Title);
+    }
+
+    [TestMethod]
     public async Task GetUserVoteOnContentAsync_WhenMissing_ReturnsNull()
     {
         var service = CreateService(out var voteRepository, out _, out _);
