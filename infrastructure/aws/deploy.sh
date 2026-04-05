@@ -22,6 +22,15 @@ TRACE_SAMPLE_RATIO="${TRACE_SAMPLE_RATIO:-0.25}"
 API_SERVICE_NAME="${API_SERVICE_NAME:-crs-api}"
 JOBS_SERVICE_NAME="${JOBS_SERVICE_NAME:-crs-jobs}"
 ADOT_COLLECTOR_IMAGE="${ADOT_COLLECTOR_IMAGE:-public.ecr.aws/aws-observability/aws-otel-collector:latest}"
+LOG_RETENTION_DAYS="${LOG_RETENTION_DAYS:-30}"
+RUM_APP_MONITOR_NAME="${RUM_APP_MONITOR_NAME:-${PREFIX}-web}"
+RUM_SESSION_SAMPLE_RATE="${RUM_SESSION_SAMPLE_RATE:-0.1}"
+RUM_ALLOW_COOKIES="${RUM_ALLOW_COOKIES:-true}"
+RUM_ENABLE_XRAY="${RUM_ENABLE_XRAY:-true}"
+RUM_CW_LOGS_ENABLED="${RUM_CW_LOGS_ENABLED:-true}"
+RUM_SOURCE_MAPS_PREFIX="${RUM_SOURCE_MAPS_PREFIX:-rum-source-maps}"
+RUM_IDENTITY_POOL_ID="${RUM_IDENTITY_POOL_ID:-}"
+RUM_GUEST_ROLE_ARN="${RUM_GUEST_ROLE_ARN:-}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -442,17 +451,113 @@ create_cloudwatch_logs() {
 
     log_info "App Runner API logs are managed under /aws/apprunner/${PREFIX}-api/<service-id>/application"
 
-    for LOG_NAME in "jobs" "ingestion" "feed" "otel-collector"; do
+    for LOG_NAME in "jobs" "ingestion" "feed" "x-ingestion" "reindex" "sync-index" "otel-collector" "local-jobs" "windows-host" "cloudwatch-agent"; do
         LOG_GROUP="/crs/$LOG_NAME"
         EXISTING=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --region $REGION --query "logGroups[?logGroupName=='$LOG_GROUP'].logGroupName" --output text 2>/dev/null || echo "")
         if [ -z "$EXISTING" ]; then
             aws logs create-log-group --log-group-name "$LOG_GROUP" --tags Project=${PROJECT_TAG} --region $REGION
-            aws logs put-retention-policy --log-group-name "$LOG_GROUP" --retention-in-days 30 --region $REGION
+            aws logs put-retention-policy --log-group-name "$LOG_GROUP" --retention-in-days $LOG_RETENTION_DAYS --region $REGION
             log_info "Created log group: $LOG_GROUP"
         else
+            aws logs put-retention-policy --log-group-name "$LOG_GROUP" --retention-in-days $LOG_RETENTION_DAYS --region $REGION
             log_info "Log group already exists: $LOG_GROUP"
         fi
     done
+}
+
+create_rum_app_monitor() {
+    log_info "Configuring CloudWatch RUM app monitor..."
+
+    local existing_monitor
+    existing_monitor=$(aws rum get-app-monitor --name "$RUM_APP_MONITOR_NAME" --region $REGION --output json 2>/dev/null || echo "")
+
+    if [ -z "$existing_monitor" ] && [ -z "$RUM_IDENTITY_POOL_ID" ]; then
+        log_warn "Skipping CloudWatch RUM creation because RUM_IDENTITY_POOL_ID is not set and app monitor ${RUM_APP_MONITOR_NAME} does not exist."
+        return
+    fi
+
+    local web_domain="${WEB_URL#http://}"
+    local cf_domain="${CF_URL#https://}"
+    local monitor_config_file
+    monitor_config_file=$(mktemp)
+
+    python - "$monitor_config_file" "$RUM_IDENTITY_POOL_ID" "$RUM_GUEST_ROLE_ARN" "$RUM_SESSION_SAMPLE_RATE" "$RUM_ALLOW_COOKIES" "$RUM_ENABLE_XRAY" <<'PY'
+import json
+import sys
+
+output_path, identity_pool_id, guest_role_arn, sample_rate, allow_cookies, enable_xray = sys.argv[1:]
+payload = {
+    "IdentityPoolId": identity_pool_id,
+    "SessionSampleRate": float(sample_rate),
+    "AllowCookies": allow_cookies.lower() == "true",
+    "Telemetries": ["errors", "performance", "http"],
+    "EnableXRay": enable_xray.lower() == "true"
+}
+
+if guest_role_arn:
+    payload["GuestRoleArn"] = guest_role_arn
+
+with open(output_path, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle)
+PY
+
+    local rum_log_flag="--no-cw-log-enabled"
+    if [ "$RUM_CW_LOGS_ENABLED" = "true" ]; then
+        rum_log_flag="--cw-log-enabled"
+    fi
+
+    local domain_args=(--domain-list "$web_domain")
+    if [ -n "$cf_domain" ]; then
+        domain_args=(--domain-list "$web_domain" "$cf_domain")
+    fi
+
+    if [ -z "$existing_monitor" ]; then
+        aws rum create-app-monitor \
+            --name "$RUM_APP_MONITOR_NAME" \
+            "${domain_args[@]}" \
+            --app-monitor-configuration "file://${monitor_config_file}" \
+            $rum_log_flag \
+            --deobfuscation-configuration "JavaScriptSourceMaps={Status=ENABLED,S3Uri=s3://${BUCKET_NAME}/${RUM_SOURCE_MAPS_PREFIX}/}" \
+            --custom-events Status=DISABLED \
+            --platform Web \
+            --tags Project=${PROJECT_TAG} \
+            --region $REGION > /dev/null
+        log_info "Created CloudWatch RUM app monitor: ${RUM_APP_MONITOR_NAME}"
+    elif [ -n "$RUM_IDENTITY_POOL_ID" ]; then
+        aws rum update-app-monitor \
+            --name "$RUM_APP_MONITOR_NAME" \
+            "${domain_args[@]}" \
+            --app-monitor-configuration "file://${monitor_config_file}" \
+            $rum_log_flag \
+            --deobfuscation-configuration "JavaScriptSourceMaps={Status=ENABLED,S3Uri=s3://${BUCKET_NAME}/${RUM_SOURCE_MAPS_PREFIX}/}" \
+            --custom-events Status=DISABLED \
+            --region $REGION > /dev/null
+        log_info "Updated CloudWatch RUM app monitor: ${RUM_APP_MONITOR_NAME}"
+    else
+        log_info "Reusing existing CloudWatch RUM app monitor: ${RUM_APP_MONITOR_NAME}"
+    fi
+
+    rm -f "$monitor_config_file"
+
+    local rum_description_file
+    rum_description_file=$(mktemp)
+    aws rum get-app-monitor --name "$RUM_APP_MONITOR_NAME" --region $REGION > "$rum_description_file"
+    local rum_log_group
+    rum_log_group=$(python - "$rum_description_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text())
+print(payload.get("AppMonitor", {}).get("DataStorage", {}).get("CwLog", {}).get("CwLogGroup", ""))
+PY
+)
+
+    if [ -n "$rum_log_group" ]; then
+        aws logs put-retention-policy --log-group-name "$rum_log_group" --retention-in-days $LOG_RETENTION_DAYS --region $REGION
+    fi
+
+    rm -f "$rum_description_file"
 }
 
 # Create IAM roles
@@ -679,6 +784,7 @@ create_app_runner() {
                     "Cors__AllowedOrigins__1": "'"${CF_URL:-$WEB_URL}"'",
                     "Registration__Enabled": "true",
                     "Observability__Environment": "'"${ENVIRONMENT}"'",
+                    "Observability__ExecutionEnvironment": "aws",
                     "Observability__ServiceName": "'"${API_SERVICE_NAME}"'",
                     "Observability__ServiceNamespace": "crs",
                     "Observability__MetricsNamespace": "'"${METRICS_NAMESPACE}"'",
@@ -753,6 +859,7 @@ create_app_runner() {
               aws apprunner list-services --region $REGION --query "ServiceSummaryList[?ServiceName=='${PREFIX}-api'].ServiceUrl" --output text)
     SERVICE_ID=$(aws apprunner describe-service --service-arn $SERVICE_ARN --region $REGION --query 'Service.ServiceId' --output text)
     APP_RUNNER_APPLICATION_LOG_GROUP="/aws/apprunner/${PREFIX}-api/${SERVICE_ID}/application"
+    aws logs put-retention-policy --log-group-name "$APP_RUNNER_APPLICATION_LOG_GROUP" --retention-in-days $LOG_RETENTION_DAYS --region $REGION 2>/dev/null || true
     log_info "API URL: https://$API_URL"
     log_info "API log group: ${APP_RUNNER_APPLICATION_LOG_GROUP}"
     export API_URL APP_RUNNER_APPLICATION_LOG_GROUP
@@ -799,6 +906,7 @@ register_task_definitions() {
       {"name": "OpenAI__Model", "value": "gpt-5-nano"},
       {"name": "OpenAI__MaxTokens", "value": "16384"},
       {"name": "Observability__Environment", "value": "${ENVIRONMENT}"},
+      {"name": "Observability__ExecutionEnvironment", "value": "aws"},
       {"name": "Observability__ServiceName", "value": "${JOBS_SERVICE_NAME}"},
       {"name": "Observability__ServiceNamespace", "value": "crs"},
       {"name": "Observability__MetricsNamespace", "value": "${METRICS_NAMESPACE}"},
@@ -991,7 +1099,7 @@ create_cloudwatch_dashboards() {
 EOF
 )
 
-    JOBS_DASHBOARD_BODY=$(cat <<EOF
+JOBS_DASHBOARD_BODY=$(cat <<EOF
 {
   "widgets": [
     {
@@ -1119,6 +1227,156 @@ EOF
 EOF
 )
 
+    PLATFORM_DASHBOARD_BODY=$(cat <<EOF
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "API Throughput and Errors",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "api.request.count", "Service", "${API_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", {"label": "Requests"}],
+          [".", "api.request.5xx.count", ".", ".", ".", ".", {"label": "5xx"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Local Job Wrapper Health",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 3600,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "job.wrapper.success.count", "Service", "${JOBS_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", "ExecutionEnvironment", "local", {"label": "Wrapper Success"}],
+          [".", "job.wrapper.failure.count", ".", ".", ".", ".", ".", ".", {"label": "Wrapper Failure"}],
+          [".", "job.host.heartbeat", ".", ".", ".", ".", ".", ".", {"label": "Heartbeat"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 6,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "App Runner Readiness and Latency",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "period": 300,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "api.request.duration", "Service", "${API_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", {"stat": "p95", "label": "API p95"}],
+          [".", "api.request.count", ".", ".", ".", ".", "Operation", "/health/ready", "Outcome", "server_error", {"stat": "Sum", "label": "Readiness Failures"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 6,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Frontend Sessions and Page Views",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          ["AWS/RUM", "SessionCount", "application_name", "${RUM_APP_MONITOR_NAME}", {"label": "Sessions"}],
+          [".", "PageViewCount", ".", ".", {"label": "Page Views"}]
+        ]
+      }
+    }
+  ]
+}
+EOF
+)
+
+    FRONTEND_DASHBOARD_BODY=$(cat <<EOF
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Frontend JavaScript and HTTP Errors",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          ["AWS/RUM", "JsErrorCount", "application_name", "${RUM_APP_MONITOR_NAME}", {"label": "JS Errors"}],
+          [".", "Http4xxCount", ".", ".", {"label": "HTTP 4xx"}],
+          [".", "Http5xxCount", ".", ".", {"label": "HTTP 5xx"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Frontend Navigation Performance",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "period": 300,
+        "metrics": [
+          ["AWS/RUM", "PerformanceNavigationDuration", "application_name", "${RUM_APP_MONITOR_NAME}", {"stat": "p50", "label": "Navigation p50"}],
+          [".", "PerformanceNavigationDuration", ".", ".", {"stat": "p95", "label": "Navigation p95"}],
+          [".", "WebVitalsLargestContentfulPaint", ".", ".", {"stat": "p95", "label": "LCP p95"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 6,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Dependency Failure Counts",
+        "region": "${REGION}",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          ["${METRICS_NAMESPACE}", "dependency.failure.count", "Service", "${API_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", "Dependency", "openai", {"label": "API OpenAI"}],
+          [".", "dependency.failure.count", "Service", "${API_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", "Dependency", "opensearch", {"label": "API OpenSearch"}],
+          [".", "dependency.failure.count", "Service", "${JOBS_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", "Dependency", "openai", {"label": "Jobs OpenAI"}],
+          [".", "dependency.failure.count", "Service", "${JOBS_SERVICE_NAME}", "Environment", "${ENVIRONMENT}", "Dependency", "x", {"label": "Jobs X"}]
+        ]
+      }
+    }
+  ]
+}
+EOF
+)
+
+    aws cloudwatch put-dashboard \
+        --dashboard-name "${PREFIX}-platform-overview" \
+        --dashboard-body "${PLATFORM_DASHBOARD_BODY}" \
+        --region $REGION > /dev/null
+
     aws cloudwatch put-dashboard \
         --dashboard-name "${PREFIX}-api-observability" \
         --dashboard-body "${API_DASHBOARD_BODY}" \
@@ -1129,7 +1387,12 @@ EOF
         --dashboard-body "${JOBS_DASHBOARD_BODY}" \
         --region $REGION > /dev/null
 
-    log_info "Created CloudWatch dashboards: ${PREFIX}-api-observability, ${PREFIX}-jobs-observability"
+    aws cloudwatch put-dashboard \
+        --dashboard-name "${PREFIX}-dependency-frontend-observability" \
+        --dashboard-body "${FRONTEND_DASHBOARD_BODY}" \
+        --region $REGION > /dev/null
+
+    log_info "Created CloudWatch dashboards: ${PREFIX}-platform-overview, ${PREFIX}-api-observability, ${PREFIX}-jobs-observability, ${PREFIX}-dependency-frontend-observability"
 }
 
 put_metric_alarm() {
@@ -1272,7 +1535,54 @@ create_cloudwatch_alarms() {
         done
     done
 
-    log_info "Created CloudWatch alarms for API, jobs, and dependency failure spikes"
+    for LOCAL_JOB_NAME in "ingestion" "x-ingestion" "feed"; do
+        put_metric_alarm \
+            "${PREFIX}-${LOCAL_JOB_NAME}-wrapper-failures" \
+            "job.wrapper.failure.count" \
+            "Sum" \
+            "1" \
+            "GreaterThanOrEqualToThreshold" \
+            "3600" \
+            "1" \
+            "Name=Service,Value=${JOBS_SERVICE_NAME}" \
+            "Name=Environment,Value=${ENVIRONMENT}" \
+            "Name=ExecutionEnvironment,Value=local" \
+            "Name=JobName,Value=${LOCAL_JOB_NAME}"
+
+        aws cloudwatch put-metric-alarm \
+            --alarm-name "${PREFIX}-${LOCAL_JOB_NAME}-missing-heartbeat" \
+            --alarm-description "${PREFIX}-${LOCAL_JOB_NAME}-missing-heartbeat" \
+            --namespace "$METRICS_NAMESPACE" \
+            --metric-name "job.host.heartbeat" \
+            --statistic "Sum" \
+            --threshold "1" \
+            --comparison-operator "LessThanThreshold" \
+            --period "86400" \
+            --evaluation-periods "1" \
+            --treat-missing-data breaching \
+            --dimensions \
+                "Name=Service,Value=${JOBS_SERVICE_NAME}" \
+                "Name=Environment,Value=${ENVIRONMENT}" \
+                "Name=ExecutionEnvironment,Value=local" \
+                "Name=JobName,Value=${LOCAL_JOB_NAME}" \
+            --region $REGION > /dev/null
+    done
+
+    aws cloudwatch put-metric-alarm \
+        --alarm-name "${PREFIX}-frontend-js-errors" \
+        --alarm-description "${PREFIX}-frontend-js-errors" \
+        --namespace "AWS/RUM" \
+        --metric-name "JsErrorCount" \
+        --statistic "Sum" \
+        --threshold "5" \
+        --comparison-operator "GreaterThanOrEqualToThreshold" \
+        --period "300" \
+        --evaluation-periods "1" \
+        --treat-missing-data notBreaching \
+        --dimensions "Name=application_name,Value=${RUM_APP_MONITOR_NAME}" \
+        --region $REGION > /dev/null
+
+    log_info "Created CloudWatch alarms for API, jobs, local scheduler heartbeats, dependencies, and frontend errors"
 }
 
 # Create CloudFront invalidation schedule (runs daily at 1 PM Pacific, after the 12 PM feed job)
@@ -1427,9 +1737,16 @@ print_summary() {
     echo ""
     echo "Observability:"
     echo "  - Metrics namespace: ${METRICS_NAMESPACE}"
+    echo "  - Log retention days: ${LOG_RETENTION_DAYS}"
+    echo "  - Dashboard: ${PREFIX}-platform-overview"
     echo "  - Dashboard: ${PREFIX}-api-observability"
     echo "  - Dashboard: ${PREFIX}-jobs-observability"
+    echo "  - Dashboard: ${PREFIX}-dependency-frontend-observability"
     echo "  - Collector logs: /crs/otel-collector"
+    echo "  - Local jobs logs: /crs/local-jobs"
+    echo "  - Windows host logs: /crs/windows-host"
+    echo "  - CloudWatch Agent logs: /crs/cloudwatch-agent"
+    echo "  - CloudWatch RUM monitor: ${RUM_APP_MONITOR_NAME}"
     echo ""
     echo "=============================================="
     echo "Next Steps:"
@@ -1460,6 +1777,7 @@ main() {
     create_iam_roles
     create_rds
     create_s3_web
+    create_rum_app_monitor
     create_ecs_cluster
     create_opensearch
     create_apprunner_observability_configuration

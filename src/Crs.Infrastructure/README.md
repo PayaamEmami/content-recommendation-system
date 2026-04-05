@@ -63,6 +63,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 This registers:
 - `CrsDbContext` with PostgreSQL provider
 - All repository implementations as scoped services
+- Shared observability plumbing for metrics, structured logging, and OpenTelemetry/X-Ray export
 
 ### Connection String Configuration
 ```json
@@ -116,3 +117,10 @@ All repository methods are async with `CancellationToken` support. This is non-n
 
 ### Connection Resilience
 The DbContext is configured with `EnableRetryOnFailure()` for automatic retry on transient PostgreSQL errors (network blips, timeouts, etc.).
+
+### Observability
+`Crs.Infrastructure` owns the shared observability registration used by both the API and jobs:
+- JSON console logging in non-development environments
+- OpenTelemetry tracing for custom activities, outbound HTTP, and PostgreSQL via `Npgsql.OpenTelemetry`
+- CloudWatch Embedded Metric Format emission through `IObservabilityMetrics`
+- Common defaults for `Service`, `Environment`, and `ExecutionEnvironment`

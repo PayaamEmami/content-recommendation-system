@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Crs.Api.Middleware;
 using Crs.Core.Observability;
+using Crs.Infrastructure.Configuration;
 
 namespace Crs.Tests.Unit.Api;
 
@@ -41,7 +42,13 @@ public sealed class RequestLoggingMiddlewareTests
                 await context.Response.WriteAsync("ok");
             },
             logger.Object,
-            metrics);
+            metrics,
+            new ObservabilitySettings
+            {
+                Environment = "Testing",
+                ExecutionEnvironment = "local",
+                ServiceName = "crs-tests"
+            });
 
         var context = new DefaultHttpContext();
         context.Request.Method = HttpMethods.Get;
@@ -60,7 +67,11 @@ public sealed class RequestLoggingMiddlewareTests
 
         logger.Verify();
         Assert.IsNotNull(capturedScope);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(context.Response.Headers[CrsTelemetry.CorrelationIdHeaderName]));
+        Assert.IsTrue(capturedScope.Any(item => item.Key == "correlation_id" && item.Value != null));
+        Assert.IsTrue(capturedScope.Any(item => item.Key == "execution_environment" && Equals(item.Value, "local")));
         Assert.IsTrue(capturedScope.Any(item => item.Key == "trace_id" && item.Value != null));
+        Assert.IsFalse(capturedScope.Any(item => item.Key == "user_id"));
         Assert.IsTrue(metrics.Calls.Any(call => call.Name == "api.request.count"));
         Assert.IsTrue(metrics.Calls.Any(call => call.Name == "api.request.duration"));
     }

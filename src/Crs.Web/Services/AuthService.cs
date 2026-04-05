@@ -56,7 +56,7 @@ public class AuthService
             if (storedState?.IsAuthenticated == true && !string.IsNullOrEmpty(storedState.AccessToken))
             {
                 _currentState = storedState;
-                _logger.LogInformation("Restored auth state from storage for user {Email}", storedState.Email);
+                _logger.LogInformation("Restored auth state from storage");
             }
         }
         catch (Exception ex)
@@ -128,8 +128,7 @@ public class AuthService
                 }
             }
 
-            var errorContent = await response.Content.ReadAsStringAsync();
-            _logger.LogWarning("Registration failed: {StatusCode} - {Content}", response.StatusCode, errorContent);
+            _logger.LogWarning("Registration failed: {StatusCode}", response.StatusCode);
 
             return new AuthResult { Success = false, ErrorMessage = "Registration failed. Please try again." };
         }

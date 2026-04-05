@@ -85,7 +85,7 @@ public class XAccountService : IXAccountService
         };
 
         var url = $"{_settings.AuthorizationUrl}?{ToQueryString(query)}";
-        _logger.LogInformation("Created X connect URL for user {UserId} with redirect URI {RedirectUri}", userId, effectiveRedirectUri);
+        _logger.LogInformation("Created X connect URL for user {UserId}", userId);
         return url;
     }
 
@@ -102,7 +102,7 @@ public class XAccountService : IXAccountService
             throw new InvalidOperationException("Invalid or expired X authorization state");
         }
 
-        _logger.LogInformation("Exchanging X OAuth code for user {UserId} using redirect URI {RedirectUri}", userId, authState.RedirectUri);
+        _logger.LogInformation("Exchanging X OAuth code for user {UserId}", userId);
         var token = await _xApiClient.ExchangeCodeAsync(code, authState.CodeVerifier, authState.RedirectUri, cancellationToken);
         if (!string.IsNullOrWhiteSpace(token.Scope))
         {

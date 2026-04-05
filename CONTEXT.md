@@ -10,7 +10,7 @@ This file is a quick orientation guide for AI coding agents working in this repo
 
 - **Backend**: .NET 10, ASP.NET Core, Entity Framework Core
 - **Frontend**: Blazor WebAssembly (S3 + CloudFront)
-- **Cloud**: AWS (App Runner, RDS, S3, CloudFront; optional ECS/OpenSearch infrastructure exists but is not the primary job runtime today)
+- **Cloud**: AWS (App Runner, RDS, S3, CloudFront, CloudWatch/X-Ray; optional ECS/OpenSearch infrastructure exists but is not the primary job runtime today)
 - **AI**: OpenAI API (GPT-5-nano, text-embedding-3-small)
 
 ## Architecture
@@ -38,7 +38,10 @@ All resources prefixed with `crs-` for clear separation:
 - ECR repositories - `crs-api`, `crs-jobs`
 - EventBridge Scheduler - `crs-cloudfront-invalidation` (configured in `deploy.sh` for daily CloudFront invalidation at 1:00 PM `America/Los_Angeles`)
 - Secrets Manager - `crs-secrets/*`
-- CloudWatch logs - `/aws/apprunner/crs-api/*` for API, `/crs/*` for ECS jobs
+- CloudWatch logs - `/aws/apprunner/crs-api/*` for API, `/crs/*` for ECS/local-job/agent logs
+- CloudWatch dashboards - `crs-platform-overview`, `crs-api-observability`, `crs-jobs-observability`, `crs-dependency-frontend-observability`
+- X-Ray tracing - App Runner API plus any OTLP-capable local/ECS jobs routed through an OTLP collector/agent
+- CloudWatch RUM - optional `crs-web` app monitor for the Blazor frontend when Cognito auth details are configured
 - OpenAI API (direct, not AWS Bedrock)
 - AWS OpenSearch Serverless - **not currently deployed** (enable with `ENABLE_OPENSEARCH=true` in `deploy.sh`)
 
@@ -67,6 +70,14 @@ SQL_CONNECTION_STRING
 **Mapping**: `appsettings.json` section `"OpenSearch": { "Endpoint": "..." }` -> env var `OpenSearch__Endpoint`
 
 **Current default**: `OpenSearch:Mode` defaults to `Local` in app settings, so API and jobs expect the local Docker OpenSearch instance unless explicitly configured for AWS.
+
+### Observability Configuration
+
+- `Observability__ExecutionEnvironment` is `aws` for App Runner/ECS and `local` for the Windows scheduled-job host.
+- API production trace sampling defaults to `0.2`; jobs default to `1.0` unless overridden by environment variables.
+- Blazor frontend RUM is configured through `src/Crs.Web/wwwroot/appsettings*.json` under `Observability:Rum`.
+- Local scheduled jobs write newline-delimited JSON logs to `C:\ProgramData\CRS\observability\jobs\<job-name>\YYYY-MM-DD.jsonl`.
+- The Windows CloudWatch Agent template for the local jobs host lives at `infrastructure/aws/cloudwatch-agent/windows-config.json`.
 
 ### Registration
 
@@ -102,7 +113,7 @@ SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceNa
 
 ## Job Scheduling
 
-Jobs currently run locally via **Windows Task Scheduler**, using `run-job.ps1` as a wrapper script. The wrapper automatically starts Docker Desktop and the local OpenSearch container if they are not already running, then executes `dotnet run --project src/Crs.Jobs -- <job-name>`.
+Jobs currently run locally via **Windows Task Scheduler**, using `run-job.ps1` as a wrapper script. The wrapper automatically starts Docker Desktop and the local OpenSearch container if they are not already running, emits structured JSON + EMF-compatible metric events to `C:\ProgramData\CRS\observability\jobs`, and then executes `dotnet run --project src/Crs.Jobs -- <job-name>`.
 
 Use **UTC as the canonical schedule** in this document so DST changes do not require doc updates. This PC's scheduled tasks are:
 
@@ -167,6 +178,7 @@ Helper scripts in `infrastructure/aws/`:
 - **deploy.sh** - Deploys all AWS infrastructure
 - **build-and-push.sh** - Builds and pushes Docker images to ECR
 - **deploy-web.sh** - Builds and deploys Blazor to S3
+- **cloudwatch-agent/install-windows.ps1** - Applies the Windows CloudWatch Agent config for the local jobs host
 
 See `infrastructure/aws/README.md` for detailed usage.
 
@@ -185,6 +197,9 @@ dotnet ef database update --project src/Crs.Infrastructure --startup-project src
 SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='crs-api'].ServiceArn" --output text --region us-west-2)
 SERVICE_ID=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query 'Service.ServiceId' --output text --region us-west-2)
 aws logs tail /aws/apprunner/crs-api/$SERVICE_ID/application --follow --region us-west-2
+
+# View local job logs after CloudWatch Agent is configured on the Windows host
+aws logs tail /crs/local-jobs --follow --region us-west-2
 ```
 
 ## Key Decisions

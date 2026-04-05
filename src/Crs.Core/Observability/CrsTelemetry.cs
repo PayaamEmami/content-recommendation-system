@@ -10,14 +10,18 @@ public static class CrsTelemetry
 {
     public const string ActivitySourceName = "Crs.Observability";
     public const string MeterName = "Crs.Observability";
+    public const string CorrelationIdHeaderName = "X-Correlation-Id";
 
     public static readonly ActivitySource ActivitySource = new(ActivitySourceName);
     public static readonly Meter Meter = new(MeterName);
 
     public static class Tags
     {
+        public const string CorrelationId = "crs.correlation_id";
         public const string Dependency = "crs.dependency";
+        public const string ExecutionEnvironment = "crs.execution_environment";
         public const string FeedType = "crs.feed_type";
+        public const string JobRunId = "crs.job.run_id";
         public const string JobName = "crs.job.name";
         public const string ResultCount = "crs.result_count";
         public const string UserId = "enduser.id";

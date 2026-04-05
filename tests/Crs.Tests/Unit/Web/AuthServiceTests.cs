@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Blazored.LocalStorage;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Crs.Web.Services;
@@ -31,6 +32,29 @@ public sealed class AuthServiceTests
 
         Assert.IsTrue(authService.CurrentState.IsAuthenticated);
         Assert.AreEqual("user@example.com", authService.CurrentState.Email);
+    }
+
+    [TestMethod]
+    public async Task InitializeAsync_DoesNotLogStoredEmailAddress()
+    {
+        var storedState = new AuthState
+        {
+            IsAuthenticated = true,
+            Email = "user@example.com",
+            AccessToken = "access",
+            ExpiresAt = DateTime.UtcNow.AddMinutes(5)
+        };
+        var localStorage = new Mock<ILocalStorageService>(MockBehavior.Strict);
+        localStorage.Setup(store => store.GetItemAsync<AuthState>(It.IsAny<string>()))
+            .ReturnsAsync(storedState);
+        var logger = new RecordingLogger<AuthService>();
+
+        var authService = CreateAuthService(localStorage, new HttpTestHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)), logger);
+
+        await authService.InitializeAsync();
+
+        Assert.IsTrue(logger.Messages.Any(message => message.Contains("Restored auth state from storage", StringComparison.Ordinal)));
+        Assert.IsFalse(logger.Messages.Any(message => message.Contains("user@example.com", StringComparison.OrdinalIgnoreCase)));
     }
 
     [TestMethod]
@@ -104,7 +128,10 @@ public sealed class AuthServiceTests
         Assert.AreEqual("new-access", authService.CurrentState.AccessToken);
     }
 
-    private static AuthService CreateAuthService(Mock<ILocalStorageService> localStorage, HttpTestHandler handler)
+    private static AuthService CreateAuthService(
+        Mock<ILocalStorageService> localStorage,
+        HttpTestHandler handler,
+        ILogger<AuthService>? logger = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -119,6 +146,34 @@ public sealed class AuthServiceTests
             BaseAddress = new Uri("https://example.com")
         };
 
-        return new AuthService(httpClient, localStorage.Object, configuration, NullLogger<AuthService>.Instance);
+        return new AuthService(httpClient, localStorage.Object, configuration, logger ?? NullLogger<AuthService>.Instance);
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+        }
+    }
+
+    private sealed class NullScope : IDisposable
+    {
+        public static readonly NullScope Instance = new();
+
+        public void Dispose()
+        {
+        }
     }
 }

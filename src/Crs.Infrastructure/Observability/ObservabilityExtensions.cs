@@ -12,6 +12,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Exporter;
@@ -26,7 +27,7 @@ namespace Crs.Infrastructure.Observability;
 /// </summary>
 public static class ObservabilityExtensions
 {
-    private static readonly string[] ReservedDimensions = ["Service", "Environment"];
+    private static readonly string[] ReservedDimensions = ["Service", "Environment", "ExecutionEnvironment"];
 
     public static IServiceCollection AddCrsObservability(
         this IServiceCollection services,
@@ -56,6 +57,7 @@ public static class ObservabilityExtensions
                     serviceVersion: serviceVersion)
                 .AddAttributes(new Dictionary<string, object>
                 {
+                    ["crs.execution_environment"] = settings.ExecutionEnvironment,
                     ["deployment.environment"] = settings.Environment,
                     ["service.namespace"] = settings.ServiceNamespace
                 }))
@@ -64,6 +66,7 @@ public static class ObservabilityExtensions
                 tracing
                     .SetSampler(new ParentBasedSampler(new TraceIdRatioBasedSampler(settings.TraceSampleRatio)))
                     .AddSource(CrsTelemetry.ActivitySourceName)
+                    .AddNpgsql()
                     .AddHttpClientInstrumentation(options =>
                     {
                         options.RecordException = true;
@@ -155,6 +158,7 @@ public static class ObservabilityExtensions
         {
             "Service",
             "Environment",
+            "ExecutionEnvironment",
             "Operation",
             "Outcome",
             "Dependency",
@@ -257,7 +261,8 @@ public static class ObservabilityExtensions
             var merged = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["Service"] = _settings.ServiceName,
-                ["Environment"] = _settings.Environment
+                ["Environment"] = _settings.Environment,
+                ["ExecutionEnvironment"] = _settings.ExecutionEnvironment
             };
 
             if (dimensions == null)

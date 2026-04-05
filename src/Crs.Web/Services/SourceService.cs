@@ -99,8 +99,7 @@ public class SourceService
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning("Failed to fetch sources: {StatusCode} - {Error}", response.StatusCode, errorContent);
+                _logger.LogWarning("Failed to fetch sources: {StatusCode}", response.StatusCode);
                 return SourceLoadResult.Failure("Couldn't load your sources right now. Please try again.");
             }
 
@@ -156,8 +155,7 @@ public class SourceService
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning("Failed to add source: {StatusCode} - {Content}", response.StatusCode, errorContent);
+                _logger.LogWarning("Failed to add source: {StatusCode}", response.StatusCode);
                 return false;
             }
 
@@ -297,8 +295,7 @@ public class SourceService
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning("Failed to update source: {StatusCode} - {Content}", response.StatusCode, errorContent);
+                _logger.LogWarning("Failed to update source: {StatusCode}", response.StatusCode);
                 return false;
             }
 
@@ -325,8 +322,7 @@ public class SourceService
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning("Failed to import sources: {StatusCode} - {Content}", response.StatusCode, errorContent);
+                _logger.LogWarning("Failed to import sources: {StatusCode}", response.StatusCode);
                 throw new HttpRequestException($"Failed to import sources: {response.StatusCode}");
             }
 

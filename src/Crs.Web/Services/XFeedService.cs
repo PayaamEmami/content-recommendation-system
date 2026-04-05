@@ -114,7 +114,7 @@ public class XFeedService
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning("X callback API returned {StatusCode}: {Body}", response.StatusCode, body);
+                _logger.LogWarning("X callback API returned {StatusCode}", response.StatusCode);
                 return new XCallbackResult
                 {
                     Success = false,

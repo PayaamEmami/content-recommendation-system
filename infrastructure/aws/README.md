@@ -47,6 +47,7 @@ chmod +x deploy.sh
 
 Optional flags:
 - `ENABLE_OPENSEARCH=true ./deploy.sh` creates OpenSearch (default is skipped) and enables AWS ingestion/feed schedules.
+- `RUM_IDENTITY_POOL_ID=... RUM_GUEST_ROLE_ARN=... ./deploy.sh` creates or updates the optional CloudWatch RUM monitor for the Blazor frontend.
 
 This creates all AWS resources:
 - VPC and networking (`crs-vpc`, `crs-subnet-*`)
@@ -57,7 +58,9 @@ This creates all AWS resources:
 - App Runner service (`crs-api`)
 - ECS cluster and scheduled tasks (`crs-cluster`)
 - IAM roles and policies (`crs-*-role`)
-- CloudWatch log groups (`/aws/apprunner/crs-api/*` for API, `/crs/*` for ECS jobs)
+- CloudWatch log groups (`/aws/apprunner/crs-api/*` for API, `/crs/*` for ECS jobs, local job forwarding, and agents)
+- CloudWatch dashboards and alarms for API health, job health, dependencies, and frontend observability
+- Optional CloudWatch RUM app monitor (`crs-web`) when the required RUM auth inputs are provided
 
 ### 3. Build and push Docker images
 
@@ -74,6 +77,8 @@ chmod +x build-and-push.sh
 chmod +x deploy-web.sh
 ./deploy-web.sh
 ```
+
+If a CloudWatch RUM app monitor named `crs-web` exists, `deploy-web.sh` updates the published Blazor `appsettings*.json` with the RUM monitor metadata and uploads `_framework/*.map` source maps to the configured S3 prefix for stack-trace deobfuscation.
 
 Recommended deployment order after updating code or config:
 
@@ -105,6 +110,33 @@ All resources are prefixed with `crs-` for clear separation from other projects:
 | Log Groups | `/aws/apprunner/crs-api/*` for API, `/crs/*` for ECS jobs |
 | IAM Roles | `crs-*-role` |
 
+## Observability
+
+### What is provisioned
+
+- **CloudWatch Logs**: App Runner application logs, ECS task logs, local Windows job forwarding (`/crs/local-jobs`), Windows host event logs (`/crs/windows-host`), and collector/agent logs.
+- **CloudWatch Metrics**: Application custom metrics under `CRS/Application`, host metrics under `CRS/Host`, and frontend metrics under `AWS/RUM`.
+- **X-Ray**: App Runner tracing plus OTLP/X-Ray export for ECS and local jobs.
+- **Dashboards**: `crs-platform-overview`, `crs-api-observability`, `crs-jobs-observability`, and `crs-dependency-frontend-observability`.
+- **Alarms**: API 5xx and latency, readiness failures, dependency spikes, local job wrapper failures, local job missing heartbeat, and frontend JavaScript errors.
+
+### Local Windows jobs host
+
+The production scheduled jobs currently run on Windows Task Scheduler, not ECS. To forward those logs, metrics, and traces into AWS:
+
+```powershell
+cd infrastructure\aws\cloudwatch-agent
+powershell.exe -ExecutionPolicy Bypass -File .\install-windows.ps1 -Region us-west-2
+```
+
+This applies `windows-config.json`, which collects:
+- Structured job logs from `C:\ProgramData\CRS\observability\jobs\*\*.jsonl`
+- Windows Application/System warning+error events
+- CPU, memory, and disk host metrics
+- OTLP traces on `127.0.0.1:4317` and `127.0.0.1:4318`
+
+`run-job.ps1` sets the local OTLP exporter endpoint to `http://127.0.0.1:4317` by default and emits EMF-compatible job wrapper metrics such as `job.host.heartbeat`, `job.wrapper.success.count`, and `job.wrapper.failure.count`.
+
 ## Manual Operations
 
 ### Trigger scheduled jobs manually
@@ -134,6 +166,10 @@ aws logs tail /aws/apprunner/crs-api/$SERVICE_ID/application --follow --region u
 # Job logs
 aws logs tail /crs/ingestion --follow --region us-west-2
 aws logs tail /crs/feed --follow --region us-west-2
+aws logs tail /crs/local-jobs --follow --region us-west-2
+
+# RUM monitor details
+aws rum get-app-monitor --name crs-web --region us-west-2
 ```
 
 ### Update App Runner service
@@ -169,3 +205,5 @@ For CI/CD, add these secrets to your GitHub repository:
 | `X__CLIENT_ID` | X OAuth client ID for connect and refresh flows |
 | `X__CLIENT_SECRET` | X OAuth client secret |
 | `X__REDIRECT_URI` | X OAuth redirect URI, e.g. `https://your-web-host/x/callback` |
+| `RUM_IDENTITY_POOL_ID` | Optional Cognito identity pool for CloudWatch RUM |
+| `RUM_GUEST_ROLE_ARN` | Optional guest role ARN used by CloudWatch RUM |

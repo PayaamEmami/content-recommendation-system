@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 using Crs.Api.Extensions;
 using Crs.Api.Health;
 using Crs.Api.Middleware;
+using Crs.Core.Observability;
 using Crs.Infrastructure;
 using Crs.Infrastructure.Observability;
 using Crs.Recommendation;
@@ -96,6 +98,11 @@ if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Produ
     using (var scope = app.Services.CreateScope())
     {
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        var metrics = scope.ServiceProvider.GetRequiredService<IObservabilityMetrics>();
+        using var activity = CrsTelemetry.ActivitySource.StartActivity("startup.database_migrations");
+        activity?.SetTag(CrsTelemetry.Tags.ExecutionEnvironment, builder.Configuration["Observability:ExecutionEnvironment"]);
+        var stopwatch = Stopwatch.StartNew();
+
         try
         {
             var db = scope.ServiceProvider.GetRequiredService<Crs.Infrastructure.Data.CrsDbContext>();
@@ -110,10 +117,38 @@ if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Produ
             logger.LogInformation("Running database migrations...");
             await db.Database.MigrateAsync();
             logger.LogInformation("Database migrations completed successfully");
+            stopwatch.Stop();
+            metrics.RecordDuration(
+                "startup.duration",
+                stopwatch.Elapsed,
+                new MetricContext(
+                    Dimensions: new Dictionary<string, string>
+                    {
+                        ["Operation"] = "database.migrations",
+                        ["Outcome"] = "success"
+                    }));
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "An error occurred while migrating the database");
+            stopwatch.Stop();
+            metrics.Increment(
+                "startup.failure.count",
+                context: new MetricContext(
+                    Dimensions: new Dictionary<string, string>
+                    {
+                        ["Operation"] = "database.migrations",
+                        ["Outcome"] = "failed"
+                    }));
+            metrics.RecordDuration(
+                "startup.duration",
+                stopwatch.Elapsed,
+                new MetricContext(
+                    Dimensions: new Dictionary<string, string>
+                    {
+                        ["Operation"] = "database.migrations",
+                        ["Outcome"] = "failed"
+                    }));
             throw;
         }
     }

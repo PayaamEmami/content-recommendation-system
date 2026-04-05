@@ -5,6 +5,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Crs.Api.Middleware;
+using Crs.Infrastructure.Configuration;
 
 namespace Crs.Tests.Unit.Api;
 
@@ -63,6 +64,7 @@ public sealed class ExceptionHandlingMiddlewareTests
         var problem = await ReadProblemAsync(context);
         Assert.AreEqual("Internal Server Error", problem.Title);
         Assert.AreEqual("An error occurred processing your request.", problem.Detail);
+        Assert.IsTrue(problem.Extensions.ContainsKey("correlationId"));
     }
 
     private static ExceptionHandlingMiddleware CreateMiddleware(Exception exception, string environment)
@@ -70,7 +72,16 @@ public sealed class ExceptionHandlingMiddlewareTests
         RequestDelegate next = _ => throw exception;
         var hostEnvironment = new TestHostEnvironment { EnvironmentName = environment };
 
-        return new ExceptionHandlingMiddleware(next, NullLogger<ExceptionHandlingMiddleware>.Instance, hostEnvironment);
+        return new ExceptionHandlingMiddleware(
+            next,
+            NullLogger<ExceptionHandlingMiddleware>.Instance,
+            hostEnvironment,
+            new ObservabilitySettings
+            {
+                Environment = environment,
+                ExecutionEnvironment = "local",
+                ServiceName = "crs-tests"
+            });
     }
 
     private static DefaultHttpContext CreateHttpContext()

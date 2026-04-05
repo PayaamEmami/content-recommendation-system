@@ -46,6 +46,8 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
+        using var activity = CrsTelemetry.ActivitySource.StartActivity("auth.login");
+        var startedAt = DateTime.UtcNow;
         // Find user by email
         var user = await _userRepository.GetByEmailAsync(request.Email, cancellationToken);
         if (user == null)
@@ -69,6 +71,7 @@ public class AuthService : IAuthService
         // Generate tokens
         var accessToken = GenerateAccessToken(user);
         var refreshToken = await GenerateAndStoreRefreshTokenAsync(user.Id, cancellationToken);
+        RecordAuthSuccess("login", startedAt);
 
         return new LoginResponse
         {
@@ -81,10 +84,13 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
+        using var activity = CrsTelemetry.ActivitySource.StartActivity("auth.register");
+        var startedAt = DateTime.UtcNow;
         // Check if registrations are enabled (defense in depth)
         if (!_registrationSettings.Enabled)
         {
             _logger.LogWarning("Registration attempt rejected at service layer - registrations are disabled");
+            RecordAuthFailure("register", "registrations_disabled", startedAt);
             throw new InvalidOperationException(_registrationSettings.DisabledMessage);
         }
 
@@ -92,6 +98,7 @@ public class AuthService : IAuthService
         var existingUser = await _userRepository.GetByEmailAsync(request.Email, cancellationToken);
         if (existingUser != null)
         {
+            RecordAuthFailure("register", "duplicate_email", startedAt);
             throw new ArgumentException("A user with this email already exists");
         }
 
@@ -115,6 +122,7 @@ public class AuthService : IAuthService
         // Generate tokens
         var accessToken = GenerateAccessToken(user);
         var refreshToken = await GenerateAndStoreRefreshTokenAsync(user.Id, cancellationToken);
+        RecordAuthSuccess("register", startedAt);
 
         return new LoginResponse
         {
@@ -129,30 +137,33 @@ public class AuthService : IAuthService
         RefreshTokenRequest request,
         CancellationToken cancellationToken = default)
     {
+        using var activity = CrsTelemetry.ActivitySource.StartActivity("auth.refresh");
+        var startedAt = DateTime.UtcNow;
         await _refreshTokenRepository.RemoveExpiredAsync(cancellationToken);
 
         var tokenEntity = await _refreshTokenRepository.GetAndRemoveAsync(request.RefreshToken, cancellationToken);
         if (tokenEntity == null)
         {
-            RecordAuthFailure("refresh", "invalid_refresh_token");
+            RecordAuthFailure("refresh", "invalid_refresh_token", startedAt);
             throw new UnauthorizedAccessException("Invalid refresh token");
         }
 
         if (tokenEntity.ExpiresAt < DateTime.UtcNow)
         {
-            RecordAuthFailure("refresh", "expired_refresh_token");
+            RecordAuthFailure("refresh", "expired_refresh_token", startedAt);
             throw new UnauthorizedAccessException("Refresh token has expired");
         }
 
         var user = await _userRepository.GetByIdAsync(tokenEntity.UserId, cancellationToken);
         if (user == null)
         {
-            RecordAuthFailure("refresh", "user_not_found");
+            RecordAuthFailure("refresh", "user_not_found", startedAt);
             throw new UnauthorizedAccessException("User not found");
         }
 
         var accessToken = GenerateAccessToken(user);
         var refreshToken = await GenerateAndStoreRefreshTokenAsync(user.Id, cancellationToken);
+        RecordAuthSuccess("refresh", startedAt);
 
         return new RefreshTokenResponse
         {
@@ -251,7 +262,7 @@ public class AuthService : IAuthService
         };
     }
 
-    private void RecordAuthFailure(string operation, string outcome)
+    private void RecordAuthFailure(string operation, string outcome, DateTime? startedAt = null)
     {
         _metrics.Increment(
             "auth.failure.count",
@@ -261,6 +272,43 @@ public class AuthService : IAuthService
                     ["Operation"] = operation,
                     ["Outcome"] = outcome,
                     ["StatusClass"] = "4xx"
+                }));
+
+        if (startedAt.HasValue)
+        {
+            _metrics.RecordDuration(
+                "auth.request.duration",
+                DateTime.UtcNow - startedAt.Value,
+                new MetricContext(
+                    Dimensions: new Dictionary<string, string>
+                    {
+                        ["Operation"] = operation,
+                        ["Outcome"] = outcome,
+                        ["StatusClass"] = "4xx"
+                    }));
+        }
+    }
+
+    private void RecordAuthSuccess(string operation, DateTime startedAt)
+    {
+        _metrics.Increment(
+            "auth.success.count",
+            context: new MetricContext(
+                Dimensions: new Dictionary<string, string>
+                {
+                    ["Operation"] = operation,
+                    ["Outcome"] = "success",
+                    ["StatusClass"] = "2xx"
+                }));
+        _metrics.RecordDuration(
+            "auth.request.duration",
+            DateTime.UtcNow - startedAt,
+            new MetricContext(
+                Dimensions: new Dictionary<string, string>
+                {
+                    ["Operation"] = operation,
+                    ["Outcome"] = "success",
+                    ["StatusClass"] = "2xx"
                 }));
     }
 }

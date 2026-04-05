@@ -23,7 +23,8 @@ public sealed class ObservabilityExtensionsTests
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     ["Observability:ServiceName"] = "crs-tests",
-                    ["Observability:Environment"] = "Testing"
+                    ["Observability:Environment"] = "Testing",
+                    ["Observability:ExecutionEnvironment"] = "local"
                 })
                 .Build();
 
@@ -50,6 +51,7 @@ public sealed class ObservabilityExtensionsTests
             Assert.IsTrue(payload.TryGetProperty("_aws", out _));
             Assert.AreEqual("crs-tests", payload.GetProperty("Service").GetString());
             Assert.AreEqual("Testing", payload.GetProperty("Environment").GetString());
+            Assert.AreEqual("local", payload.GetProperty("ExecutionEnvironment").GetString());
             Assert.AreEqual(1d, payload.GetProperty("api.request.count").GetDouble(), 0.001d);
         }
         finally

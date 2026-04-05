@@ -100,7 +100,7 @@ public class DailyFeedGenerationJob
                             totalFeedsGenerated += recommendations.Count;
 
                             _logger.LogDebug(
-                                "Generated {Count} recommendations for user {Email}, feed type {FeedType}",
+                                "Generated {Count} recommendations for user {UserId}, feed type {FeedType}",
                                 recommendations.Count,
                                 user.Id,
                                 feedType);

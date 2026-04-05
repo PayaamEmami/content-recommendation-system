@@ -5,6 +5,7 @@ using Moq;
 using Crs.Core.Entities;
 using Crs.Core.Interfaces;
 using Crs.Core.Models;
+using Crs.Core.Observability;
 using Crs.Infrastructure.Configuration;
 using Crs.Jobs.Jobs;
 
@@ -35,7 +36,8 @@ public sealed class LocalVectorIndexSyncJobTests
         var job = new LocalVectorIndexSyncJob(
             provider,
             Options.Create(new OpenSearchSettings { Mode = OpenSearchMode.Local }),
-            NullLogger<LocalVectorIndexSyncJob>.Instance);
+            NullLogger<LocalVectorIndexSyncJob>.Instance,
+            NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 
@@ -77,7 +79,8 @@ public sealed class LocalVectorIndexSyncJobTests
         var job = new LocalVectorIndexSyncJob(
             provider,
             Options.Create(new OpenSearchSettings { Mode = OpenSearchMode.Local }),
-            NullLogger<LocalVectorIndexSyncJob>.Instance);
+            NullLogger<LocalVectorIndexSyncJob>.Instance,
+            NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 
@@ -96,7 +99,8 @@ public sealed class LocalVectorIndexSyncJobTests
         var job = new LocalVectorIndexSyncJob(
             provider,
             Options.Create(new OpenSearchSettings { Mode = OpenSearchMode.Aws }),
-            NullLogger<LocalVectorIndexSyncJob>.Instance);
+            NullLogger<LocalVectorIndexSyncJob>.Instance,
+            NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 
