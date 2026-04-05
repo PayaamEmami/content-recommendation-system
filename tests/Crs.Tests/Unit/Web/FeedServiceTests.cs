@@ -147,6 +147,7 @@ public sealed class FeedServiceTests
         Assert.AreEqual(contentId, result[0].ContentId);
         Assert.AreEqual(VoteType.Upvote, result[0].VoteType);
         Assert.AreEqual("History item", result[0].Title);
+        Assert.AreEqual("/api/v1/users/me/vote-history", handler.Requests.Single().RequestUri!.AbsolutePath);
     }
 
     private static AuthService CreateAuthService(Mock<ILocalStorageService> localStorage)

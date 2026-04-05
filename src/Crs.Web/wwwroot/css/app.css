@@ -157,7 +157,7 @@ a:hover {
 }
 
 .user-name {
-    color: var(--text-secondary);
+    color: inherit;
     font-size: 0.9rem;
 }
 
@@ -166,16 +166,22 @@ a:hover {
     align-items: center;
     gap: 0.5rem;
     background: transparent;
-    border: 1px solid transparent;
-    border-radius: 999px;
-    padding: 0.45rem 0.75rem;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 0.5rem 0;
     color: var(--text-secondary);
+    transition: all 0.2s ease;
 }
 
 .user-menu-trigger:hover {
     color: var(--text-primary);
-    background-color: var(--bg-secondary);
-    border-color: var(--border-color);
+    border-bottom-color: var(--accent-color);
+}
+
+.user-menu-trigger[aria-expanded="true"] {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent-color);
 }
 
 .user-menu-dropdown {
@@ -1677,14 +1683,12 @@ textarea.form-input {
 }
 
 .preferences-setting-copy h3,
-.preferences-panel-heading h3,
 .preferences-list-header h3 {
     margin-bottom: 0.35rem;
     font-size: 1.05rem;
 }
 
-.preferences-setting-copy p,
-.preferences-panel-heading p {
+.preferences-setting-copy p {
     margin-bottom: 0;
     color: var(--text-secondary);
 }
@@ -1714,8 +1718,9 @@ textarea.form-input {
 .preferences-content-form-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 1rem;
+    min-height: 40px;
 }
 
 .preferences-content-form-body {
@@ -1723,33 +1728,41 @@ textarea.form-input {
 }
 
 .preferences-form-toggle {
+    width: 40px;
+    height: 40px;
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.65rem 0.95rem;
+    justify-content: center;
+    padding: 0;
     border: 1px solid var(--border-color);
     border-radius: 999px;
     background-color: var(--bg-secondary);
-    color: var(--text-primary);
-    font-weight: 600;
+    color: var(--text-secondary);
     cursor: pointer;
     transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     flex-shrink: 0;
 }
 
 .preferences-form-toggle:hover {
+    color: var(--text-primary);
     background-color: var(--bg-tertiary);
+    border-color: var(--text-secondary);
+}
+
+.preferences-form-toggle[aria-expanded="true"] {
+    color: var(--text-primary);
     border-color: var(--text-secondary);
 }
 
 .preferences-form-toggle-icon {
     width: 1rem;
     height: 1rem;
-    transition: transform 0.15s ease;
 }
 
-.preferences-form-toggle[aria-expanded="true"] .preferences-form-toggle-icon {
-    transform: rotate(180deg);
+.preferences-form-toggle-plus {
+    font-size: 1.35rem;
+    line-height: 1;
+    font-weight: 500;
 }
 
 .preferences-textarea {
@@ -1953,13 +1966,11 @@ textarea.form-input {
     }
 
     .preferences-content-form-header {
-        flex-direction: column;
-        align-items: flex-start;
+        justify-content: flex-end;
     }
 
     .preferences-form-toggle {
-        width: 100%;
-        justify-content: space-between;
+        width: 40px;
     }
 
     .preferences-history-filter-shell {

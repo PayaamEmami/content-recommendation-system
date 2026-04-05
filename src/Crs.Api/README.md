@@ -91,6 +91,8 @@ To run the API against local OpenSearch:
 ### Users (requires auth)
 - `GET /api/v1/users/me` - Get current user profile
 - `PATCH /api/v1/users/me` - Update current user profile
+- `GET /api/v1/users/me/votes` - Get the current user's vote records
+- `GET /api/v1/users/me/vote-history` - Get the current user's vote history joined with content details
 - `GET /api/v1/users/me/topics` - Get user's interested topics
 - `PUT /api/v1/users/me/topics` - Update user's interested topics
 
@@ -164,4 +166,3 @@ See [SECURITY.md](SECURITY.md) for details on:
 **Project References:**
 - `Crs.Core` - Domain layer
 - `Crs.Infrastructure` - Data access
-

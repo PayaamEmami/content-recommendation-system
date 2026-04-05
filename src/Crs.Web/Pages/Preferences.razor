@@ -12,7 +12,7 @@
 <div class="page-container preferences-page">
     <section class="preferences-section">
         <div class="preferences-section-header">
-            <h2>Settings</h2>
+            <h2>General Settings</h2>
         </div>
 
         <div class="preferences-section-body">
@@ -36,7 +36,7 @@
     <section class="preferences-section">
         <div class="preferences-section-header">
             <h2>Content Examples</h2>
-            <p>Add specific content to give the recommendation system more examples to learn from.</p>
+            <p class="preferences-section-subtitle">Add specific content to give the recommendation system more examples to learn from.</p>
         </div>
 
         <div class="preferences-section-body">
@@ -53,16 +53,20 @@
             <div class="preferences-content-stack">
                 <div class="preferences-content-form-shell">
                     <div class="preferences-content-form-header">
-                        <div class="preferences-panel-heading">
-                            <h3>@(_editingContentId.HasValue ? "Edit Content Example" : "Add Content Example")</h3>
-                            <p>@GetContentFormSummary()</p>
-                        </div>
                         <button class="preferences-form-toggle"
                                 type="button"
                                 @onclick="ToggleContentForm"
-                                aria-expanded="@_showContentForm">
-                            <span>@GetContentFormToggleLabel()</span>
-                            <UiSvgIcon Kind="SvgIconKind.ChevronDown" Class="preferences-form-toggle-icon" />
+                                aria-expanded="@_showContentForm"
+                                aria-label="@GetContentFormToggleAriaLabel()"
+                                title="@GetContentFormToggleAriaLabel()">
+                            @if (_showContentForm)
+                            {
+                                <UiSvgIcon Kind="SvgIconKind.Close" Class="preferences-form-toggle-icon" />
+                            }
+                            else
+                            {
+                                <span class="preferences-form-toggle-plus" aria-hidden="true">+</span>
+                            }
                         </button>
                     </div>
 
@@ -80,7 +84,7 @@
                                         </div>
 
                                         <div class="form-group">
-                                            <label for="content-type">Content Type <span class="optional">(optional)</span></label>
+                                            <label for="content-type">Content Type</label>
                                             <InputSelect id="content-type" @bind-Value="_formModel.ContentType" class="form-input">
                                                 <option value="">Select...</option>
                                                 @foreach (var type in Enum.GetValues<ContentType>())
@@ -99,13 +103,13 @@
                                         </div>
 
                                         <div class="form-group form-group-wide">
-                                            <label for="content-url">URL <span class="optional">(optional)</span></label>
+                                            <label for="content-url">URL</label>
                                             <InputText id="content-url" @bind-Value="_formModel.Url" class="form-input" placeholder="https://example.com/article" />
                                             <ValidationMessage For="@(() => _formModel.Url)" />
                                         </div>
 
                                         <div class="form-group form-group-wide">
-                                            <label for="content-description">Description <span class="optional">(optional)</span></label>
+                                            <label for="content-description">Description</label>
                                             <InputTextArea id="content-description" @bind-Value="_formModel.Description" class="form-input preferences-textarea" placeholder="What about this content did you like or dislike?" />
                                             <ValidationMessage For="@(() => _formModel.Description)" />
                                         </div>
@@ -664,21 +668,14 @@
         _showContentForm = !_content.Any();
     }
 
-    private string GetContentFormSummary()
-    {
-        return _editingContentId.HasValue
-            ? "Update an example and keep the saved list in view below."
-            : "Add an upvote or downvote example without taking over the page.";
-    }
-
-    private string GetContentFormToggleLabel()
+    private string GetContentFormToggleAriaLabel()
     {
         if (_editingContentId.HasValue)
         {
-            return _showContentForm ? "Hide form" : "Continue editing";
+            return _showContentForm ? "Hide content form" : "Continue editing content";
         }
 
-        return _showContentForm ? "Hide form" : "Add content";
+        return _showContentForm ? "Hide content form" : "Add content";
     }
 
     private static string GetContentTypeDisplay(ContentType type) => type switch

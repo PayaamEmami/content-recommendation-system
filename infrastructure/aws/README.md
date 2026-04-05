@@ -66,6 +66,8 @@ chmod +x build-and-push.sh
 ./build-and-push.sh
 ```
 
+`build-and-push.sh` starts an App Runner deployment for `crs-api` after pushing by default. Use `--skip-api-deploy` if you only want to publish the image, or `--update-ecs` if you also want the jobs guidance printed for ECS consumers.
+
 ### 4. Deploy web frontend
 
 ```bash
