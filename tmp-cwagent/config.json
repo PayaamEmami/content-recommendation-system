@@ -45,6 +45,10 @@
   "metrics": {
     "namespace": "CRS/Host",
     "append_dimensions": {
+      "InstanceId": "${aws:InstanceId}",
+      "ImageId": "${aws:ImageId}",
+      "InstanceType": "${aws:InstanceType}",
+      "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
       "host": "${hostname}"
     },
     "metrics_collected": {

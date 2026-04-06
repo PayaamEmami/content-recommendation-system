@@ -42,6 +42,15 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+to_native_path() {
+    local file_path="$1"
+    if command -v cygpath >/dev/null 2>&1; then
+        cygpath -w "$file_path"
+    else
+        echo "$file_path"
+    fi
+}
+
 require_config_value() {
     local name="$1"
     local value="$2"
@@ -480,8 +489,10 @@ create_rum_app_monitor() {
     local cf_domain="${CF_URL#https://}"
     local monitor_config_file
     monitor_config_file=$(mktemp)
+    local monitor_config_file_native
+    monitor_config_file_native=$(to_native_path "$monitor_config_file")
 
-    python - "$monitor_config_file" "$RUM_IDENTITY_POOL_ID" "$RUM_GUEST_ROLE_ARN" "$RUM_SESSION_SAMPLE_RATE" "$RUM_ALLOW_COOKIES" "$RUM_ENABLE_XRAY" <<'PY'
+    python - "$monitor_config_file_native" "$RUM_IDENTITY_POOL_ID" "$RUM_GUEST_ROLE_ARN" "$RUM_SESSION_SAMPLE_RATE" "$RUM_ALLOW_COOKIES" "$RUM_ENABLE_XRAY" <<'PY'
 import json
 import sys
 
@@ -542,8 +553,10 @@ PY
     local rum_description_file
     rum_description_file=$(mktemp)
     aws rum get-app-monitor --name "$RUM_APP_MONITOR_NAME" --region $REGION > "$rum_description_file"
+    local rum_description_file_native
+    rum_description_file_native=$(to_native_path "$rum_description_file")
     local rum_log_group
-    rum_log_group=$(python - "$rum_description_file" <<'PY'
+    rum_log_group=$(python - "$rum_description_file_native" <<'PY'
 import json
 import sys
 from pathlib import Path

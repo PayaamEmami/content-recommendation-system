@@ -184,7 +184,7 @@ function Wait-ForOpenSearch {
 }
 
 $env:DOTNET_ENVIRONMENT = if ($env:DOTNET_ENVIRONMENT) { $env:DOTNET_ENVIRONMENT } else { "Production" }
-$env:Observability__Environment = if ($env:Observability__Environment) { $env:Observability__Environment } else { "Production" }
+$env:Observability__Environment = if ($env:Observability__Environment) { $env:Observability__Environment } else { "dev" }
 $env:Observability__ExecutionEnvironment = $executionEnvironment
 $env:Observability__ServiceName = if ($env:Observability__ServiceName) { $env:Observability__ServiceName } else { $serviceName }
 $env:OTEL_EXPORTER_OTLP_ENDPOINT = if ($env:OTEL_EXPORTER_OTLP_ENDPOINT) { $env:OTEL_EXPORTER_OTLP_ENDPOINT } else { "http://127.0.0.1:4317" }

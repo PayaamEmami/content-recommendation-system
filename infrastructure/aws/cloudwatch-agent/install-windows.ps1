@@ -15,7 +15,11 @@ New-Item -ItemType Directory -Path $configDirectory -Force | Out-Null
 
 $template = Get-Content -LiteralPath $ConfigTemplatePath -Raw
 $rendered = $template.Replace('${AWS_REGION}', $Region)
-$rendered | Set-Content -LiteralPath $RenderedConfigPath -Encoding UTF8
+
+# Windows PowerShell writes a UTF-8 BOM with Set-Content -Encoding UTF8, and
+# the CloudWatch Agent config translator can choke on that prefix.
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($RenderedConfigPath, $rendered, $utf8NoBom)
 
 $agentRoot = "C:\Program Files\Amazon\AmazonCloudWatchAgent"
 $controlScript = Join-Path $agentRoot "amazon-cloudwatch-agent-ctl.ps1"

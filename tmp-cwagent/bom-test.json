@@ -1,6 +1,6 @@
 {
   "agent": {
-    "region": "${AWS_REGION}",
+    "region": "us-west-2",
     "logfile": "C:\\ProgramData\\Amazon\\AmazonCloudWatchAgent\\Logs\\amazon-cloudwatch-agent.log",
     "debug": false
   },
@@ -45,6 +45,10 @@
   "metrics": {
     "namespace": "CRS/Host",
     "append_dimensions": {
+      "InstanceId": "${aws:InstanceId}",
+      "ImageId": "${aws:ImageId}",
+      "InstanceType": "${aws:InstanceType}",
+      "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
       "host": "${hostname}"
     },
     "metrics_collected": {

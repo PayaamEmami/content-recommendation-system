@@ -64,6 +64,7 @@ public static class ObservabilityExtensions
             .WithTracing(tracing =>
             {
                 tracing
+                    .AddXRayTraceId()
                     .SetSampler(new ParentBasedSampler(new TraceIdRatioBasedSampler(settings.TraceSampleRatio)))
                     .AddSource(CrsTelemetry.ActivitySourceName)
                     .AddNpgsql()

@@ -20,6 +20,15 @@ NC='\033[0m'
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+to_native_path() {
+    local file_path="$1"
+    if command -v cygpath >/dev/null 2>&1; then
+        cygpath -w "$file_path"
+    else
+        echo "$file_path"
+    fi
+}
+
 update_api_base_url() {
     local file_path="$1"
     local api_url="$2"
@@ -113,24 +122,29 @@ RUM_GUEST_ROLE_ARN=""
 
 if aws rum get-app-monitor --name "$RUM_APP_MONITOR_NAME" --region "$RUM_REGION" > /tmp/crs-rum-monitor.json 2>/dev/null; then
     RUM_ENABLED="true"
+    RUM_MONITOR_FILE=$(to_native_path /tmp/crs-rum-monitor.json)
+    export RUM_MONITOR_FILE
     RUM_APP_MONITOR_ID=$(python - <<'PY'
 import json
 from pathlib import Path
-payload = json.loads(Path('/tmp/crs-rum-monitor.json').read_text())
+from os import environ
+payload = json.loads(Path(environ['RUM_MONITOR_FILE']).read_text())
 print(payload.get('AppMonitor', {}).get('Id', ''))
 PY
 )
     RUM_IDENTITY_POOL_ID=$(python - <<'PY'
 import json
 from pathlib import Path
-payload = json.loads(Path('/tmp/crs-rum-monitor.json').read_text())
+from os import environ
+payload = json.loads(Path(environ['RUM_MONITOR_FILE']).read_text())
 print(payload.get('AppMonitor', {}).get('AppMonitorConfiguration', {}).get('IdentityPoolId', ''))
 PY
 )
     RUM_GUEST_ROLE_ARN=$(python - <<'PY'
 import json
 from pathlib import Path
-payload = json.loads(Path('/tmp/crs-rum-monitor.json').read_text())
+from os import environ
+payload = json.loads(Path(environ['RUM_MONITOR_FILE']).read_text())
 print(payload.get('AppMonitor', {}).get('AppMonitorConfiguration', {}).get('GuestRoleArn', ''))
 PY
 )
