@@ -1746,7 +1746,7 @@ print_summary() {
     else
         echo "  - None (AWS ingestion/feed schedules disabled)"
     fi
-    echo "  - CloudFront invalidation: Daily at 10 AM Pacific"
+    echo "  - CloudFront invalidation: Daily at 1:00 PM Pacific"
     echo ""
     echo "Observability:"
     echo "  - Metrics namespace: ${METRICS_NAMESPACE}"
