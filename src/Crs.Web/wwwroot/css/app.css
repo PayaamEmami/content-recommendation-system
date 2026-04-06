@@ -133,6 +133,7 @@ a:hover {
     font-weight: 500;
     padding: 0.5rem 0;
     border-bottom: 2px solid transparent;
+    cursor: pointer;
     transition: all 0.2s ease;
 }
 
@@ -171,6 +172,7 @@ a:hover {
     border-radius: 0;
     padding: 0.5rem 0;
     color: var(--text-secondary);
+    cursor: pointer;
     transition: all 0.2s ease;
 }
 
@@ -1715,16 +1717,13 @@ textarea.form-input {
     padding: 1.25rem;
 }
 
-.preferences-content-form-header {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 1rem;
-    min-height: 40px;
+.preferences-content-toggle-shell {
+    position: relative;
+    flex-shrink: 0;
 }
 
 .preferences-content-form-body {
-    padding-top: 1rem;
+    padding-top: 0;
 }
 
 .preferences-form-toggle {
@@ -1965,14 +1964,11 @@ textarea.form-input {
         align-items: flex-start;
     }
 
-    .preferences-content-form-header {
-        justify-content: flex-end;
-    }
-
     .preferences-form-toggle {
         width: 40px;
     }
 
+    .preferences-content-toggle-shell,
     .preferences-history-filter-shell {
         align-self: flex-end;
     }

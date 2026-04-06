@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Crs.Infrastructure.Configuration;
 using Crs.Core.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
@@ -43,12 +44,12 @@ internal static class ObservabilityHealthChecks
 internal sealed class OpenSearchHealthCheck : IHealthCheck
 {
     private readonly OpenSearchSettings _settings;
-    private readonly IVectorStore _vectorStore;
+    private readonly IServiceProvider _serviceProvider;
 
-    public OpenSearchHealthCheck(IOptions<OpenSearchSettings> settings, IVectorStore vectorStore)
+    public OpenSearchHealthCheck(IOptions<OpenSearchSettings> settings, IServiceProvider serviceProvider)
     {
         _settings = settings.Value;
-        _vectorStore = vectorStore;
+        _serviceProvider = serviceProvider;
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(
@@ -57,12 +58,17 @@ internal sealed class OpenSearchHealthCheck : IHealthCheck
     {
         if (string.IsNullOrWhiteSpace(_settings.Endpoint))
         {
-            return HealthCheckResult.Unhealthy("OpenSearch endpoint is not configured");
+            return HealthCheckResult.Healthy("OpenSearch is disabled for this environment", new Dictionary<string, object>
+            {
+                ["mode"] = _settings.Mode.ToString(),
+                ["configured"] = false
+            });
         }
 
         try
         {
-            var count = await _vectorStore.GetDocumentCountAsync(cancellationToken);
+            var vectorStore = _serviceProvider.GetRequiredService<IVectorStore>();
+            var count = await vectorStore.GetDocumentCountAsync(cancellationToken);
             return HealthCheckResult.Healthy("OpenSearch is reachable", new Dictionary<string, object>
             {
                 ["documentCount"] = count,

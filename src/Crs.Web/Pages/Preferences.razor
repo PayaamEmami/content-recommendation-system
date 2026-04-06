@@ -13,13 +13,13 @@
     <section class="preferences-section">
         <div class="preferences-section-header">
             <h2>General Settings</h2>
+            <p class="preferences-section-subtitle">Adjust how the app looks while you browse and manage your recommendations.</p>
         </div>
 
         <div class="preferences-section-body">
             <div class="preferences-setting-row">
                 <div class="preferences-setting-copy">
                     <h3>Theme</h3>
-                    <p>Choose how the app should look while you browse your feeds and manage content.</p>
                 </div>
                 <div class="theme-options">
                     <button class="@(ThemeService.IsDarkMode ? "btn-primary" : "btn-secondary")" @onclick="() => SetThemeAsync(true)">
@@ -34,9 +34,28 @@
     </section>
 
     <section class="preferences-section">
-        <div class="preferences-section-header">
-            <h2>Content Examples</h2>
-            <p class="preferences-section-subtitle">Add specific content to give the recommendation system more examples to learn from.</p>
+        <div class="preferences-section-header preferences-history-section-header">
+            <div>
+                <h2>Content Examples</h2>
+                <p class="preferences-section-subtitle">Add specific content to give the recommendation system more examples to learn from.</p>
+            </div>
+            <div class="preferences-content-toggle-shell">
+                <button class="preferences-form-toggle"
+                        type="button"
+                        @onclick="ToggleContentForm"
+                        aria-expanded="@_showContentForm"
+                        aria-label="@GetContentFormToggleAriaLabel()"
+                        title="@GetContentFormToggleAriaLabel()">
+                    @if (_showContentForm)
+                    {
+                        <UiSvgIcon Kind="SvgIconKind.Close" Class="preferences-form-toggle-icon" />
+                    }
+                    else
+                    {
+                        <span class="preferences-form-toggle-plus" aria-hidden="true">+</span>
+                    }
+                </button>
+            </div>
         </div>
 
         <div class="preferences-section-body">
@@ -51,27 +70,9 @@
             }
 
             <div class="preferences-content-stack">
-                <div class="preferences-content-form-shell">
-                    <div class="preferences-content-form-header">
-                        <button class="preferences-form-toggle"
-                                type="button"
-                                @onclick="ToggleContentForm"
-                                aria-expanded="@_showContentForm"
-                                aria-label="@GetContentFormToggleAriaLabel()"
-                                title="@GetContentFormToggleAriaLabel()">
-                            @if (_showContentForm)
-                            {
-                                <UiSvgIcon Kind="SvgIconKind.Close" Class="preferences-form-toggle-icon" />
-                            }
-                            else
-                            {
-                                <span class="preferences-form-toggle-plus" aria-hidden="true">+</span>
-                            }
-                        </button>
-                    </div>
-
-                    @if (_showContentForm)
-                    {
+                @if (_showContentForm)
+                {
+                    <div class="preferences-content-form-shell">
                         <div class="preferences-content-form-body">
                             <div class="add-source-form">
                                 <EditForm Model="_formModel" OnValidSubmit="HandleSubmitAsync">
@@ -127,8 +128,8 @@
                                 </EditForm>
                             </div>
                         </div>
-                    }
-                </div>
+                    </div>
+                }
 
                 <div class="preferences-saved-panel">
                     <div class="preferences-list-header">
