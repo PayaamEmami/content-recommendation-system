@@ -15,19 +15,13 @@
     <div class="feed-container">
         @if (_content == null)
         {
-            <div class="feed-loading-state" role="status" aria-live="polite">
-                <div class="feed-loading-spinner" aria-hidden="true"></div>
-                <div class="feed-loading-copy">
-                    <span class="feed-loading-title">Building your feed</span>
-                    <span class="feed-loading-subtitle">Pulling in recommendations and recent activity for you.</span>
-                </div>
-            </div>
+            <LoadingSpinner Title="Building your feed" Subtitle="Pulling in recommendations and recent activity for you." />
         }
         else if (!_content.Any())
         {
             @if (_sources == null)
             {
-                <p>Checking your sources...</p>
+                <LoadingSpinner Title="Checking your sources" Subtitle="Verifying which sources you have connected." />
             }
             else if (!string.IsNullOrEmpty(_sourcesLoadError))
             {
@@ -143,13 +137,7 @@
 
                     @if (_xLoading)
                     {
-                        <div class="feed-loading-state x-loading-state" role="status" aria-live="polite">
-                            <div class="feed-loading-spinner" aria-hidden="true"></div>
-                            <div class="feed-loading-copy">
-                                <span class="feed-loading-title">Loading X feed</span>
-                                <span class="feed-loading-subtitle">Fetching the latest posts from the accounts you follow.</span>
-                            </div>
-                        </div>
+                        <LoadingSpinner Title="Loading X feed" Subtitle="Fetching the latest posts from the accounts you follow." />
                     }
                     else if (!_followedAccounts.Any())
                     {

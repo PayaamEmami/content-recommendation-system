@@ -215,7 +215,10 @@ if ls publish/web/wwwroot/_framework/*.map >/dev/null 2>&1; then
         --region $REGION
 fi
 
-# Set cache headers and content types for static assets
+# Set cache headers and content types for static assets.
+# Fingerprinted files (contain a hash in the filename) get immutable 1-year cache.
+# Non-fingerprinted framework files (blazor.webassembly.js, dotnet.js) get short
+# cache so redeployments with new fingerprinted assets take effect immediately.
 log_info "Setting cache headers..."
 aws s3 cp s3://$BUCKET_NAME/ s3://$BUCKET_NAME/ \
     --recursive \
@@ -253,10 +256,24 @@ aws s3 cp s3://$BUCKET_NAME/ s3://$BUCKET_NAME/ \
     --content-type "application/wasm" \
     --region $REGION
 
+# Non-fingerprinted framework files must use short cache so that redeployments
+# with new content-hashed assets are picked up without waiting for the old
+# bootloader scripts to expire. These files reference fingerprinted filenames
+# that change every publish; a stale copy causes 404s for the new assets.
+for NON_FP_FILE in "_framework/blazor.webassembly.js" "_framework/dotnet.js"; do
+    if aws s3api head-object --bucket "$BUCKET_NAME" --key "$NON_FP_FILE" --region "$REGION" > /dev/null 2>&1; then
+        aws s3 cp "s3://$BUCKET_NAME/$NON_FP_FILE" "s3://$BUCKET_NAME/$NON_FP_FILE" \
+            --metadata-directive REPLACE \
+            --cache-control "no-cache" \
+            --content-type "application/javascript" \
+            --region $REGION
+    fi
+done
+
 # HTML files should not be cached as aggressively
 aws s3 cp s3://$BUCKET_NAME/index.html s3://$BUCKET_NAME/index.html \
     --metadata-directive REPLACE \
-    --cache-control "max-age=300" \
+    --cache-control "no-cache" \
     --content-type "text/html" \
     --region $REGION
 

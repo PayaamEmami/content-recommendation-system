@@ -7,10 +7,17 @@
 <PageTitle>Connecting X - CRS</PageTitle>
 
 <div class="page-container">
-    <div class="page-header">
-        <h1>Connecting your X account</h1>
-        <p class="subtitle">@_statusMessage</p>
-    </div>
+    @if (_isProcessing)
+    {
+        <LoadingSpinner Title="Connecting your X account" Subtitle="@_statusMessage" />
+    }
+    else
+    {
+        <div class="page-header">
+            <h1>Connecting your X account</h1>
+            <p class="subtitle">@_statusMessage</p>
+        </div>
+    }
 </div>
 
 @code {
@@ -21,6 +28,7 @@
     public string? State { get; set; }
 
     private string _statusMessage = "Finalizing connection...";
+    private bool _isProcessing = true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -35,6 +43,7 @@
         if (string.IsNullOrWhiteSpace(Code) || string.IsNullOrWhiteSpace(State))
         {
             _statusMessage = "Missing authorization details. Please try again.";
+            _isProcessing = false;
             return;
         }
 
@@ -42,6 +51,7 @@
         _statusMessage = result.Success
             ? "Connected! Redirecting to your feed..."
             : result.ErrorMessage ?? "Failed to connect. Please try again.";
+        _isProcessing = false;
 
         if (result.Success)
         {

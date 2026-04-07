@@ -1,0 +1,24 @@
+<div class="loading-spinner-container" role="status" aria-live="polite">
+    @if (!string.IsNullOrEmpty(Title))
+    {
+        <div class="loading-spinner-card">
+            <div class="loading-spinner-wheel" aria-hidden="true"></div>
+            <div class="loading-spinner-copy">
+                <span class="loading-spinner-title">@Title</span>
+                @if (!string.IsNullOrEmpty(Subtitle))
+                {
+                    <span class="loading-spinner-subtitle">@Subtitle</span>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="loading-spinner-wheel" aria-hidden="true"></div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Subtitle { get; set; }
+}

@@ -34,28 +34,9 @@
     </section>
 
     <section class="preferences-section">
-        <div class="preferences-section-header preferences-history-section-header">
-            <div>
-                <h2>Content Examples</h2>
-                <p class="preferences-section-subtitle">Add specific content to give the recommendation system more examples to learn from.</p>
-            </div>
-            <div class="preferences-content-toggle-shell">
-                <button class="preferences-form-toggle"
-                        type="button"
-                        @onclick="ToggleContentForm"
-                        aria-expanded="@_showContentForm"
-                        aria-label="@GetContentFormToggleAriaLabel()"
-                        title="@GetContentFormToggleAriaLabel()">
-                    @if (_showContentForm)
-                    {
-                        <UiSvgIcon Kind="SvgIconKind.Close" Class="preferences-form-toggle-icon" />
-                    }
-                    else
-                    {
-                        <span class="preferences-form-toggle-plus" aria-hidden="true">+</span>
-                    }
-                </button>
-            </div>
+        <div class="preferences-section-header">
+            <h2>Content Examples</h2>
+            <p class="preferences-section-subtitle">Add specific content to give the recommendation system more examples to learn from.</p>
         </div>
 
         <div class="preferences-section-body">
@@ -70,66 +51,63 @@
             }
 
             <div class="preferences-content-stack">
-                @if (_showContentForm)
-                {
-                    <div class="preferences-content-form-shell">
-                        <div class="preferences-content-form-body">
-                            <div class="add-source-form">
-                                <EditForm Model="_formModel" OnValidSubmit="HandleSubmitAsync">
-                                    <DataAnnotationsValidator />
-                                    <div class="form-grid">
-                                        <div class="form-group form-group-wide">
-                                            <label for="content-title">Title</label>
-                                            <InputText id="content-title" @bind-Value="_formModel.Title" class="form-input" placeholder="e.g. Distill article on transformers" />
-                                            <ValidationMessage For="@(() => _formModel.Title)" />
-                                        </div>
-
-                                        <div class="form-group">
-                                            <label for="content-type">Content Type</label>
-                                            <InputSelect id="content-type" @bind-Value="_formModel.ContentType" class="form-input">
-                                                <option value="">Select...</option>
-                                                @foreach (var type in Enum.GetValues<ContentType>())
-                                                {
-                                                    <option value="@type">@GetContentTypeDisplay(type)</option>
-                                                }
-                                            </InputSelect>
-                                        </div>
-
-                                        <div class="form-group">
-                                            <label for="content-vote">Feedback</label>
-                                            <InputSelect id="content-vote" @bind-Value="_formModel.VoteType" class="form-input">
-                                                <option value="@VoteType.Upvote">Upvote</option>
-                                                <option value="@VoteType.Downvote">Downvote</option>
-                                            </InputSelect>
-                                        </div>
-
-                                        <div class="form-group form-group-wide">
-                                            <label for="content-url">URL</label>
-                                            <InputText id="content-url" @bind-Value="_formModel.Url" class="form-input" placeholder="https://example.com/article" />
-                                            <ValidationMessage For="@(() => _formModel.Url)" />
-                                        </div>
-
-                                        <div class="form-group form-group-wide">
-                                            <label for="content-description">Description</label>
-                                            <InputTextArea id="content-description" @bind-Value="_formModel.Description" class="form-input preferences-textarea" placeholder="What about this content did you like or dislike?" />
-                                            <ValidationMessage For="@(() => _formModel.Description)" />
-                                        </div>
+                <div class="preferences-content-form-shell">
+                    <div class="preferences-content-form-body">
+                        <div class="add-source-form">
+                            <EditForm Model="_formModel" OnValidSubmit="HandleSubmitAsync">
+                                <DataAnnotationsValidator />
+                                <div class="form-grid">
+                                    <div class="form-group form-group-wide">
+                                        <label for="content-title">Title</label>
+                                        <InputText id="content-title" @bind-Value="_formModel.Title" class="form-input" placeholder="e.g. Distill article on transformers" />
+                                        <ValidationMessage For="@(() => _formModel.Title)" />
                                     </div>
 
-                                    <div class="preferences-form-actions">
-                                        <button type="submit" class="btn-primary" disabled="@_isSaving">
-                                            @(_isSaving ? "Saving..." : _editingContentId.HasValue ? "Save Changes" : "Add Content")
-                                        </button>
-                                        @if (_editingContentId.HasValue)
-                                        {
-                                            <button type="button" class="btn-secondary" @onclick="ResetForm" disabled="@_isSaving">Cancel</button>
-                                        }
+                                    <div class="form-group">
+                                        <label for="content-type">Content Type</label>
+                                        <InputSelect id="content-type" @bind-Value="_formModel.ContentType" class="form-input">
+                                            <option value="">Select...</option>
+                                            @foreach (var type in Enum.GetValues<ContentType>())
+                                            {
+                                                <option value="@type">@GetContentTypeDisplay(type)</option>
+                                            }
+                                        </InputSelect>
                                     </div>
-                                </EditForm>
-                            </div>
+
+                                    <div class="form-group">
+                                        <label for="content-vote">Feedback</label>
+                                        <InputSelect id="content-vote" @bind-Value="_formModel.VoteType" class="form-input">
+                                            <option value="@VoteType.Upvote">Upvote</option>
+                                            <option value="@VoteType.Downvote">Downvote</option>
+                                        </InputSelect>
+                                    </div>
+
+                                    <div class="form-group form-group-wide">
+                                        <label for="content-url">URL</label>
+                                        <InputText id="content-url" @bind-Value="_formModel.Url" class="form-input" placeholder="https://example.com/article" />
+                                        <ValidationMessage For="@(() => _formModel.Url)" />
+                                    </div>
+
+                                    <div class="form-group form-group-wide">
+                                        <label for="content-description">Description</label>
+                                        <InputTextArea id="content-description" @bind-Value="_formModel.Description" class="form-input preferences-textarea" placeholder="What about this content did you like or dislike?" />
+                                        <ValidationMessage For="@(() => _formModel.Description)" />
+                                    </div>
+                                </div>
+
+                                <div class="preferences-form-actions">
+                                    <button type="submit" class="btn-primary" disabled="@_isSaving">
+                                        @(_isSaving ? "Saving..." : _editingContentId.HasValue ? "Save Changes" : "Add Content")
+                                    </button>
+                                    @if (_editingContentId.HasValue)
+                                    {
+                                        <button type="button" class="btn-secondary" @onclick="ResetForm" disabled="@_isSaving">Cancel</button>
+                                    }
+                                </div>
+                            </EditForm>
                         </div>
                     </div>
-                }
+                </div>
 
                 <div class="preferences-saved-panel">
                     <div class="preferences-list-header">
@@ -139,13 +117,7 @@
 
                     @if (_isLoading)
                     {
-                        <div class="feed-loading-state" role="status" aria-live="polite">
-                            <div class="feed-loading-spinner" aria-hidden="true"></div>
-                            <div class="feed-loading-copy">
-                                <span class="feed-loading-title">Loading saved content</span>
-                                <span class="feed-loading-subtitle">Gathering the examples you have already rated so you can review them here.</span>
-                            </div>
-                        </div>
+                        <LoadingSpinner Title="Loading saved content" Subtitle="Gathering the examples you have already rated so you can review them here." />
                     }
                     else if (!_content.Any())
                     {
@@ -274,13 +246,7 @@
 
                 @if (_isVoteHistoryLoading)
                 {
-                    <div class="feed-loading-state" role="status" aria-live="polite">
-                        <div class="feed-loading-spinner" aria-hidden="true"></div>
-                        <div class="feed-loading-copy">
-                            <span class="feed-loading-title">Loading voting history</span>
-                            <span class="feed-loading-subtitle">Pulling in the content you have voted on so you can review it here.</span>
-                        </div>
-                    </div>
+                    <LoadingSpinner Title="Loading voting history" Subtitle="Pulling in the content you have voted on so you can review it here." />
                 }
                 else if (!visibleVoteHistory.Any())
                 {
@@ -354,9 +320,7 @@
     private bool _isLoading = true;
     private bool _isVoteHistoryLoading = true;
     private bool _isSaving;
-    private bool _showContentForm = true;
     private bool _showVoteHistoryFilters;
-    private bool _hasInitializedContentFormVisibility;
     private string? _errorMessage;
     private string? _successMessage;
     private string? _voteHistoryError;
@@ -392,16 +356,6 @@
         _isLoading = true;
         _content.Clear();
         _content.AddRange(await PreferencesService.GetPreferencesAsync());
-        if (!_hasInitializedContentFormVisibility)
-        {
-            _showContentForm = !_content.Any();
-            _hasInitializedContentFormVisibility = true;
-        }
-        else if (!_content.Any())
-        {
-            _showContentForm = true;
-        }
-
         _isLoading = false;
     }
 
@@ -459,7 +413,6 @@
 
         await LoadContentAsync();
         ResetForm();
-        _showContentForm = false;
         _successMessage = wasEditing ? "Content updated." : "Content added.";
         _isSaving = false;
     }
@@ -477,7 +430,6 @@
             ContentType = content.ContentType,
             VoteType = content.VoteType
         };
-        _showContentForm = true;
     }
 
     private async Task DeleteContentAsync(Guid contentId)
@@ -504,11 +456,6 @@
     private async Task SetThemeAsync(bool isDarkMode)
     {
         await ThemeService.SetThemeAsync(isDarkMode);
-    }
-
-    private void ToggleContentForm()
-    {
-        _showContentForm = !_showContentForm;
     }
 
     private void ToggleVoteHistoryFilters()
@@ -660,17 +607,6 @@
     {
         _editingContentId = null;
         _formModel = new ContentFormModel();
-        _showContentForm = !_content.Any();
-    }
-
-    private string GetContentFormToggleAriaLabel()
-    {
-        if (_editingContentId.HasValue)
-        {
-            return _showContentForm ? "Hide content form" : "Continue editing content";
-        }
-
-        return _showContentForm ? "Hide content form" : "Add content";
     }
 
     private static string GetContentTypeDisplay(ContentType type) => type switch
