@@ -1710,8 +1710,7 @@ textarea.form-input {
     gap: 1rem;
 }
 
-.preferences-content-form-shell,
-.preferences-saved-panel {
+.preferences-content-form-shell {
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
@@ -1838,25 +1837,6 @@ textarea.form-input {
 
 .preferences-content-actions {
     gap: 0.5rem;
-}
-
-.preferences-row-action {
-    cursor: pointer;
-}
-
-.preferences-row-action:disabled {
-    cursor: default;
-    opacity: 0.6;
-}
-
-.preferences-row-action-danger {
-    color: #b13b3b;
-}
-
-.preferences-row-action-danger:hover:not(:disabled) {
-    background-color: rgba(177, 59, 59, 0.12);
-    border-color: rgba(177, 59, 59, 0.3);
-    color: #9f2f2f;
 }
 
 .preferences-history-row.vote-cleared {

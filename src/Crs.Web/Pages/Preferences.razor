@@ -174,14 +174,14 @@
                                             </a>
                                         }
                                         <button type="button"
-                                                class="content-open-btn preferences-row-action"
+                                                class="action-btn"
                                                 @onclick="() => StartEdit(content)"
                                                 disabled="@_isSaving"
                                                 title="Edit">
                                             <UiSvgIcon Kind="SvgIconKind.Edit" />
                                         </button>
                                         <button type="button"
-                                                class="content-open-btn preferences-row-action preferences-row-action-danger"
+                                                class="action-btn danger"
                                                 @onclick="() => DeleteContentAsync(content.Id)"
                                                 disabled="@_isSaving"
                                                 title="Delete">
