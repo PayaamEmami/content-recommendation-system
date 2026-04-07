@@ -110,11 +110,6 @@
                 </div>
 
                 <div class="preferences-saved-panel">
-                    <div class="preferences-list-header">
-                        <h3>Saved Content</h3>
-                        <span class="preferences-count">@_content.Count item@(_content.Count == 1 ? "" : "s")</span>
-                    </div>
-
                     @if (_isLoading)
                     {
                         <LoadingSpinner Title="Loading saved content" Subtitle="Gathering the examples you have already rated so you can review them here." />
@@ -206,7 +201,7 @@
         <div class="preferences-section-header preferences-history-section-header">
             <div>
                 <h2>Voting History</h2>
-                <p class="preferences-section-subtitle">Review the recommendation content you have voted on and adjust those votes with the same controls used in the feed.</p>
+                <p class="preferences-section-subtitle">Browse your voting history to see what content has influenced your recommendations.</p>
             </div>
             <div class="preferences-history-filter-shell">
                 <button class="preferences-filter-btn"

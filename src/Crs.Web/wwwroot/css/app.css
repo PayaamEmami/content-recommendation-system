@@ -1687,8 +1687,7 @@ textarea.form-input {
     gap: 1.5rem;
 }
 
-.preferences-setting-copy h3,
-.preferences-list-header h3 {
+.preferences-setting-copy h3 {
     margin-bottom: 0.35rem;
     font-size: 1.05rem;
 }
@@ -1732,19 +1731,6 @@ textarea.form-input {
     display: flex;
     gap: 0.75rem;
     margin-top: 1rem;
-}
-
-.preferences-list-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 1rem;
-}
-
-.preferences-count {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
 }
 
 .preferences-history-filter-shell {
