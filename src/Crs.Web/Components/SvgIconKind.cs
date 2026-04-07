@@ -16,5 +16,6 @@ public enum SvgIconKind
     Library,
     Check,
     Cross,
-    Filter
+    Filter,
+    Settings
 }
