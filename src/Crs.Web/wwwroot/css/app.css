@@ -1709,8 +1709,7 @@ textarea.form-input {
 }
 
 .preferences-content-form-shell,
-.preferences-saved-panel,
-.preferences-history-panel {
+.preferences-saved-panel {
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 8px;

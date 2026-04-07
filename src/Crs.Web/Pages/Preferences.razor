@@ -263,14 +263,9 @@
         </div>
 
         <div class="preferences-section-body">
-            <div class="preferences-history-panel">
                 @{
                     var visibleVoteHistory = GetVisibleVoteHistory();
                 }
-                <div class="preferences-list-header">
-                    <h3>@GetVoteHistoryFilterHeading()</h3>
-                    <span class="preferences-count">@visibleVoteHistory.Count item@(visibleVoteHistory.Count == 1 ? "" : "s")</span>
-                </div>
 
                 @if (!string.IsNullOrWhiteSpace(_voteHistoryError))
                 {
@@ -341,7 +336,6 @@
                         }
                     </div>
                 }
-            </div>
         </div>
     </section>
 </div>
@@ -705,16 +699,6 @@
             VoteHistoryFilter.Upvoted => item.VoteType == VoteType.Upvote,
             VoteHistoryFilter.Downvoted => item.VoteType == VoteType.Downvote,
             _ => true
-        };
-    }
-
-    private string GetVoteHistoryFilterHeading()
-    {
-        return _activeVoteHistoryFilter switch
-        {
-            VoteHistoryFilter.Upvoted => "Upvoted Content",
-            VoteHistoryFilter.Downvoted => "Downvoted Content",
-            _ => "All Voted Content"
         };
     }
 
