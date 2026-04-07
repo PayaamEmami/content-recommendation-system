@@ -62,6 +62,11 @@ Create `appsettings.Development.local.json` with your JWT secret:
 {
   "JwtSettings": {
     "SecretKey": "your-secure-random-32-character-minimum-string"
+  },
+  "ReverseProxy": {
+    "KnownNetworks": [
+      "127.0.0.1/32"
+    ]
   }
 }
 ```
@@ -146,7 +151,7 @@ See [SECURITY.md](SECURITY.md) for details on:
 ## Known Limitations
 
 1. **In-Memory Refresh Tokens**: Lost on restart (use Redis/database in production)
-2. **No Integration Tests**: Planned for future
+2. **Forwarded Headers Require Trusted Networks**: Set `ReverseProxy:KnownNetworks` when running behind a load balancer or reverse proxy
 
 ## Dependencies
 

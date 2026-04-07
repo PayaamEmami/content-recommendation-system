@@ -49,8 +49,7 @@ public class ObservabilitySettings
     private static bool IsAwsExecutionEnvironment()
     {
         return !string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("AWS_REGION")) ||
-               !string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("AWS_EXECUTION_ENV")) ||
-               !string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("APP_RUNNER_SERVICE_ARN"));
+               !string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("AWS_EXECUTION_ENV"));
     }
 }
 

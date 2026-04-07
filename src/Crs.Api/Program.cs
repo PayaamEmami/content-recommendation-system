@@ -62,6 +62,7 @@ builder.Services.AddOpenApiConfiguration();
 builder.Services.AddCorsConfiguration(builder.Configuration);
 builder.Services.AddRateLimitingConfiguration();
 builder.Services.AddRegistrationSettings(builder.Configuration);
+builder.Services.AddReverseProxyConfiguration(builder.Configuration);
 
 // Add Infrastructure layer (DbContext, repositories)
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -155,6 +156,7 @@ if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Produ
 }
 
 // Configure the HTTP request pipeline
+app.UseForwardedHeaders();
 app.UseCors("DefaultCorsPolicy");
 
 app.UseMiddleware<RequestLoggingMiddleware>();

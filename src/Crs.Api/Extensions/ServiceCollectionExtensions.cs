@@ -1,6 +1,8 @@
+using System.Net;
 using System.Text;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Crs.Api.Configuration;
 using Crs.Core.Observability;
@@ -152,5 +154,62 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(registrationSettings);
 
         return services;
+    }
+
+    /// <summary>
+    /// Configures trusted reverse proxy networks for forwarded headers.
+    /// </summary>
+    public static IServiceCollection AddReverseProxyConfiguration(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var reverseProxySettings = configuration.GetSection("ReverseProxy").Get<ReverseProxySettings>()
+            ?? new ReverseProxySettings();
+
+        services.AddSingleton(reverseProxySettings);
+        services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor |
+                                       ForwardedHeaders.XForwardedHost |
+                                       ForwardedHeaders.XForwardedProto;
+            options.RequireHeaderSymmetry = false;
+            options.ForwardLimit = 1;
+            options.KnownIPNetworks.Clear();
+            options.KnownProxies.Clear();
+
+            foreach (var network in reverseProxySettings.KnownNetworks)
+            {
+                if (string.IsNullOrWhiteSpace(network))
+                {
+                    continue;
+                }
+
+                options.KnownIPNetworks.Add(ParseNetwork(network));
+            }
+        });
+
+        return services;
+    }
+
+    private static System.Net.IPNetwork ParseNetwork(string cidr)
+    {
+        var segments = cidr.Split('/', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length != 2 ||
+            !IPAddress.TryParse(segments[0], out var prefix) ||
+            !int.TryParse(segments[1], out var prefixLength))
+        {
+            throw new InvalidOperationException($"Invalid ReverseProxy:KnownNetworks value '{cidr}'. Expected CIDR notation.");
+        }
+
+        try
+        {
+            return new System.Net.IPNetwork(prefix, prefixLength);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                $"Invalid ReverseProxy:KnownNetworks value '{cidr}'. Expected a valid CIDR network.",
+                exception);
+        }
     }
 }

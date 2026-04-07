@@ -28,6 +28,8 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                 ["JwtSettings:RefreshTokenExpirationDays"] = "7",
                 ["Registration:Enabled"] = "true",
                 ["Registration:DisabledMessage"] = "Registrations disabled",
+                ["ReverseProxy:KnownNetworks:0"] = "127.0.0.1/32",
+                ["ReverseProxy:KnownNetworks:1"] = "::1/128",
                 ["Embedding:ApiKey"] = "test-key",
                 ["Embedding:ModelName"] = "test",
                 ["Embedding:Dimensions"] = "3",

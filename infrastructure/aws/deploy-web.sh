@@ -5,6 +5,8 @@ set -e
 # Builds Blazor WebAssembly and deploys to S3
 
 REGION="${AWS_REGION:-us-west-2}"
+API_URL_SOURCE="${API_URL_SOURCE:-ecs-express}"
+API_BASE_URL_EXPLICIT="${API_BASE_URL_EXPLICIT:-}"
 RUM_APP_MONITOR_NAME="${RUM_APP_MONITOR_NAME:-crs-web}"
 RUM_REGION="${RUM_REGION:-$REGION}"
 RUM_SOURCE_MAPS_PREFIX="${RUM_SOURCE_MAPS_PREFIX:-rum-source-maps}"
@@ -19,6 +21,53 @@ NC='\033[0m'
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+normalize_api_base_url() {
+    local value="$1"
+
+    if [[ "$value" == http://* || "$value" == https://* ]]; then
+        echo "$value"
+    else
+        echo "https://$value"
+    fi
+}
+
+resolve_ecs_express_api_base_url() {
+    local service_arn
+    service_arn=$(aws ecs list-services --cluster crs-cluster --query "serviceArns[?contains(@, '/crs-api')] | [0]" --output text --region "$REGION" 2>/dev/null || echo "")
+    if [ -z "$service_arn" ] || [ "$service_arn" = "None" ]; then
+        log_error "Could not find ECS Express service 'crs-api' in cluster crs-cluster."
+        exit 1
+    fi
+
+    local endpoint
+    endpoint=$(aws ecs describe-express-gateway-service --service-arn "$service_arn" --query 'service.activeConfigurations[0].ingressPaths[0].endpoint' --output text --region "$REGION")
+    if [ -z "$endpoint" ] || [ "$endpoint" = "None" ]; then
+        log_error "Could not resolve the ECS Express endpoint for service 'crs-api'."
+        exit 1
+    fi
+
+    normalize_api_base_url "$endpoint"
+}
+
+resolve_api_base_url() {
+    case "${API_URL_SOURCE,,}" in
+        ecs-express)
+            resolve_ecs_express_api_base_url
+            ;;
+        explicit)
+            if [ -z "$API_BASE_URL_EXPLICIT" ]; then
+                log_error "API_BASE_URL_EXPLICIT must be set when API_URL_SOURCE=explicit."
+                exit 1
+            fi
+            normalize_api_base_url "$API_BASE_URL_EXPLICIT"
+            ;;
+        *)
+            log_error "Unsupported API_URL_SOURCE '$API_URL_SOURCE'. Use ecs-express or explicit."
+            exit 1
+            ;;
+    esac
+}
 
 to_native_path() {
     local file_path="$1"
@@ -104,16 +153,8 @@ log_info "Deploying to S3 bucket: $BUCKET_NAME"
 # Navigate to project root
 cd "$(dirname "$0")/../.."
 
-# Resolve current App Runner API URL so the published web config points at the live API.
-SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='crs-api'].ServiceArn" --output text --region $REGION 2>/dev/null || echo "")
-if [ -z "$SERVICE_ARN" ] || [ "$SERVICE_ARN" = "None" ]; then
-    log_error "Could not find App Runner service 'crs-api' in region $REGION."
-    exit 1
-fi
-
-API_URL=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query 'Service.ServiceUrl' --output text --region $REGION)
-API_BASE_URL="https://${API_URL}"
-log_info "Using API base URL: ${API_BASE_URL}"
+API_BASE_URL=$(resolve_api_base_url)
+log_info "Using API base URL from ${API_URL_SOURCE}: ${API_BASE_URL}"
 
 RUM_ENABLED="false"
 RUM_APP_MONITOR_ID=""

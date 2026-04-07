@@ -34,7 +34,7 @@ CRS provides:
 ### Cloud & Infrastructure (AWS)
 
 - **Amazon S3 + CloudFront** - Static hosting for Blazor WebAssembly frontend
-- **AWS App Runner** - Serverless container hosting for API
+- **Amazon ECS Express Mode** - Managed container hosting for API
 - **Amazon ECS Fargate + EventBridge** - Scheduled job execution
 - **AWS OpenSearch Serverless** - Vector database for semantic similarity search
 - **OpenAI API** - GPT-5-nano and text-embedding-3-small models
@@ -140,7 +140,7 @@ Jobs are implemented as **Amazon ECS Fargate tasks** with EventBridge cron sched
 ### ☁️ Infrastructure (AWS)
 
 - **Amazon S3 + CloudFront**: Static hosting for Blazor WebAssembly frontend (global CDN)
-- **AWS App Runner**: Serverless container hosting for API (auto-scaling)
+- **Amazon ECS Express Mode**: Managed container hosting for the API (primary target runtime)
 - **Amazon ECS Fargate + EventBridge**: Scheduled job execution with cron triggers (cost-efficient)
 - **AWS OpenSearch Serverless**: Vector database for semantic similarity search
 - **OpenAI API**: Embedding generation with text-embedding-3-small and GPT-5-nano
@@ -153,12 +153,12 @@ Jobs are implemented as **Amazon ECS Fargate tasks** with EventBridge cron sched
 
 - **AWS Hosting**:
   - S3 + CloudFront (Web) - Global CDN distribution
-  - App Runner (API) - Auto-scaling serverless
+  - ECS Express Mode (API) - Managed container runtime
   - ECS Fargate + EventBridge (Jobs) - Scheduled execution
 - **GitHub Actions**: Automated CI/CD pipeline
   - Builds and tests on every push
   - Pushes Docker images to Amazon ECR
-  - Deploys API to App Runner
+  - Deploys the API to ECS Express by image digest
   - Deploys Web to S3 with CloudFront invalidation
 - **Infrastructure as Code**: AWS CLI scripts for reproducible deployments
 - **Database Migrations**: Automated via EF Core on startup

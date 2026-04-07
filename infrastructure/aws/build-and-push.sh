@@ -5,7 +5,7 @@ set -e
 # Builds Docker images and pushes to ECR
 
 REGION="${AWS_REGION:-us-west-2}"
-DEPLOY_API="${DEPLOY_API:-true}"
+DEPLOY_ECS_EXPRESS="${DEPLOY_ECS_EXPRESS:-true}"
 UPDATE_ECS_TASKS="${UPDATE_ECS_TASKS:-false}"
 
 # Colors for output
@@ -17,13 +17,105 @@ NC='\033[0m'
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+to_native_path() {
+    local file_path="$1"
+    if command -v cygpath >/dev/null 2>&1; then
+        cygpath -w "$file_path"
+    else
+        echo "$file_path"
+    fi
+}
+
+resolve_ecs_express_service_arn() {
+    aws ecs list-services \
+        --cluster crs-cluster \
+        --region "$REGION" \
+        --query "serviceArns[?contains(@, '/crs-api')] | [0]" \
+        --output text 2>/dev/null || echo ""
+}
+
+wait_for_ecs_express_active() {
+    local service_arn="$1"
+
+    for i in {1..60}; do
+        STATUS=$(aws ecs describe-express-gateway-service \
+            --service-arn "$service_arn" \
+            --region "$REGION" \
+            --query "service.status.statusCode" \
+            --output text 2>/dev/null || echo "UNKNOWN")
+        if [ "$STATUS" = "ACTIVE" ]; then
+            return 0
+        fi
+
+        echo "Current ECS Express status: $STATUS (attempt $i/60)"
+        sleep 10
+    done
+
+    return 1
+}
+
+update_ecs_express_service_image() {
+    local image_identifier="$1"
+    local service_arn
+    service_arn=$(resolve_ecs_express_service_arn)
+
+    if [ -z "$service_arn" ] || [ "$service_arn" = "None" ]; then
+        log_error "ECS Express service 'crs-api' not found in cluster crs-cluster"
+        return 1
+    fi
+
+    local primary_container_file
+    primary_container_file=$(mktemp)
+    local primary_container_file_native
+    primary_container_file_native=$(to_native_path "$primary_container_file")
+    aws ecs describe-express-gateway-service \
+        --service-arn "$service_arn" \
+        --region "$REGION" \
+        --query "service.activeConfigurations[0].primaryContainer" \
+        --output json > "$primary_container_file"
+
+    local updated_primary_container
+    updated_primary_container=$(python - "$primary_container_file_native" "$image_identifier" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text())
+payload["image"] = sys.argv[2]
+print(json.dumps(payload, separators=(",", ":")))
+PY
+)
+
+    rm -f "$primary_container_file"
+
+    aws ecs update-express-gateway-service \
+        --service-arn "$service_arn" \
+        --primary-container "$updated_primary_container" \
+        --region "$REGION" > /dev/null
+
+    log_info "Submitted ECS Express deployment with image $image_identifier"
+
+    if wait_for_ecs_express_active "$service_arn"; then
+        log_info "ECS Express service is ACTIVE"
+    else
+        log_error "Timed out waiting for ECS Express service to become ACTIVE"
+        return 1
+    fi
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --deploy-api)
-            DEPLOY_API=true
+            DEPLOY_ECS_EXPRESS=true
             ;;
         --skip-api-deploy)
-            DEPLOY_API=false
+            DEPLOY_ECS_EXPRESS=false
+            ;;
+        --deploy-ecs-express)
+            DEPLOY_ECS_EXPRESS=true
+            ;;
+        --skip-ecs-express)
+            DEPLOY_ECS_EXPRESS=false
             ;;
         --update-ecs)
             UPDATE_ECS_TASKS=true
@@ -33,7 +125,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             log_error "Unknown argument: $1"
-            echo "Usage: $0 [--deploy-api|--skip-api-deploy] [--update-ecs|--skip-ecs-update]"
+            echo "Usage: $0 [--deploy-api|--skip-api-deploy] [--deploy-ecs-express|--skip-ecs-express] [--update-ecs|--skip-ecs-update]"
             exit 1
             ;;
     esac
@@ -47,7 +139,7 @@ ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 log_info "AWS Account: $ACCOUNT_ID"
 log_info "ECR URI: $ECR_URI"
 log_info "Region: $REGION"
-log_info "Deploy API after push: $DEPLOY_API"
+log_info "Deploy ECS Express after push: $DEPLOY_ECS_EXPRESS"
 log_info "Update ECS tasks after push: $UPDATE_ECS_TASKS"
 
 # Login to ECR
@@ -62,11 +154,20 @@ log_info "Building from: $(pwd)"
 log_info "Building crs-api image..."
 docker build -t crs-api:latest -f src/Crs.Api/Dockerfile .
 docker tag crs-api:latest $ECR_URI/crs-api:latest
-docker tag crs-api:latest $ECR_URI/crs-api:$(git rev-parse --short HEAD 2>/dev/null || echo "manual")
+API_IMAGE_TAG=$(git rev-parse --short HEAD 2>/dev/null || echo "manual")
+docker tag crs-api:latest $ECR_URI/crs-api:${API_IMAGE_TAG}
 
 log_info "Pushing crs-api to ECR..."
 docker push $ECR_URI/crs-api:latest
-docker push $ECR_URI/crs-api:$(git rev-parse --short HEAD 2>/dev/null || echo "manual")
+docker push $ECR_URI/crs-api:${API_IMAGE_TAG}
+
+API_IMAGE_DIGEST=$(aws ecr describe-images \
+    --repository-name crs-api \
+    --image-ids imageTag=${API_IMAGE_TAG} \
+    --query "imageDetails[0].imageDigest" \
+    --output text \
+    --region "$REGION")
+API_IMAGE_IDENTIFIER="${ECR_URI}/crs-api@${API_IMAGE_DIGEST}"
 
 # Build and push Jobs image
 log_info "Building crs-jobs image..."
@@ -82,16 +183,10 @@ log_info "Done! Images pushed to ECR:"
 log_info "  - $ECR_URI/crs-api:latest"
 log_info "  - $ECR_URI/crs-jobs:latest"
 
-# Update App Runner unless explicitly skipped
-if [[ "${DEPLOY_API,,}" == "true" ]]; then
-    log_info "Updating App Runner service..."
-    SERVICE_ARN=$(aws apprunner list-services --region $REGION --query "ServiceSummaryList[?ServiceName=='crs-api'].ServiceArn" --output text)
-    if [ -n "$SERVICE_ARN" ]; then
-        aws apprunner start-deployment --service-arn $SERVICE_ARN --region $REGION
-        log_info "Deployment started for App Runner service"
-    else
-        log_error "App Runner service 'crs-api' not found"
-    fi
+# Update API runtimes unless explicitly skipped
+if [[ "${DEPLOY_ECS_EXPRESS,,}" == "true" ]]; then
+    log_info "Updating ECS Express service..."
+    update_ecs_express_service_image "$API_IMAGE_IDENTIFIER"
 fi
 
 # Optionally update ECS task definitions

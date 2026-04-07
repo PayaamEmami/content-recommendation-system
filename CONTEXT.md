@@ -10,14 +10,14 @@ This file is a quick orientation guide for AI coding agents working in this repo
 
 - **Backend**: .NET 10, ASP.NET Core, Entity Framework Core
 - **Frontend**: Blazor WebAssembly (S3 + CloudFront)
-- **Cloud**: AWS (App Runner, RDS, S3, CloudFront, CloudWatch/X-Ray; optional ECS/OpenSearch infrastructure exists but is not the primary job runtime today)
+- **Cloud**: AWS (ECS Express Mode for the API, RDS, S3, CloudFront, CloudWatch/X-Ray; optional ECS/OpenSearch infrastructure exists but is not the primary job runtime today)
 - **AI**: OpenAI API (GPT-5-nano, text-embedding-3-small)
 
 ## Architecture
 
 ### Core Services
 
-1. **Crs.Api** - REST API with JWT authentication (App Runner)
+1. **Crs.Api** - REST API with JWT authentication (ECS Express Mode)
 2. **Crs.Web** - Blazor WebAssembly web UI (S3 + CloudFront)
 3. **Crs.Jobs** - Console jobs executed locally via Windows Task Scheduler today; optional ECS/EventBridge infrastructure also exists for AWS deployment:
    - **Primary runtime today**: local scheduled tasks on this PC via `run-job.ps1`
@@ -31,16 +31,18 @@ This file is a quick orientation guide for AI coding agents working in this repo
 
 All resources prefixed with `crs-` for clear separation:
 
-- 1 App Runner service (API) - `crs-api`
+- 1 ECS Express service (API) - `crs-api`
 - 1 S3 bucket + CloudFront (Web) - `crs-web-*`
-- 1 ECS Cluster - `crs-cluster` (available for AWS-hosted jobs, not the current primary execution path)
+- 1 ECS Cluster - `crs-cluster`
+- 1 ECS Fargate OTEL collector service - `crs-otel-collector`
+- 1 private Cloud Map namespace - `crs.internal`
 - RDS PostgreSQL - `crs-db`
 - ECR repositories - `crs-api`, `crs-jobs`
 - EventBridge Scheduler - `crs-cloudfront-invalidation` (configured in `deploy.sh` for daily CloudFront invalidation at 1:00 PM `America/Los_Angeles`)
-- Secrets Manager - `crs-secrets/*`
-- CloudWatch logs - `/aws/apprunner/crs-api/*` for API, `/crs/*` for ECS/local-job/agent logs
+- Secrets Manager - `crs-secrets/*` including `openai-api-key`, `jwt-secret`, `connection-string`, and `x-client-secret`
+- CloudWatch logs - `/crs/api` for the ECS Express API and `/crs/*` for ECS/local-job/agent logs
 - CloudWatch dashboards - `crs-platform-overview`, `crs-api-observability`, `crs-jobs-observability`, `crs-dependency-frontend-observability`
-- X-Ray tracing - App Runner API plus any OTLP-capable local/ECS jobs routed through an OTLP collector/agent
+- X-Ray tracing - ECS Express API traces route to `otel-collector.crs.internal:4317`, and local/ECS jobs use an OTLP collector/agent
 - CloudWatch RUM - optional `crs-web` app monitor for the Blazor frontend when Cognito auth details are configured
 - OpenAI API (direct, not AWS Bedrock)
 - AWS OpenSearch Serverless - **not currently deployed** (enable with `ENABLE_OPENSEARCH=true` in `deploy.sh`)
@@ -73,8 +75,9 @@ SQL_CONNECTION_STRING
 
 ### Observability Configuration
 
-- `Observability__ExecutionEnvironment` is `aws` for App Runner/ECS and `local` for the Windows scheduled-job host.
+- `Observability__ExecutionEnvironment` is `aws` for ECS-hosted services and `local` for the Windows scheduled-job host.
 - API production trace sampling defaults to `0.2`; jobs default to `1.0` unless overridden by environment variables.
+- ECS Express API tasks set `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.crs.internal:4317` and trust `ReverseProxy__KnownNetworks__0=10.1.0.0/16` for ALB forwarded headers.
 - Blazor frontend RUM is configured through `src/Crs.Web/wwwroot/appsettings*.json` under `Observability:Rum`.
 - Local scheduled jobs write newline-delimited JSON logs to `C:\ProgramData\CRS\observability\jobs\<job-name>\YYYY-MM-DD.jsonl`.
 - The Windows CloudWatch Agent template for the local jobs host lives at `infrastructure/aws/cloudwatch-agent/windows-config.json`.
@@ -83,13 +86,12 @@ SQL_CONNECTION_STRING
 
 **Toggle user registration**:
 
-1. **API** - Update App Runner environment variables:
+1. **API** - Deploy the ECS Express API with the AWS deployment scripts:
 
 ```bash
-# Get current service ARN
-SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='crs-api'].ServiceArn" --output text --region us-west-2)
-
-# Update registration setting (requires service update)
+cd infrastructure/aws
+./deploy.sh
+./build-and-push.sh
 ```
 
 2. **Web** - Update in `src/Crs.Web/wwwroot/appsettings.json` (requires redeploy):
@@ -177,7 +179,7 @@ Helper scripts in `infrastructure/aws/`:
 
 - **deploy.sh** - Deploys all AWS infrastructure
 - **build-and-push.sh** - Builds and pushes Docker images to ECR
-- **deploy-web.sh** - Builds and deploys Blazor to S3
+- **deploy-web.sh** - Builds and deploys Blazor to S3 (`API_URL_SOURCE=ecs-express|explicit`)
 - **cloudwatch-agent/install-windows.ps1** - Applies the Windows CloudWatch Agent config for the local jobs host
 
 See `infrastructure/aws/README.md` for detailed usage.
@@ -193,10 +195,8 @@ cd infrastructure/aws
 dotnet ef migrations add Name --project src/Crs.Infrastructure --startup-project src/Crs.Api
 dotnet ef database update --project src/Crs.Infrastructure --startup-project src/Crs.Api
 
-# View API logs
-SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='crs-api'].ServiceArn" --output text --region us-west-2)
-SERVICE_ID=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query 'Service.ServiceId' --output text --region us-west-2)
-aws logs tail /aws/apprunner/crs-api/$SERVICE_ID/application --follow --region us-west-2
+# View ECS Express API logs
+aws logs tail /crs/api --follow --region us-west-2
 
 # View local job logs after CloudWatch Agent is configured on the Windows host
 aws logs tail /crs/local-jobs --follow --region us-west-2

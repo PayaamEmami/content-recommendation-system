@@ -35,7 +35,7 @@ X__ClientSecret=your-x-client-secret
 X__RedirectUri=https://your-web-host/x/callback
 ```
 
-The deploy script reads `infrastructure/aws/secrets.env` as the single source of truth for application secrets and runtime configuration.
+The deploy script reads `infrastructure/aws/secrets.env` for bootstrap values and stores sensitive API settings in Secrets Manager for the ECS Express API runtime.
 
 ### 2. Deploy infrastructure
 
@@ -48,6 +48,7 @@ chmod +x deploy.sh
 Optional flags:
 - `ENABLE_OPENSEARCH=true ./deploy.sh` creates OpenSearch (default is skipped) and enables AWS ingestion/feed schedules.
 - `RUM_IDENTITY_POOL_ID=... RUM_GUEST_ROLE_ARN=... ./deploy.sh` creates or updates the optional CloudWatch RUM monitor for the Blazor frontend.
+- `DEPLOY_ECS_EXPRESS=false ./deploy.sh` skips the ECS Express API deployment path.
 
 This creates all AWS resources:
 - VPC and networking (`crs-vpc`, `crs-subnet-*`)
@@ -55,10 +56,12 @@ This creates all AWS resources:
 - RDS PostgreSQL (`crs-db`)
 - S3 bucket for web hosting (`crs-web-*`)
 - OpenSearch Serverless (`crs-search`)
-- App Runner service (`crs-api`)
+- ECS Express API service (`crs-api`)
 - ECS cluster and scheduled tasks (`crs-cluster`)
+- ECS OTEL collector service (`crs-otel-collector`)
+- Private Cloud Map namespace (`crs.internal`) with `otel-collector.crs.internal`
 - IAM roles and policies (`crs-*-role`)
-- CloudWatch log groups (`/aws/apprunner/crs-api/*` for API, `/crs/*` for ECS jobs, local job forwarding, and agents)
+- CloudWatch log groups (`/crs/api` for the ECS Express API, `/crs/*` for ECS jobs, local job forwarding, and agents)
 - CloudWatch dashboards and alarms for API health, job health, dependencies, and frontend observability
 - Optional CloudWatch RUM app monitor (`crs-web`) when the required RUM auth inputs are provided
 
@@ -69,7 +72,7 @@ chmod +x build-and-push.sh
 ./build-and-push.sh
 ```
 
-`build-and-push.sh` starts an App Runner deployment for `crs-api` after pushing by default. Use `--skip-api-deploy` if you only want to publish the image, or `--update-ecs` if you also want the jobs guidance printed for ECS consumers.
+`build-and-push.sh` updates the ECS Express API service by image digest after pushing by default. Use `--skip-ecs-express` or the legacy `--skip-api-deploy` flag to control whether the API runtime is updated.
 
 ### 4. Deploy web frontend
 
@@ -78,7 +81,7 @@ chmod +x deploy-web.sh
 ./deploy-web.sh
 ```
 
-If a CloudWatch RUM app monitor named `crs-web` exists, `deploy-web.sh` updates the published Blazor `appsettings*.json` with the RUM monitor metadata and uploads `_framework/*.map` source maps to the configured S3 prefix for stack-trace deobfuscation.
+If a CloudWatch RUM app monitor named `crs-web` exists, `deploy-web.sh` updates the published Blazor `appsettings*.json` with the RUM monitor metadata and uploads `_framework/*.map` source maps to the configured S3 prefix for stack-trace deobfuscation. Use `API_URL_SOURCE=ecs-express|explicit` to control which API base URL is published to the frontend.
 
 Recommended deployment order after updating code or config:
 
@@ -97,26 +100,27 @@ All resources are prefixed with `crs-` for clear separation from other projects:
 |--------------|--------------|
 | VPC | `crs-vpc` |
 | Subnets | `crs-subnet-1`, `crs-subnet-2` |
-| Security Groups | `crs-api-sg`, `crs-rds-sg` |
+| Security Groups | `crs-api-sg`, `crs-api-express-sg`, `crs-otel-collector-sg`, `crs-rds-sg` |
 | ECR Repositories | `crs-api`, `crs-jobs` |
 | RDS Instance | `crs-db` |
 | S3 Bucket | `crs-web-{account-id}` |
-| App Runner | `crs-api` |
+| ECS Express API | `crs-api` |
 | ECS Cluster | `crs-cluster` |
+| ECS Service Discovery | `crs.internal`, `otel-collector` |
 | ECS Tasks | `crs-ingestion-task`, `crs-feed-task` |
 | EventBridge Rules | `crs-ingestion-schedule`, `crs-feed-schedule` |
 | OpenSearch | `crs-search` |
 | Secrets | `crs-secrets/*` |
-| Log Groups | `/aws/apprunner/crs-api/*` for API, `/crs/*` for ECS jobs |
+| Log Groups | `/crs/api` for the ECS Express API, `/crs/*` for ECS jobs |
 | IAM Roles | `crs-*-role` |
 
 ## Observability
 
 ### What is provisioned
 
-- **CloudWatch Logs**: App Runner application logs, ECS task logs, local Windows job forwarding (`/crs/local-jobs`), Windows host event logs (`/crs/windows-host`), and collector/agent logs.
+- **CloudWatch Logs**: ECS Express API logs (`/crs/api`), ECS task logs, local Windows job forwarding (`/crs/local-jobs`), Windows host event logs (`/crs/windows-host`), and collector/agent logs.
 - **CloudWatch Metrics**: Application custom metrics under `CRS/Application`, host metrics under `CRS/Host`, and frontend metrics under `AWS/RUM`.
-- **X-Ray**: App Runner tracing plus OTLP/X-Ray export for ECS and local jobs.
+- **X-Ray**: ECS Express API traces are forwarded to `otel-collector.crs.internal:4317`, and local/ECS jobs continue to use OTLP/X-Ray export.
 - **Dashboards**: `crs-platform-overview`, `crs-api-observability`, `crs-jobs-observability`, and `crs-dependency-frontend-observability`.
 - **Alarms**: API 5xx and latency, readiness failures, dependency spikes, local job wrapper failures, local job missing heartbeat, and frontend JavaScript errors.
 
@@ -158,10 +162,8 @@ aws ecs run-task \
   --network-configuration 'awsvpcConfiguration={subnets=[SUBNET_ID],securityGroups=[SG_ID],assignPublicIp=ENABLED}' \
   --region us-west-2
 
-# API logs
-SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='crs-api'].ServiceArn" --output text --region us-west-2)
-SERVICE_ID=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query 'Service.ServiceId' --output text --region us-west-2)
-aws logs tail /aws/apprunner/crs-api/$SERVICE_ID/application --follow --region us-west-2
+# ECS Express API logs
+aws logs tail /crs/api --follow --region us-west-2
 
 # Job logs
 aws logs tail /crs/ingestion --follow --region us-west-2
@@ -172,12 +174,14 @@ aws logs tail /crs/local-jobs --follow --region us-west-2
 aws rum get-app-monitor --name crs-web --region us-west-2
 ```
 
-### Update App Runner service
+### Update API runtimes
 
 ```bash
-# Trigger new deployment
-SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='crs-api'].ServiceArn" --output text --region us-west-2)
-aws apprunner start-deployment --service-arn $SERVICE_ARN --region us-west-2
+# Update the ECS Express API
+./build-and-push.sh
+
+# Publish the web against ECS Express
+API_URL_SOURCE=ecs-express ./deploy-web.sh
 ```
 
 ### Connect to RDS

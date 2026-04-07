@@ -22,10 +22,14 @@ on:
 env:
   DOTNET_VERSION: "10.0.x"
   AWS_REGION: us-west-2
+  API_URL_SOURCE: ecs-express
+  DEPLOY_ECS_EXPRESS: "true"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      api_image_identifier: ${{ steps.api-image.outputs.image_identifier }}
 
     steps:
       - name: Checkout code
@@ -66,6 +70,14 @@ jobs:
           docker push $ECR_REGISTRY/crs-api:latest
           docker push $ECR_REGISTRY/crs-api:${{ github.sha }}
 
+      - name: Resolve API image digest
+        id: api-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          DIGEST=$(aws ecr describe-images --repository-name crs-api --image-ids imageTag=${{ github.sha }} --query "imageDetails[0].imageDigest" --output text)
+          echo "image_identifier=$ECR_REGISTRY/crs-api@$DIGEST" >> "$GITHUB_OUTPUT"
+
       - name: Build and push Jobs Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -89,6 +101,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    env:
+      API_IMAGE_IDENTIFIER: ${{ needs.build.outputs.api_image_identifier }}
 
     steps:
       - name: Checkout code
@@ -109,21 +123,53 @@ jobs:
 
       - name: Stamp web config with live API URL
         run: |
-          SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='crs-api'].ServiceArn" --output text)
-          if [ -z "$SERVICE_ARN" ] || [ "$SERVICE_ARN" = "None" ]; then
-            echo "App Runner service not found - cannot resolve API URL for web config"
-            exit 1
-          fi
+          normalize_api_base_url() {
+            if [[ "$1" == http://* || "$1" == https://* ]]; then
+              echo "$1"
+            else
+              echo "https://$1"
+            fi
+          }
 
-          API_URL=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query "Service.ServiceUrl" --output text)
-          API_BASE_URL="https://${API_URL}"
+          resolve_ecs_express_api_base_url() {
+            SERVICE_ARN=$(aws ecs list-services --cluster crs-cluster --query "serviceArns[?contains(@, '/crs-api')] | [0]" --output text)
+            if [ -z "$SERVICE_ARN" ] || [ "$SERVICE_ARN" = "None" ]; then
+              echo "ECS Express service not found - cannot resolve API URL for web config"
+              exit 1
+            fi
+
+            API_URL=$(aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" --query "service.activeConfigurations[0].ingressPaths[0].endpoint" --output text)
+            if [ -z "$API_URL" ] || [ "$API_URL" = "None" ]; then
+              echo "ECS Express endpoint not found - cannot resolve API URL for web config"
+              exit 1
+            fi
+
+            normalize_api_base_url "$API_URL"
+          }
+
+          case "${API_URL_SOURCE,,}" in
+            ecs-express)
+              API_BASE_URL=$(resolve_ecs_express_api_base_url)
+              ;;
+            explicit)
+              if [ -z "${API_BASE_URL_EXPLICIT:-}" ]; then
+                echo "API_BASE_URL_EXPLICIT must be set when API_URL_SOURCE=explicit"
+                exit 1
+              fi
+              API_BASE_URL=$(normalize_api_base_url "$API_BASE_URL_EXPLICIT")
+              ;;
+            *)
+              echo "Unsupported API_URL_SOURCE: $API_URL_SOURCE"
+              exit 1
+              ;;
+          esac
 
           sed -i "s|\"ApiBaseUrl\": \".*\"|\"ApiBaseUrl\": \"${API_BASE_URL}\"|" web-app/appsettings.json
           if [ -f web-app/appsettings.Production.json ]; then
             sed -i "s|\"ApiBaseUrl\": \".*\"|\"ApiBaseUrl\": \"${API_BASE_URL}\"|" web-app/appsettings.Production.json
           fi
 
-          echo "Stamped web config with ${API_BASE_URL}"
+          echo "Stamped web config with ${API_BASE_URL} from ${API_URL_SOURCE}"
 
       - name: Deploy to S3
         run: |
@@ -172,37 +218,34 @@ jobs:
             --cache-control "max-age=300" \
             --content-type "text/html"
 
-      - name: Update App Runner service
+      - name: Update ECS Express service
+        if: env.DEPLOY_ECS_EXPRESS == 'true'
         run: |
-          SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='crs-api'].ServiceArn" --output text)
-          if [ -n "$SERVICE_ARN" ] && [ "$SERVICE_ARN" != "None" ]; then
-            echo "Waiting for App Runner service to be RUNNING..."
-            for i in {1..30}; do
-              STATUS=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query "Service.Status" --output text)
-              if [ "$STATUS" = "RUNNING" ]; then
-                break
-              fi
-              echo "Current status: $STATUS (attempt $i/30)"
-              sleep 10
-            done
+          SERVICE_ARN=$(aws ecs list-services --cluster crs-cluster --query "serviceArns[?contains(@, '/crs-api')] | [0]" --output text)
+          if [ -z "$SERVICE_ARN" ] || [ "$SERVICE_ARN" = "None" ]; then
+            echo "ECS Express service not found - skipping deployment"
+            exit 1
+          fi
 
-            STATUS=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query "Service.Status" --output text)
-            if [ "$STATUS" != "RUNNING" ]; then
-              echo "App Runner service not in RUNNING state ($STATUS). Skipping deployment."
-              exit 0
+          PRIMARY_CONTAINER=$(aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" --query "service.activeConfigurations[0].primaryContainer" --output json)
+          UPDATED_PRIMARY=$(echo "$PRIMARY_CONTAINER" | python -c 'import json,sys; payload=json.load(sys.stdin); payload["image"]=sys.argv[1]; print(json.dumps(payload, separators=(",", ":")))' "$API_IMAGE_IDENTIFIER")
+
+          aws ecs update-express-gateway-service --service-arn "$SERVICE_ARN" --primary-container "$UPDATED_PRIMARY"
+          echo "Submitted ECS Express deployment with $API_IMAGE_IDENTIFIER"
+
+          for i in {1..60}; do
+            STATUS=$(aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" --query "service.status.statusCode" --output text)
+            if [ "$STATUS" = "ACTIVE" ]; then
+              break
             fi
+            echo "Current ECS Express status: $STATUS (attempt $i/60)"
+            sleep 10
+          done
 
-            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-            IMAGE_ID="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/crs-api:${GITHUB_SHA}"
-
-            echo "Updating App Runner image to $IMAGE_ID"
-            SOURCE_CONFIG=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query "Service.SourceConfiguration" --output json)
-            UPDATED_CONFIG=$(echo "$SOURCE_CONFIG" | jq --arg image "$IMAGE_ID" '.ImageRepository.ImageIdentifier = $image')
-
-            aws apprunner update-service --service-arn "$SERVICE_ARN" --source-configuration "$UPDATED_CONFIG"
-            echo "Deployment update submitted"
-          else
-            echo "App Runner service not found - skipping deployment"
+          STATUS=$(aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" --query "service.status.statusCode" --output text)
+          if [ "$STATUS" != "ACTIVE" ]; then
+            echo "ECS Express service not ACTIVE ($STATUS)"
+            exit 1
           fi
 
       - name: Invalidate CloudFront cache
@@ -224,19 +267,18 @@ jobs:
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           BUCKET_NAME="crs-web-${ACCOUNT_ID}"
 
-          SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='crs-api'].ServiceArn" --output text 2>/dev/null || echo "")
-          API_URL=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='crs-api'].ServiceUrl" --output text 2>/dev/null || echo "not-deployed")
-          API_LOG_GROUP="not-available"
-          if [ -n "$SERVICE_ARN" ] && [ "$SERVICE_ARN" != "None" ]; then
-            SERVICE_ID=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query "Service.ServiceId" --output text)
-            API_LOG_GROUP="/aws/apprunner/crs-api/${SERVICE_ID}/application"
+          ECS_EXPRESS_SERVICE_ARN=$(aws ecs list-services --cluster crs-cluster --query "serviceArns[?contains(@, '/crs-api')] | [0]" --output text 2>/dev/null || echo "")
+          ECS_EXPRESS_URL="not-deployed"
+          if [ -n "$ECS_EXPRESS_SERVICE_ARN" ] && [ "$ECS_EXPRESS_SERVICE_ARN" != "None" ]; then
+            ECS_EXPRESS_URL=$(aws ecs describe-express-gateway-service --service-arn "$ECS_EXPRESS_SERVICE_ARN" --query "service.activeConfigurations[0].ingressPaths[0].endpoint" --output text 2>/dev/null || echo "not-deployed")
           fi
           WEB_URL="http://${BUCKET_NAME}.s3-website-${{ env.AWS_REGION }}.amazonaws.com"
 
           echo "=============================================="
           echo "Deployment Complete!"
           echo "=============================================="
-          echo "API URL: https://${API_URL}"
+          echo "ECS Express API URL: https://${ECS_EXPRESS_URL}"
+          echo "Web API source: ${API_URL_SOURCE}"
           echo "Web URL: ${WEB_URL}"
-          echo "API Logs: ${API_LOG_GROUP}"
+          echo "ECS Express API Logs: /crs/api"
           echo "=============================================="

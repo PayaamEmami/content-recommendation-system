@@ -23,6 +23,18 @@ API_SERVICE_NAME="${API_SERVICE_NAME:-crs-api}"
 JOBS_SERVICE_NAME="${JOBS_SERVICE_NAME:-crs-jobs}"
 ADOT_COLLECTOR_IMAGE="${ADOT_COLLECTOR_IMAGE:-public.ecr.aws/aws-observability/aws-otel-collector:latest}"
 LOG_RETENTION_DAYS="${LOG_RETENTION_DAYS:-30}"
+DEPLOY_ECS_EXPRESS="${DEPLOY_ECS_EXPRESS:-true}"
+API_CLUSTER_NAME="${API_CLUSTER_NAME:-${PREFIX}-cluster}"
+API_EXPRESS_SERVICE_NAME="${API_EXPRESS_SERVICE_NAME:-${PREFIX}-api}"
+API_REVERSE_PROXY_NETWORK="${API_REVERSE_PROXY_NETWORK:-10.1.0.0/16}"
+API_EXPRESS_LOG_GROUP="${API_EXPRESS_LOG_GROUP:-/crs/api}"
+API_EXPRESS_LOG_STREAM_PREFIX="${API_EXPRESS_LOG_STREAM_PREFIX:-ecs-express}"
+OTEL_COLLECTOR_SERVICE_NAME="${OTEL_COLLECTOR_SERVICE_NAME:-${PREFIX}-otel-collector}"
+OTEL_COLLECTOR_TASK_FAMILY="${OTEL_COLLECTOR_TASK_FAMILY:-${PREFIX}-otel-collector-task}"
+OTEL_COLLECTOR_CONTAINER_NAME="${OTEL_COLLECTOR_CONTAINER_NAME:-aws-otel-collector}"
+OTEL_COLLECTOR_NAMESPACE_NAME="${OTEL_COLLECTOR_NAMESPACE_NAME:-crs.internal}"
+OTEL_COLLECTOR_DISCOVERY_SERVICE_NAME="${OTEL_COLLECTOR_DISCOVERY_SERVICE_NAME:-otel-collector}"
+OTEL_COLLECTOR_ENDPOINT="${OTEL_COLLECTOR_ENDPOINT:-http://otel-collector.crs.internal:4317}"
 RUM_APP_MONITOR_NAME="${RUM_APP_MONITOR_NAME:-${PREFIX}-web}"
 RUM_SESSION_SAMPLE_RATE="${RUM_SESSION_SAMPLE_RATE:-0.1}"
 RUM_ALLOW_COOKIES="${RUM_ALLOW_COOKIES:-true}"
@@ -99,6 +111,287 @@ ensure_managed_role_policy() {
             --role-name "$role_name" \
             --policy-arn "$policy_arn" > /dev/null
     fi
+}
+
+ensure_secret_string_exists() {
+    local secret_name="$1"
+    local secret_value="$2"
+
+    if [ -z "$secret_value" ]; then
+        return
+    fi
+
+    if aws secretsmanager describe-secret --secret-id "$secret_name" --region "$REGION" > /dev/null 2>&1; then
+        return
+    fi
+
+    aws secretsmanager create-secret \
+        --name "$secret_name" \
+        --secret-string "$secret_value" \
+        --tags Key=Project,Value=${PROJECT_TAG} \
+        --region "$REGION" > /dev/null
+    log_info "Created secret: $secret_name"
+}
+
+get_secret_arn() {
+    local secret_name="$1"
+
+    aws secretsmanager describe-secret \
+        --secret-id "$secret_name" \
+        --query 'ARN' \
+        --output text \
+        --region "$REGION" 2>/dev/null || echo ""
+}
+
+resolve_ecs_express_service_arn() {
+    aws ecs list-services \
+        --cluster "$API_CLUSTER_NAME" \
+        --region "$REGION" \
+        --query "serviceArns[?contains(@, '/${API_EXPRESS_SERVICE_NAME}')] | [0]" \
+        --output text 2>/dev/null || echo ""
+}
+
+resolve_ecs_express_endpoint() {
+    local service_arn="$1"
+
+    aws ecs describe-express-gateway-service \
+        --service-arn "$service_arn" \
+        --region "$REGION" \
+        --query 'service.activeConfigurations[0].ingressPaths[0].endpoint' \
+        --output text 2>/dev/null || echo ""
+}
+
+wait_for_ecs_express_status() {
+    local service_arn="$1"
+    local desired_status="${2:-ACTIVE}"
+    local attempts="${3:-60}"
+
+    for ((i = 1; i <= attempts; i++)); do
+        local current_status
+        current_status=$(aws ecs describe-express-gateway-service \
+            --service-arn "$service_arn" \
+            --region "$REGION" \
+            --query 'service.status.statusCode' \
+            --output text 2>/dev/null || echo "UNKNOWN")
+
+        if [ "$current_status" = "$desired_status" ]; then
+            return 0
+        fi
+
+        echo -n "."
+        sleep 10
+    done
+
+    echo ""
+    return 1
+}
+
+build_default_api_runtime_image_config() {
+    local destination_file="$1"
+    local connection_string="$2"
+    local destination_file_native
+    destination_file_native=$(to_native_path "$destination_file")
+
+    python - "$destination_file_native" "$connection_string" "$OpenAI__ApiKey" "$JWT_SECRET" "$X__ClientId" "$X__ClientSecret" "$X__RedirectUri" "$WEB_URL" "${CF_URL:-$WEB_URL}" "$ENVIRONMENT" "$API_SERVICE_NAME" "$METRICS_NAMESPACE" "$TRACE_SAMPLE_RATIO" "$API_REVERSE_PROXY_NETWORK" "$OTEL_COLLECTOR_ENDPOINT" "$OPENSEARCH_ENDPOINT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+(
+    destination,
+    connection_string,
+    openai_api_key,
+    jwt_secret,
+    x_client_id,
+    x_client_secret,
+    x_redirect_uri,
+    web_url,
+    cloudfront_url,
+    environment_name,
+    service_name,
+    metrics_namespace,
+    trace_sample_ratio,
+    reverse_proxy_network,
+    otel_endpoint,
+    opensearch_endpoint,
+) = sys.argv[1:]
+
+env = {
+    "ASPNETCORE_ENVIRONMENT": "Production",
+    "ConnectionStrings__DefaultConnection": connection_string,
+    "OpenAI__ApiKey": openai_api_key,
+    "Embedding__ModelName": "text-embedding-3-small",
+    "Embedding__Dimensions": "1536",
+    "JwtSettings__SecretKey": jwt_secret,
+    "JwtSettings__ExpirationMinutes": "60",
+    "Cors__AllowedOrigins__0": web_url,
+    "Cors__AllowedOrigins__1": cloudfront_url,
+    "Registration__Enabled": "true",
+    "Observability__Environment": environment_name,
+    "Observability__ExecutionEnvironment": "aws",
+    "Observability__ServiceName": service_name,
+    "Observability__ServiceNamespace": "crs",
+    "Observability__MetricsNamespace": metrics_namespace,
+    "Observability__TraceSampleRatio": trace_sample_ratio,
+    "Observability__EnableSensitiveBodyLogging": "false",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": otel_endpoint,
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+    "OTEL_METRICS_EXPORTER": "none",
+    "OTEL_LOGS_EXPORTER": "none",
+    "OTEL_PROPAGATORS": "xray",
+    "ReverseProxy__KnownNetworks__0": reverse_proxy_network,
+}
+
+if x_client_id:
+    env["X__ClientId"] = x_client_id
+if x_client_secret:
+    env["X__ClientSecret"] = x_client_secret
+if x_redirect_uri:
+    env["X__RedirectUri"] = x_redirect_uri
+if opensearch_endpoint:
+    env["OpenSearch__Endpoint"] = opensearch_endpoint
+    env["OpenSearch__IndexName"] = "crs-content"
+    env["OpenSearch__EmbeddingDimensions"] = "1536"
+
+payload = {
+    "Port": "8080",
+    "RuntimeEnvironmentVariables": env,
+    "RuntimeEnvironmentSecrets": {},
+}
+
+Path(destination).write_text(json.dumps(payload))
+PY
+}
+
+build_runtime_image_config_from_ecs_express_container() {
+    local destination_file="$1"
+    local primary_container_file="$2"
+    local destination_file_native
+    local primary_container_file_native
+    destination_file_native=$(to_native_path "$destination_file")
+    primary_container_file_native=$(to_native_path "$primary_container_file")
+
+    python - "$destination_file_native" "$primary_container_file_native" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+destination, primary_container_path = sys.argv[1:]
+payload = json.loads(Path(primary_container_path).read_text())
+env = {
+    entry["name"]: entry.get("value", "")
+    for entry in (payload.get("environment") or [])
+    if entry.get("name")
+}
+result = {
+    "Port": str(payload.get("containerPort", "8080")),
+    "RuntimeEnvironmentVariables": env,
+    "RuntimeEnvironmentSecrets": {},
+}
+Path(destination).write_text(json.dumps(result))
+PY
+}
+
+build_api_primary_container_json() {
+    local image_identifier="$1"
+
+    python - "${API_RUNTIME_IMAGE_CONFIG_FILE_NATIVE:-$API_RUNTIME_IMAGE_CONFIG_FILE}" "$image_identifier" "$API_EXPRESS_LOG_GROUP" "$API_EXPRESS_LOG_STREAM_PREFIX" "$CONNECTION_STRING_SECRET_ARN" "$OPENAI_API_KEY_SECRET_ARN" "$JWT_SECRET_SECRET_ARN" "$X_CLIENT_SECRET_SECRET_ARN" "$OTEL_COLLECTOR_ENDPOINT" "$API_REVERSE_PROXY_NETWORK" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+(
+    config_file,
+    image_identifier,
+    log_group,
+    log_stream_prefix,
+    connection_secret_arn,
+    openai_secret_arn,
+    jwt_secret_arn,
+    x_secret_arn,
+    otel_endpoint,
+    reverse_proxy_network,
+) = sys.argv[1:]
+
+payload = json.loads(Path(config_file).read_text())
+env = dict(payload.get("RuntimeEnvironmentVariables") or {})
+
+secret_map = {
+    "ConnectionStrings__DefaultConnection": connection_secret_arn,
+    "OpenAI__ApiKey": openai_secret_arn,
+    "JwtSettings__SecretKey": jwt_secret_arn,
+    "X__ClientSecret": x_secret_arn,
+}
+
+for secret_key in secret_map:
+    env.pop(secret_key, None)
+
+env["OTEL_EXPORTER_OTLP_ENDPOINT"] = otel_endpoint
+env["OTEL_EXPORTER_OTLP_PROTOCOL"] = "grpc"
+env["ReverseProxy__KnownNetworks__0"] = reverse_proxy_network
+
+environment = [{"name": key, "value": str(value)} for key, value in sorted(env.items()) if value is not None]
+secrets = [{"name": key, "valueFrom": arn} for key, arn in secret_map.items() if arn]
+
+container = {
+    "image": image_identifier,
+    "containerPort": int(payload.get("Port", "8080")),
+    "awsLogsConfiguration": {
+        "logGroup": log_group,
+        "logStreamPrefix": log_stream_prefix,
+    },
+    "environment": environment,
+    "secrets": secrets,
+}
+
+print(json.dumps(container, separators=(",", ":")))
+PY
+}
+
+prepare_api_runtime_configuration() {
+    log_info "Preparing API runtime configuration..."
+
+    API_RUNTIME_IMAGE_CONFIG_FILE=$(mktemp)
+    API_RUNTIME_IMAGE_CONFIG_FILE_NATIVE=$(to_native_path "$API_RUNTIME_IMAGE_CONFIG_FILE")
+    local connection_string
+    connection_string="Host=${RDS_ENDPOINT};Database=crsdb;Username=${DB_USERNAME};Password=${DB_PASSWORD}"
+    local ecs_express_service_arn
+    ecs_express_service_arn=$(resolve_ecs_express_service_arn)
+
+    if [ -n "$ecs_express_service_arn" ] && [ "$ecs_express_service_arn" != "None" ]; then
+        local ecs_primary_container_file
+        ecs_primary_container_file=$(mktemp)
+        aws ecs describe-express-gateway-service \
+            --service-arn "$ecs_express_service_arn" \
+            --region "$REGION" \
+            --query 'service.activeConfigurations[0].primaryContainer' \
+            --output json > "$ecs_primary_container_file"
+        build_runtime_image_config_from_ecs_express_container "$API_RUNTIME_IMAGE_CONFIG_FILE" "$ecs_primary_container_file"
+        API_IMAGE_IDENTIFIER=$(aws ecs describe-express-gateway-service \
+            --service-arn "$ecs_express_service_arn" \
+            --region "$REGION" \
+            --query 'service.activeConfigurations[0].primaryContainer.image' \
+            --output text)
+        rm -f "$ecs_primary_container_file"
+        log_info "Using live ECS Express runtime configuration as the deployment seed"
+    else
+        build_default_api_runtime_image_config "$API_RUNTIME_IMAGE_CONFIG_FILE" "$connection_string"
+        API_IMAGE_IDENTIFIER="${ECR_URI}/crs-api:latest"
+        log_warn "ECS Express service not found. Falling back to deploy.sh runtime defaults for API configuration."
+    fi
+
+    ensure_secret_string_exists "${PREFIX}-secrets/openai-api-key" "$OpenAI__ApiKey"
+    ensure_secret_string_exists "${PREFIX}-secrets/jwt-secret" "$JWT_SECRET"
+    ensure_secret_string_exists "${PREFIX}-secrets/connection-string" "$connection_string"
+    ensure_secret_string_exists "${PREFIX}-secrets/x-client-secret" "$X__ClientSecret"
+
+    OPENAI_API_KEY_SECRET_ARN=$(get_secret_arn "${PREFIX}-secrets/openai-api-key")
+    JWT_SECRET_SECRET_ARN=$(get_secret_arn "${PREFIX}-secrets/jwt-secret")
+    CONNECTION_STRING_SECRET_ARN=$(get_secret_arn "${PREFIX}-secrets/connection-string")
+    X_CLIENT_SECRET_SECRET_ARN=$(get_secret_arn "${PREFIX}-secrets/x-client-secret")
+
+    export API_RUNTIME_IMAGE_CONFIG_FILE API_RUNTIME_IMAGE_CONFIG_FILE_NATIVE API_IMAGE_IDENTIFIER
+    export OPENAI_API_KEY_SECRET_ARN JWT_SECRET_SECRET_ARN CONNECTION_STRING_SECRET_ARN X_CLIENT_SECRET_SECRET_ARN
 }
 
 # Check AWS CLI is configured
@@ -239,7 +532,40 @@ create_security_groups() {
         log_info "Created RDS Security Group: $RDS_SG_ID"
     fi
 
-    export API_SG_ID RDS_SG_ID
+    API_EXPRESS_SG_ID=$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=${PREFIX}-api-express-sg" "Name=vpc-id,Values=$VPC_ID" --query 'SecurityGroups[0].GroupId' --output text --region $REGION 2>/dev/null || echo "None")
+
+    if [ "$API_EXPRESS_SG_ID" = "None" ] || [ -z "$API_EXPRESS_SG_ID" ]; then
+        API_EXPRESS_SG_ID=$(aws ec2 create-security-group \
+            --group-name "${PREFIX}-api-express-sg" \
+            --description "Security group for CRS ECS Express API tasks" \
+            --vpc-id $VPC_ID \
+            --tag-specifications "ResourceType=security-group,Tags=[{Key=Name,Value=${PREFIX}-api-express-sg},{Key=Project,Value=${PROJECT_TAG}}]" \
+            --query 'GroupId' \
+            --output text \
+            --region $REGION)
+        log_info "Created ECS Express API Security Group: $API_EXPRESS_SG_ID"
+    fi
+
+    aws ec2 authorize-security-group-ingress --group-id $API_EXPRESS_SG_ID --protocol tcp --port 8080 --cidr 10.1.0.0/16 --region $REGION 2>/dev/null || true
+    aws ec2 authorize-security-group-ingress --group-id $RDS_SG_ID --protocol tcp --port 5432 --source-group $API_EXPRESS_SG_ID --region $REGION 2>/dev/null || true
+
+    OTEL_COLLECTOR_SG_ID=$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=${PREFIX}-otel-collector-sg" "Name=vpc-id,Values=$VPC_ID" --query 'SecurityGroups[0].GroupId' --output text --region $REGION 2>/dev/null || echo "None")
+
+    if [ "$OTEL_COLLECTOR_SG_ID" = "None" ] || [ -z "$OTEL_COLLECTOR_SG_ID" ]; then
+        OTEL_COLLECTOR_SG_ID=$(aws ec2 create-security-group \
+            --group-name "${PREFIX}-otel-collector-sg" \
+            --description "Security group for CRS OTEL collector" \
+            --vpc-id $VPC_ID \
+            --tag-specifications "ResourceType=security-group,Tags=[{Key=Name,Value=${PREFIX}-otel-collector-sg},{Key=Project,Value=${PROJECT_TAG}}]" \
+            --query 'GroupId' \
+            --output text \
+            --region $REGION)
+        log_info "Created OTEL collector Security Group: $OTEL_COLLECTOR_SG_ID"
+    fi
+
+    aws ec2 authorize-security-group-ingress --group-id $OTEL_COLLECTOR_SG_ID --protocol tcp --port 4317 --source-group $API_EXPRESS_SG_ID --region $REGION 2>/dev/null || true
+
+    export API_SG_ID RDS_SG_ID API_EXPRESS_SG_ID OTEL_COLLECTOR_SG_ID
 }
 
 # Create ECR Repositories
@@ -458,9 +784,9 @@ create_s3_web() {
 create_cloudwatch_logs() {
     log_info "Creating CloudWatch Log Groups..."
 
-    log_info "App Runner API logs are managed under /aws/apprunner/${PREFIX}-api/<service-id>/application"
+    log_info "ECS Express API logs are managed under ${API_EXPRESS_LOG_GROUP}"
 
-    for LOG_NAME in "jobs" "ingestion" "feed" "x-ingestion" "reindex" "sync-index" "otel-collector" "local-jobs" "windows-host" "cloudwatch-agent"; do
+    for LOG_NAME in "api" "jobs" "ingestion" "feed" "x-ingestion" "reindex" "sync-index" "otel-collector" "local-jobs" "windows-host" "cloudwatch-agent"; do
         LOG_GROUP="/crs/$LOG_NAME"
         EXISTING=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --region $REGION --query "logGroups[?logGroupName=='$LOG_GROUP'].logGroupName" --output text 2>/dev/null || echo "")
         if [ -z "$EXISTING" ]; then
@@ -577,20 +903,6 @@ PY
 create_iam_roles() {
     log_info "Creating IAM roles..."
 
-    # App Runner role
-    if ! aws iam get-role --role-name ${PREFIX}-apprunner-role &> /dev/null; then
-        aws iam create-role \
-            --role-name ${PREFIX}-apprunner-role \
-            --assume-role-policy-document "$(cat "${SCRIPT_DIR}/iam/apprunner-trust-policy.json")" \
-            --tags Key=Project,Value=${PROJECT_TAG}
-
-        log_info "Created App Runner role: ${PREFIX}-apprunner-role"
-    fi
-
-    ensure_managed_role_policy "${PREFIX}-apprunner-role" "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess"
-    ensure_managed_role_policy "${PREFIX}-apprunner-role" "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
-    ensure_inline_role_policy "${PREFIX}-apprunner-role" "${PREFIX}-app-policy" "${SCRIPT_DIR}/iam/app-policy.json"
-
     # ECS Task Execution Role
     if ! aws iam get-role --role-name ${PREFIX}-ecs-execution-role &> /dev/null; then
         aws iam create-role \
@@ -615,6 +927,20 @@ create_iam_roles() {
     fi
 
     ensure_inline_role_policy "${PREFIX}-ecs-task-role" "${PREFIX}-task-policy" "${SCRIPT_DIR}/iam/app-policy.json"
+
+    # ECS Express infrastructure role
+    if [ "${DEPLOY_ECS_EXPRESS,,}" = "true" ] && ! aws iam get-role --role-name ${PREFIX}-ecs-express-infra-role &> /dev/null; then
+        aws iam create-role \
+            --role-name ${PREFIX}-ecs-express-infra-role \
+            --assume-role-policy-document "$(cat "${SCRIPT_DIR}/iam/ecs-express-infra-trust-policy.json")" \
+            --tags Key=Project,Value=${PROJECT_TAG}
+
+        log_info "Created ECS Express infrastructure role: ${PREFIX}-ecs-express-infra-role"
+    fi
+
+    if [ "${DEPLOY_ECS_EXPRESS,,}" = "true" ]; then
+        ensure_managed_role_policy "${PREFIX}-ecs-express-infra-role" "arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices"
+    fi
 
     # EventBridge role for ECS
     if ! aws iam get-role --role-name ${PREFIX}-eventbridge-role &> /dev/null; then
@@ -644,6 +970,234 @@ create_ecs_cluster() {
     else
         log_info "ECS cluster already exists: ${PREFIX}-cluster"
     fi
+}
+
+create_service_discovery_namespace() {
+    log_info "Creating private service discovery namespace..."
+
+    OTEL_NAMESPACE_ID=$(aws servicediscovery list-namespaces \
+        --query "Namespaces[?Name=='${OTEL_COLLECTOR_NAMESPACE_NAME}'].Id | [0]" \
+        --output text \
+        --region "$REGION" 2>/dev/null || echo "")
+
+    if [ -z "$OTEL_NAMESPACE_ID" ] || [ "$OTEL_NAMESPACE_ID" = "None" ]; then
+        local operation_id
+        operation_id=$(aws servicediscovery create-private-dns-namespace \
+            --name "${OTEL_COLLECTOR_NAMESPACE_NAME}" \
+            --vpc "$VPC_ID" \
+            --creator-request-id "${PREFIX}-otel-namespace" \
+            --tags Key=Project,Value=${PROJECT_TAG} \
+            --region "$REGION" \
+            --query 'OperationId' \
+            --output text)
+
+        log_info "Waiting for Cloud Map namespace creation..."
+        while true; do
+            local status
+            status=$(aws servicediscovery get-operation \
+                --operation-id "$operation_id" \
+                --region "$REGION" \
+                --query 'Operation.Status' \
+                --output text)
+
+            if [ "$status" = "SUCCESS" ]; then
+                break
+            fi
+
+            if [ "$status" = "FAIL" ]; then
+                log_error "Cloud Map namespace creation failed"
+                exit 1
+            fi
+
+            echo -n "."
+            sleep 5
+        done
+        echo ""
+
+        OTEL_NAMESPACE_ID=$(aws servicediscovery get-operation \
+            --operation-id "$operation_id" \
+            --region "$REGION" \
+            --query 'Operation.Targets.NAMESPACE' \
+            --output text)
+
+        log_info "Created private namespace: ${OTEL_COLLECTOR_NAMESPACE_NAME}"
+    else
+        log_info "Private namespace already exists: ${OTEL_COLLECTOR_NAMESPACE_NAME}"
+    fi
+
+    OTEL_DISCOVERY_SERVICE_ARN=$(aws servicediscovery list-services \
+        --query "Services[?Name=='${OTEL_COLLECTOR_DISCOVERY_SERVICE_NAME}'].Arn | [0]" \
+        --output text \
+        --region "$REGION" 2>/dev/null || echo "")
+
+    if [ -z "$OTEL_DISCOVERY_SERVICE_ARN" ] || [ "$OTEL_DISCOVERY_SERVICE_ARN" = "None" ]; then
+        OTEL_DISCOVERY_SERVICE_ARN=$(aws servicediscovery create-service \
+            --name "${OTEL_COLLECTOR_DISCOVERY_SERVICE_NAME}" \
+            --namespace-id "$OTEL_NAMESPACE_ID" \
+            --dns-config "RoutingPolicy=MULTIVALUE,DnsRecords=[{Type=A,TTL=10}]" \
+            --health-check-custom-config FailureThreshold=1 \
+            --tags Key=Project,Value=${PROJECT_TAG} \
+            --region "$REGION" \
+            --query 'Service.Arn' \
+            --output text)
+
+        log_info "Created service discovery service: ${OTEL_COLLECTOR_DISCOVERY_SERVICE_NAME}.${OTEL_COLLECTOR_NAMESPACE_NAME}"
+    else
+        log_info "Service discovery service already exists: ${OTEL_COLLECTOR_DISCOVERY_SERVICE_NAME}.${OTEL_COLLECTOR_NAMESPACE_NAME}"
+    fi
+
+    export OTEL_NAMESPACE_ID OTEL_DISCOVERY_SERVICE_ARN
+}
+
+register_otel_collector_task_definition() {
+    log_info "Registering OTEL collector task definition..."
+
+    local collector_task_definition_file
+    collector_task_definition_file=$(mktemp)
+    local collector_task_definition_file_native
+    collector_task_definition_file_native=$(to_native_path "$collector_task_definition_file")
+    local adot_collector_config
+    adot_collector_config='receivers:\n  otlp:\n    protocols:\n      grpc:\n        endpoint: 0.0.0.0:4317\nprocessors:\n  batch:\nexporters:\n  awsxray:\nservice:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      processors: [batch]\n      exporters: [awsxray]'
+
+    cat > "$collector_task_definition_file" <<EOF
+[
+  {
+    "name": "${OTEL_COLLECTOR_CONTAINER_NAME}",
+    "image": "${ADOT_COLLECTOR_IMAGE}",
+    "essential": true,
+    "portMappings": [
+      {
+        "containerPort": 4317,
+        "protocol": "tcp"
+      }
+    ],
+    "environment": [
+      { "name": "AOT_CONFIG_CONTENT", "value": "${adot_collector_config}" }
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/crs/otel-collector",
+        "awslogs-region": "${REGION}",
+        "awslogs-stream-prefix": "service"
+      }
+    }
+  }
+]
+EOF
+
+    OTEL_COLLECTOR_TASK_DEFINITION_ARN=$(aws ecs register-task-definition \
+        --family "${OTEL_COLLECTOR_TASK_FAMILY}" \
+        --network-mode "awsvpc" \
+        --requires-compatibilities "FARGATE" \
+        --cpu "256" \
+        --memory "512" \
+        --execution-role-arn "arn:aws:iam::${ACCOUNT_ID}:role/${PREFIX}-ecs-execution-role" \
+        --task-role-arn "arn:aws:iam::${ACCOUNT_ID}:role/${PREFIX}-ecs-task-role" \
+        --container-definitions "file://${collector_task_definition_file_native}" \
+        --query 'taskDefinition.taskDefinitionArn' \
+        --output text \
+        --region "$REGION")
+
+    rm -f "$collector_task_definition_file"
+    export OTEL_COLLECTOR_TASK_DEFINITION_ARN
+}
+
+create_otel_collector_service() {
+    log_info "Creating OTEL collector ECS service..."
+
+    local collector_service_arn
+    collector_service_arn=$(aws ecs list-services \
+        --cluster "$API_CLUSTER_NAME" \
+        --region "$REGION" \
+        --query "serviceArns[?contains(@, '/${OTEL_COLLECTOR_SERVICE_NAME}')] | [0]" \
+        --output text 2>/dev/null || echo "")
+
+    if [ -z "$collector_service_arn" ] || [ "$collector_service_arn" = "None" ]; then
+        aws ecs create-service \
+            --cluster "$API_CLUSTER_NAME" \
+            --service-name "${OTEL_COLLECTOR_SERVICE_NAME}" \
+            --task-definition "$OTEL_COLLECTOR_TASK_DEFINITION_ARN" \
+            --launch-type FARGATE \
+            --desired-count 1 \
+            --network-configuration "awsvpcConfiguration={subnets=[${SUBNET_1_ID},${SUBNET_2_ID}],securityGroups=[${OTEL_COLLECTOR_SG_ID}],assignPublicIp=ENABLED}" \
+            --service-registries "registryArn=${OTEL_DISCOVERY_SERVICE_ARN}" \
+            --tags key=Project,value=${PROJECT_TAG} \
+            --region "$REGION" > /dev/null
+
+        log_info "Created OTEL collector service: ${OTEL_COLLECTOR_SERVICE_NAME}"
+    else
+        aws ecs update-service \
+            --cluster "$API_CLUSTER_NAME" \
+            --service "${OTEL_COLLECTOR_SERVICE_NAME}" \
+            --task-definition "$OTEL_COLLECTOR_TASK_DEFINITION_ARN" \
+            --desired-count 1 \
+            --force-new-deployment \
+            --region "$REGION" > /dev/null
+
+        log_info "Updated OTEL collector service: ${OTEL_COLLECTOR_SERVICE_NAME}"
+    fi
+}
+
+create_ecs_express_api_service() {
+    if [ "${DEPLOY_ECS_EXPRESS,,}" != "true" ]; then
+        log_warn "Skipping ECS Express API deployment (DEPLOY_ECS_EXPRESS is not true)"
+        return
+    fi
+
+    log_info "Creating ECS Express API service..."
+
+    local primary_container_json
+    primary_container_json=$(build_api_primary_container_json "$API_IMAGE_IDENTIFIER")
+    local service_arn
+    service_arn=$(resolve_ecs_express_service_arn)
+
+    if [ -z "$service_arn" ] || [ "$service_arn" = "None" ]; then
+        service_arn=$(aws ecs create-express-gateway-service \
+            --cluster "$API_CLUSTER_NAME" \
+            --service-name "${API_EXPRESS_SERVICE_NAME}" \
+            --execution-role-arn "arn:aws:iam::${ACCOUNT_ID}:role/${PREFIX}-ecs-execution-role" \
+            --infrastructure-role-arn "arn:aws:iam::${ACCOUNT_ID}:role/${PREFIX}-ecs-express-infra-role" \
+            --task-role-arn "arn:aws:iam::${ACCOUNT_ID}:role/${PREFIX}-ecs-task-role" \
+            --primary-container "$primary_container_json" \
+            --health-check-path "/health/ready" \
+            --network-configuration "{\"subnets\":[\"${SUBNET_1_ID}\",\"${SUBNET_2_ID}\"],\"securityGroups\":[\"${API_EXPRESS_SG_ID}\"]}" \
+            --cpu "256" \
+            --memory "512" \
+            --scaling-target '{"minTaskCount":1,"maxTaskCount":25,"autoScalingMetric":"AVERAGE_CPU","autoScalingTargetValue":60}' \
+            --tags key=Project,value=${PROJECT_TAG} \
+            --region "$REGION" \
+            --query 'service.serviceArn' \
+            --output text)
+
+        log_info "Creating ECS Express service (this takes 3-5 minutes)..."
+    else
+        aws ecs update-express-gateway-service \
+            --service-arn "$service_arn" \
+            --execution-role-arn "arn:aws:iam::${ACCOUNT_ID}:role/${PREFIX}-ecs-execution-role" \
+            --task-role-arn "arn:aws:iam::${ACCOUNT_ID}:role/${PREFIX}-ecs-task-role" \
+            --primary-container "$primary_container_json" \
+            --health-check-path "/health/ready" \
+            --network-configuration "{\"subnets\":[\"${SUBNET_1_ID}\",\"${SUBNET_2_ID}\"],\"securityGroups\":[\"${API_EXPRESS_SG_ID}\"]}" \
+            --cpu "256" \
+            --memory "512" \
+            --scaling-target '{"minTaskCount":1,"maxTaskCount":25,"autoScalingMetric":"AVERAGE_CPU","autoScalingTargetValue":60}' \
+            --region "$REGION" > /dev/null
+
+        log_info "Updating ECS Express API service configuration..."
+    fi
+
+    if ! wait_for_ecs_express_status "$service_arn" "ACTIVE" 60; then
+        log_error "Timed out waiting for ECS Express API service to become ACTIVE"
+        exit 1
+    fi
+    echo ""
+
+    ECS_EXPRESS_SERVICE_ARN="$service_arn"
+    ECS_EXPRESS_API_URL=$(resolve_ecs_express_endpoint "$service_arn")
+    log_info "ECS Express API is active: ${ECS_EXPRESS_API_URL}"
+
+    export ECS_EXPRESS_SERVICE_ARN ECS_EXPRESS_API_URL
 }
 
 # Create OpenSearch Serverless Collection
@@ -682,7 +1236,7 @@ create_opensearch() {
             --region $REGION 2>/dev/null || true
 
         # Create data access policy
-        DATA_ACCESS_POLICY='[{"Rules":[{"ResourceType":"collection","Resource":["collection/'${PREFIX}'-search"],"Permission":["aoss:*"]},{"ResourceType":"index","Resource":["index/'${PREFIX}'-search/*"],"Permission":["aoss:*"]}],"Principal":["arn:aws:iam::'${ACCOUNT_ID}':role/'${PREFIX}'-apprunner-role","arn:aws:iam::'${ACCOUNT_ID}':role/'${PREFIX}'-ecs-task-role","arn:aws:iam::'${ACCOUNT_ID}':root"]}]'
+        DATA_ACCESS_POLICY='[{"Rules":[{"ResourceType":"collection","Resource":["collection/'${PREFIX}'-search"],"Permission":["aoss:*"]},{"ResourceType":"index","Resource":["index/'${PREFIX}'-search/*"],"Permission":["aoss:*"]}],"Principal":["arn:aws:iam::'${ACCOUNT_ID}':role/'${PREFIX}'-ecs-task-role","arn:aws:iam::'${ACCOUNT_ID}':root"]}]'
 
         aws opensearchserverless create-access-policy \
             --name ${PREFIX}-data-access-policy \
@@ -736,148 +1290,6 @@ create_opensearch() {
     export OPENSEARCH_ENDPOINT
 }
 
-create_apprunner_observability_configuration() {
-    log_info "Creating App Runner observability configuration..."
-
-    APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN=$(aws apprunner list-observability-configurations \
-        --region $REGION \
-        --query "ObservabilityConfigurationSummaryList[?ObservabilityConfigurationName=='${PREFIX}-xray'].ObservabilityConfigurationArn | [0]" \
-        --output text 2>/dev/null || echo "")
-
-    if [ -z "$APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN" ] || [ "$APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN" = "None" ]; then
-        APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN=$(aws apprunner create-observability-configuration \
-            --observability-configuration-name "${PREFIX}-xray" \
-            --trace-configuration '{"Vendor":"AWSXRAY"}' \
-            --tags Key=Project,Value=${PROJECT_TAG} \
-            --region $REGION \
-            --query 'ObservabilityConfiguration.ObservabilityConfigurationArn' \
-            --output text)
-        log_info "Created App Runner observability configuration: ${PREFIX}-xray"
-    else
-        log_info "App Runner observability configuration already exists: ${PREFIX}-xray"
-    fi
-
-    export APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN
-}
-
-# Create App Runner Service
-create_app_runner() {
-    log_info "Creating App Runner service for API..."
-
-    # Check if service exists
-    SERVICE_ARN=$(aws apprunner list-services --region $REGION --query "ServiceSummaryList[?ServiceName=='${PREFIX}-api'].ServiceArn" --output text 2>/dev/null || echo "")
-    CONNECTION_STRING="Host=${RDS_ENDPOINT};Database=crsdb;Username=${DB_USERNAME};Password=${DB_PASSWORD}"
-    APP_RUNNER_INSTANCE_CONFIGURATION='{
-        "Cpu": "0.25 vCPU",
-        "Memory": "0.5 GB",
-        "InstanceRoleArn": "arn:aws:iam::'${ACCOUNT_ID}':role/'${PREFIX}'-apprunner-role"
-    }'
-    APP_RUNNER_SOURCE_CONFIGURATION='{
-        "AuthenticationConfiguration": {
-            "AccessRoleArn": "arn:aws:iam::'${ACCOUNT_ID}':role/'${PREFIX}'-apprunner-role"
-        },
-        "AutoDeploymentsEnabled": false,
-        "ImageRepository": {
-            "ImageIdentifier": "'${ECR_URI}'/crs-api:latest",
-            "ImageRepositoryType": "ECR",
-            "ImageConfiguration": {
-                "Port": "8080",
-                "RuntimeEnvironmentVariables": {
-                    "ASPNETCORE_ENVIRONMENT": "Production",
-                    "ConnectionStrings__DefaultConnection": "'"${CONNECTION_STRING}"'",
-                    "OpenAI__ApiKey": "'"${OpenAI__ApiKey}"'",
-                    "Embedding__ModelName": "text-embedding-3-small",
-                    "Embedding__Dimensions": "1536",
-                    "OpenSearch__Endpoint": "'"${OPENSEARCH_ENDPOINT}"'",
-                    "OpenSearch__IndexName": "crs-content",
-                    "OpenSearch__EmbeddingDimensions": "1536",
-                    "JwtSettings__SecretKey": "'"${JWT_SECRET}"'",
-                    "JwtSettings__ExpirationMinutes": "60",
-                    "Cors__AllowedOrigins__0": "'"${WEB_URL}"'",
-                    "Cors__AllowedOrigins__1": "'"${CF_URL:-$WEB_URL}"'",
-                    "Registration__Enabled": "true",
-                    "Observability__Environment": "'"${ENVIRONMENT}"'",
-                    "Observability__ExecutionEnvironment": "aws",
-                    "Observability__ServiceName": "'"${API_SERVICE_NAME}"'",
-                    "Observability__ServiceNamespace": "crs",
-                    "Observability__MetricsNamespace": "'"${METRICS_NAMESPACE}"'",
-                    "Observability__TraceSampleRatio": "'"${TRACE_SAMPLE_RATIO}"'",
-                    "Observability__EnableSensitiveBodyLogging": "false",
-                    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
-                    "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
-                    "OTEL_METRICS_EXPORTER": "none",
-                    "OTEL_LOGS_EXPORTER": "none",
-                    "OTEL_PROPAGATORS": "xray",
-                    "X__ClientId": "'"${X__ClientId}"'",
-                    "X__ClientSecret": "'"${X__ClientSecret}"'",
-                    "X__RedirectUri": "'"${X__RedirectUri}"'"
-                }
-            }
-        }
-    }'
-
-    if [ -z "$SERVICE_ARN" ]; then
-        # Create service
-        SERVICE_ARN=$(aws apprunner create-service \
-            --service-name ${PREFIX}-api \
-            --source-configuration "${APP_RUNNER_SOURCE_CONFIGURATION}" \
-            --instance-configuration "${APP_RUNNER_INSTANCE_CONFIGURATION}" \
-            --observability-configuration "ObservabilityEnabled=true,ObservabilityConfigurationArn=${APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN}" \
-            --health-check-configuration '{"Protocol": "HTTP", "Path": "/health/ready", "Interval": 20, "Timeout": 5, "HealthyThreshold": 1, "UnhealthyThreshold": 5}' \
-            --tags Key=Project,Value=${PROJECT_TAG} \
-            --region $REGION \
-            --query 'Service.ServiceArn' \
-            --output text)
-
-        log_info "Creating App Runner service (this takes 2-5 minutes)..."
-
-        # Wait for service to be running
-        while true; do
-            STATUS=$(aws apprunner describe-service --service-arn $SERVICE_ARN --region $REGION --query 'Service.Status' --output text)
-            if [ "$STATUS" = "RUNNING" ]; then
-                break
-            fi
-            echo -n "."
-            sleep 10
-        done
-        echo ""
-        log_info "App Runner service is now running!"
-    else
-        log_info "App Runner service already exists: ${PREFIX}-api"
-
-        aws apprunner update-service \
-            --service-arn $SERVICE_ARN \
-            --source-configuration "${APP_RUNNER_SOURCE_CONFIGURATION}" \
-            --instance-configuration "${APP_RUNNER_INSTANCE_CONFIGURATION}" \
-            --observability-configuration "ObservabilityEnabled=true,ObservabilityConfigurationArn=${APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN}" \
-            --health-check-configuration '{"Protocol": "HTTP", "Path": "/health/ready", "Interval": 20, "Timeout": 5, "HealthyThreshold": 1, "UnhealthyThreshold": 5}' \
-            --region $REGION > /dev/null
-
-        log_info "Updating App Runner service configuration..."
-
-        while true; do
-            STATUS=$(aws apprunner describe-service --service-arn $SERVICE_ARN --region $REGION --query 'Service.Status' --output text)
-            if [ "$STATUS" = "RUNNING" ]; then
-                break
-            fi
-            echo -n "."
-            sleep 10
-        done
-        echo ""
-        log_info "App Runner service configuration updated"
-    fi
-
-    # Get service URL
-    API_URL=$(aws apprunner describe-service --service-arn $SERVICE_ARN --region $REGION --query 'Service.ServiceUrl' --output text 2>/dev/null || \
-              aws apprunner list-services --region $REGION --query "ServiceSummaryList[?ServiceName=='${PREFIX}-api'].ServiceUrl" --output text)
-    SERVICE_ID=$(aws apprunner describe-service --service-arn $SERVICE_ARN --region $REGION --query 'Service.ServiceId' --output text)
-    APP_RUNNER_APPLICATION_LOG_GROUP="/aws/apprunner/${PREFIX}-api/${SERVICE_ID}/application"
-    aws logs put-retention-policy --log-group-name "$APP_RUNNER_APPLICATION_LOG_GROUP" --retention-in-days $LOG_RETENTION_DAYS --region $REGION 2>/dev/null || true
-    log_info "API URL: https://$API_URL"
-    log_info "API log group: ${APP_RUNNER_APPLICATION_LOG_GROUP}"
-    export API_URL APP_RUNNER_APPLICATION_LOG_GROUP
-}
-
 # Register ECS Task Definitions
 register_task_definitions() {
     log_info "Registering ECS task definitions..."
@@ -894,6 +1306,7 @@ register_task_definitions() {
 
     for TASK in "${JOB_TASKS[@]}"; do
         TASK_DEFINITION_FILE=$(mktemp)
+        TASK_DEFINITION_FILE_NATIVE=$(to_native_path "$TASK_DEFINITION_FILE")
         cat > "$TASK_DEFINITION_FILE" <<EOF
 [
   {
@@ -970,7 +1383,7 @@ EOF
             --memory "1024" \
             --execution-role-arn "arn:aws:iam::${ACCOUNT_ID}:role/${PREFIX}-ecs-execution-role" \
             --task-role-arn "arn:aws:iam::${ACCOUNT_ID}:role/${PREFIX}-ecs-task-role" \
-            --container-definitions "file://${TASK_DEFINITION_FILE}" \
+            --container-definitions "file://${TASK_DEFINITION_FILE_NATIVE}" \
             --region $REGION > /dev/null
 
         rm -f "$TASK_DEFINITION_FILE"
@@ -1287,7 +1700,7 @@ EOF
       "width": 12,
       "height": 6,
       "properties": {
-        "title": "App Runner Readiness and Latency",
+        "title": "API Readiness and Latency",
         "region": "${REGION}",
         "view": "timeSeries",
         "period": 300,
@@ -1722,10 +2135,13 @@ print_summary() {
     echo "  - Endpoint: ${RDS_ENDPOINT}"
     echo ""
     echo "API:"
-    echo "  - App Runner: ${PREFIX}-api"
-    echo "  - URL: https://${API_URL}"
-    echo "  - CloudWatch Logs: ${APP_RUNNER_APPLICATION_LOG_GROUP}"
-    echo "  - X-Ray Observability: ${APP_RUNNER_OBSERVABILITY_CONFIGURATION_ARN}"
+    if [ "${DEPLOY_ECS_EXPRESS,,}" = "true" ]; then
+        echo "  - ECS Express: ${API_EXPRESS_SERVICE_NAME}"
+        echo "  - URL: https://${ECS_EXPRESS_API_URL}"
+        echo "  - CloudWatch Logs: ${API_EXPRESS_LOG_GROUP}"
+    fi
+    echo "  - OTEL collector: ${OTEL_COLLECTOR_SERVICE_NAME}"
+    echo "  - OTEL endpoint: ${OTEL_COLLECTOR_DISCOVERY_SERVICE_NAME}.${OTEL_COLLECTOR_NAMESPACE_NAME}:4317"
     echo ""
     echo "Web (Static):"
     echo "  - S3 Bucket: ${BUCKET_NAME}"
@@ -1755,6 +2171,7 @@ print_summary() {
     echo "  - Dashboard: ${PREFIX}-api-observability"
     echo "  - Dashboard: ${PREFIX}-jobs-observability"
     echo "  - Dashboard: ${PREFIX}-dependency-frontend-observability"
+    echo "  - API logs: ${API_EXPRESS_LOG_GROUP}"
     echo "  - Collector logs: /crs/otel-collector"
     echo "  - Local jobs logs: /crs/local-jobs"
     echo "  - Windows host logs: /crs/windows-host"
@@ -1769,8 +2186,8 @@ print_summary() {
     echo "2. Deploy web frontend:"
     echo "   ./infrastructure/aws/deploy-web.sh"
     echo ""
-    echo "3. Tail API logs:"
-    echo "   aws logs tail ${APP_RUNNER_APPLICATION_LOG_GROUP} --follow --region ${REGION}"
+    echo "3. Tail ECS Express API logs:"
+    echo "   aws logs tail ${API_EXPRESS_LOG_GROUP} --follow --region ${REGION}"
     echo "=============================================="
 }
 
@@ -1792,9 +2209,12 @@ main() {
     create_s3_web
     create_rum_app_monitor
     create_ecs_cluster
+    create_service_discovery_namespace
+    register_otel_collector_task_definition
+    create_otel_collector_service
     create_opensearch
-    create_apprunner_observability_configuration
-    create_app_runner
+    prepare_api_runtime_configuration
+    create_ecs_express_api_service
     register_task_definitions
     create_eventbridge_rules
     create_cloudfront_invalidation_schedule
