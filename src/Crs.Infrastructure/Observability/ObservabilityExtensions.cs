@@ -42,7 +42,10 @@ public static class ObservabilityExtensions
         services.AddSingleton(settings);
         services.AddSingleton<IOptions<ObservabilitySettings>>(Options.Create(settings));
         services.AddSingleton<IEmbeddedMetricSink, ConsoleEmbeddedMetricSink>();
-        services.AddSingleton<IObservabilityMetrics, EmbeddedMetricObservabilityMetrics>();
+        services.AddSingleton<IObservabilityMetrics>(_ =>
+            settings.EnableMetrics
+                ? new EmbeddedMetricObservabilityMetrics(settings, new ConsoleEmbeddedMetricSink())
+                : NullObservabilityMetrics.Instance);
 
         ConfigurePropagators();
 

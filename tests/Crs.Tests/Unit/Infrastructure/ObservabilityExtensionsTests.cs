@@ -59,4 +59,26 @@ public sealed class ObservabilityExtensionsTests
             Console.SetOut(previousOut);
         }
     }
+
+    [TestMethod]
+    public void AddCrsObservability_DisabledMetrics_UsesNullMetrics()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Observability:ServiceName"] = "crs-tests",
+                ["Observability:Environment"] = "Testing",
+                ["Observability:ExecutionEnvironment"] = "local",
+                ["Observability:EnableMetrics"] = "false"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddCrsObservability(configuration, new TestHostEnvironment(), "crs-tests");
+
+        using var provider = services.BuildServiceProvider();
+        var metrics = provider.GetRequiredService<IObservabilityMetrics>();
+
+        Assert.IsInstanceOfType<NullObservabilityMetrics>(metrics);
+    }
 }

@@ -17,6 +17,8 @@ public class ObservabilitySettings
 
     public string MetricsNamespace { get; set; } = "CRS/Application";
 
+    public bool EnableMetrics { get; set; } = true;
+
     public string ExecutionEnvironment { get; set; } = string.Empty;
 
     public bool EnableSensitiveBodyLogging { get; set; }

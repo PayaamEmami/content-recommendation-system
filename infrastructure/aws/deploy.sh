@@ -19,6 +19,10 @@ PROJECT_TAG="CRS"
 ENABLE_OPENSEARCH="${ENABLE_OPENSEARCH:-false}"
 METRICS_NAMESPACE="${METRICS_NAMESPACE:-CRS/Application}"
 TRACE_SAMPLE_RATIO="${TRACE_SAMPLE_RATIO:-0.25}"
+ENABLE_CRS_OBSERVABILITY="${ENABLE_CRS_OBSERVABILITY:-false}"
+ENABLE_OTEL_COLLECTOR="${ENABLE_OTEL_COLLECTOR:-${ENABLE_CRS_OBSERVABILITY}}"
+ENABLE_CLOUDWATCH_DASHBOARDS="${ENABLE_CLOUDWATCH_DASHBOARDS:-false}"
+ENABLE_CLOUDWATCH_ALARMS="${ENABLE_CLOUDWATCH_ALARMS:-false}"
 API_SERVICE_NAME="${API_SERVICE_NAME:-crs-api}"
 JOBS_SERVICE_NAME="${JOBS_SERVICE_NAME:-crs-jobs}"
 ADOT_COLLECTOR_IMAGE="${ADOT_COLLECTOR_IMAGE:-public.ecr.aws/aws-observability/aws-otel-collector:latest}"
@@ -43,6 +47,14 @@ RUM_CW_LOGS_ENABLED="${RUM_CW_LOGS_ENABLED:-true}"
 RUM_SOURCE_MAPS_PREFIX="${RUM_SOURCE_MAPS_PREFIX:-rum-source-maps}"
 RUM_IDENTITY_POOL_ID="${RUM_IDENTITY_POOL_ID:-}"
 RUM_GUEST_ROLE_ARN="${RUM_GUEST_ROLE_ARN:-}"
+
+if [ "${ENABLE_CRS_OBSERVABILITY,,}" != "true" ]; then
+    TRACE_SAMPLE_RATIO="0"
+fi
+
+if [ "${ENABLE_OTEL_COLLECTOR,,}" != "true" ]; then
+    OTEL_COLLECTOR_ENDPOINT=""
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -192,7 +204,7 @@ build_default_api_runtime_image_config() {
     local destination_file_native
     destination_file_native=$(to_native_path "$destination_file")
 
-    python - "$destination_file_native" "$connection_string" "$OpenAI__ApiKey" "$JWT_SECRET" "$X__ClientId" "$X__ClientSecret" "$X__RedirectUri" "$WEB_URL" "${CF_URL:-$WEB_URL}" "$ENVIRONMENT" "$API_SERVICE_NAME" "$METRICS_NAMESPACE" "$TRACE_SAMPLE_RATIO" "$API_REVERSE_PROXY_NETWORK" "$OTEL_COLLECTOR_ENDPOINT" "$OPENSEARCH_ENDPOINT" <<'PY'
+    python - "$destination_file_native" "$connection_string" "$OpenAI__ApiKey" "$JWT_SECRET" "$X__ClientId" "$X__ClientSecret" "$X__RedirectUri" "$WEB_URL" "${CF_URL:-$WEB_URL}" "$ENVIRONMENT" "$API_SERVICE_NAME" "$METRICS_NAMESPACE" "$TRACE_SAMPLE_RATIO" "$API_REVERSE_PROXY_NETWORK" "$OTEL_COLLECTOR_ENDPOINT" "$OPENSEARCH_ENDPOINT" "${ENABLE_CRS_OBSERVABILITY,,}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -214,6 +226,7 @@ from pathlib import Path
     reverse_proxy_network,
     otel_endpoint,
     opensearch_endpoint,
+    enable_observability,
 ) = sys.argv[1:]
 
 env = {
@@ -232,15 +245,20 @@ env = {
     "Observability__ServiceName": service_name,
     "Observability__ServiceNamespace": "crs",
     "Observability__MetricsNamespace": metrics_namespace,
+    "Observability__EnableMetrics": "true" if enable_observability == "true" else "false",
     "Observability__TraceSampleRatio": trace_sample_ratio,
     "Observability__EnableSensitiveBodyLogging": "false",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": otel_endpoint,
-    "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
     "OTEL_METRICS_EXPORTER": "none",
     "OTEL_LOGS_EXPORTER": "none",
-    "OTEL_PROPAGATORS": "xray",
     "ReverseProxy__KnownNetworks__0": reverse_proxy_network,
 }
+
+if otel_endpoint:
+    env["OTEL_EXPORTER_OTLP_ENDPOINT"] = otel_endpoint
+    env["OTEL_EXPORTER_OTLP_PROTOCOL"] = "grpc"
+    env["OTEL_PROPAGATORS"] = "xray"
+else:
+    env["OTEL_TRACES_EXPORTER"] = "none"
 
 if x_client_id:
     env["X__ClientId"] = x_client_id
@@ -326,9 +344,15 @@ secret_map = {
 for secret_key in secret_map:
     env.pop(secret_key, None)
 
-env["OTEL_EXPORTER_OTLP_ENDPOINT"] = otel_endpoint
-env["OTEL_EXPORTER_OTLP_PROTOCOL"] = "grpc"
 env["ReverseProxy__KnownNetworks__0"] = reverse_proxy_network
+env.pop("OTEL_TRACES_EXPORTER", None)
+if otel_endpoint:
+    env["OTEL_EXPORTER_OTLP_ENDPOINT"] = otel_endpoint
+    env["OTEL_EXPORTER_OTLP_PROTOCOL"] = "grpc"
+else:
+    env.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
+    env.pop("OTEL_EXPORTER_OTLP_PROTOCOL", None)
+    env["OTEL_TRACES_EXPORTER"] = "none"
 
 environment = [{"name": key, "value": str(value)} for key, value in sorted(env.items()) if value is not None]
 secrets = [{"name": key, "valueFrom": arn} for key, arn in secret_map.items() if arn]
@@ -1050,6 +1074,11 @@ create_service_discovery_namespace() {
 }
 
 register_otel_collector_task_definition() {
+    if [ "${ENABLE_OTEL_COLLECTOR,,}" != "true" ]; then
+        log_info "Skipping OTEL collector task definition registration"
+        return
+    fi
+
     log_info "Registering OTEL collector task definition..."
 
     local collector_task_definition_file
@@ -1104,6 +1133,11 @@ EOF
 }
 
 create_otel_collector_service() {
+    if [ "${ENABLE_OTEL_COLLECTOR,,}" != "true" ]; then
+        log_info "Skipping OTEL collector service"
+        return
+    fi
+
     log_info "Creating OTEL collector ECS service..."
 
     local collector_service_arn
@@ -1304,58 +1338,32 @@ register_task_definitions() {
         JOB_TASKS=("ingestion" "feed")
     fi
 
-    for TASK in "${JOB_TASKS[@]}"; do
-        TASK_DEFINITION_FILE=$(mktemp)
-        TASK_DEFINITION_FILE_NATIVE=$(to_native_path "$TASK_DEFINITION_FILE")
-        cat > "$TASK_DEFINITION_FILE" <<EOF
-[
-  {
-    "name": "${PREFIX}-${TASK}",
-    "image": "${ECR_URI}/crs-jobs:latest",
-    "essential": true,
-    "command": ["${TASK}"],
+    local job_depends_on_block=""
+    local job_tracing_env='
+      {"name": "OTEL_TRACES_EXPORTER", "value": "none"},'
+    local otel_sidecar_block=""
+
+    if [ "${ENABLE_OTEL_COLLECTOR,,}" = "true" ]; then
+        job_depends_on_block='
     "dependsOn": [
       {
         "containerName": "aws-otel-collector",
         "condition": "START"
       }
-    ],
-    "environment": [
-      {"name": "ASPNETCORE_ENVIRONMENT", "value": "Production"},
-      {"name": "ConnectionStrings__DefaultConnection", "value": "${CONNECTION_STRING}"},
-      {"name": "Embedding__ModelName", "value": "text-embedding-3-small"},
-      {"name": "Embedding__Dimensions", "value": "1536"},
-      {"name": "OpenSearch__Endpoint", "value": "${OPENSEARCH_ENDPOINT}"},
-      {"name": "OpenSearch__IndexName", "value": "crs-content"},
-      {"name": "OpenSearch__EmbeddingDimensions", "value": "1536"},
-      {"name": "OpenAI__ApiKey", "value": "${OpenAI__ApiKey}"},
-      {"name": "OpenAI__Model", "value": "gpt-5-nano"},
-      {"name": "OpenAI__MaxTokens", "value": "16384"},
-      {"name": "Observability__Environment", "value": "${ENVIRONMENT}"},
-      {"name": "Observability__ExecutionEnvironment", "value": "aws"},
-      {"name": "Observability__ServiceName", "value": "${JOBS_SERVICE_NAME}"},
-      {"name": "Observability__ServiceNamespace", "value": "crs"},
-      {"name": "Observability__MetricsNamespace", "value": "${METRICS_NAMESPACE}"},
-      {"name": "Observability__TraceSampleRatio", "value": "${TRACE_SAMPLE_RATIO}"},
-      {"name": "Observability__EnableSensitiveBodyLogging", "value": "false"},
+    ],'
+        job_tracing_env='
       {"name": "OTEL_EXPORTER_OTLP_ENDPOINT", "value": "http://127.0.0.1:4317"},
       {"name": "OTEL_EXPORTER_OTLP_PROTOCOL", "value": "grpc"},
       {"name": "OTEL_METRICS_EXPORTER", "value": "none"},
       {"name": "OTEL_LOGS_EXPORTER", "value": "none"},
-      {"name": "OTEL_PROPAGATORS", "value": "xray"},
-      {"name": "X__ClientId", "value": "${X__ClientId}"},
-      {"name": "X__ClientSecret", "value": "${X__ClientSecret}"},
-      {"name": "X__RedirectUri", "value": "${X__RedirectUri}"}
-    ],
-    "logConfiguration": {
-      "logDriver": "awslogs",
-      "options": {
-        "awslogs-group": "/crs/${TASK}",
-        "awslogs-region": "${REGION}",
-        "awslogs-stream-prefix": "ecs"
-      }
-    }
-  },
+      {"name": "OTEL_PROPAGATORS", "value": "xray"},'
+    fi
+
+    for TASK in "${JOB_TASKS[@]}"; do
+        otel_sidecar_block=""
+        if [ "${ENABLE_OTEL_COLLECTOR,,}" = "true" ]; then
+            otel_sidecar_block=$(cat <<EOF
+,
   {
     "name": "aws-otel-collector",
     "image": "${ADOT_COLLECTOR_IMAGE}",
@@ -1372,6 +1380,53 @@ register_task_definitions() {
       }
     }
   }
+EOF
+)
+        fi
+
+        TASK_DEFINITION_FILE=$(mktemp)
+        TASK_DEFINITION_FILE_NATIVE=$(to_native_path "$TASK_DEFINITION_FILE")
+        cat > "$TASK_DEFINITION_FILE" <<EOF
+[
+  {
+    "name": "${PREFIX}-${TASK}",
+    "image": "${ECR_URI}/crs-jobs:latest",
+    "essential": true,
+    "command": ["${TASK}"],
+${job_depends_on_block}
+    "environment": [
+      {"name": "ASPNETCORE_ENVIRONMENT", "value": "Production"},
+      {"name": "ConnectionStrings__DefaultConnection", "value": "${CONNECTION_STRING}"},
+      {"name": "Embedding__ModelName", "value": "text-embedding-3-small"},
+      {"name": "Embedding__Dimensions", "value": "1536"},
+      {"name": "OpenSearch__Endpoint", "value": "${OPENSEARCH_ENDPOINT}"},
+      {"name": "OpenSearch__IndexName", "value": "crs-content"},
+      {"name": "OpenSearch__EmbeddingDimensions", "value": "1536"},
+      {"name": "OpenAI__ApiKey", "value": "${OpenAI__ApiKey}"},
+      {"name": "OpenAI__Model", "value": "gpt-5-nano"},
+      {"name": "OpenAI__MaxTokens", "value": "16384"},
+      {"name": "Observability__Environment", "value": "${ENVIRONMENT}"},
+      {"name": "Observability__ExecutionEnvironment", "value": "aws"},
+      {"name": "Observability__ServiceName", "value": "${JOBS_SERVICE_NAME}"},
+      {"name": "Observability__ServiceNamespace", "value": "crs"},
+      {"name": "Observability__MetricsNamespace", "value": "${METRICS_NAMESPACE}"},
+      {"name": "Observability__EnableMetrics", "value": "${ENABLE_CRS_OBSERVABILITY,,}"},
+      {"name": "Observability__TraceSampleRatio", "value": "${TRACE_SAMPLE_RATIO}"},
+      {"name": "Observability__EnableSensitiveBodyLogging", "value": "false"},
+${job_tracing_env}
+      {"name": "X__ClientId", "value": "${X__ClientId}"},
+      {"name": "X__ClientSecret", "value": "${X__ClientSecret}"},
+      {"name": "X__RedirectUri", "value": "${X__RedirectUri}"}
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/crs/${TASK}",
+        "awslogs-region": "${REGION}",
+        "awslogs-stream-prefix": "ecs"
+      }
+    }
+  }${otel_sidecar_block}
 ]
 EOF
 
@@ -1393,6 +1448,11 @@ EOF
 }
 
 create_cloudwatch_dashboards() {
+    if [ "${ENABLE_CLOUDWATCH_DASHBOARDS,,}" != "true" ]; then
+        log_info "Skipping CloudWatch dashboards"
+        return
+    fi
+
     log_info "Creating CloudWatch dashboards..."
 
     API_DASHBOARD_BODY=$(cat <<EOF
@@ -1872,6 +1932,11 @@ put_extended_stat_alarm() {
 }
 
 create_cloudwatch_alarms() {
+    if [ "${ENABLE_CLOUDWATCH_ALARMS,,}" != "true" ]; then
+        log_info "Skipping CloudWatch alarms"
+        return
+    fi
+
     log_info "Creating CloudWatch alarms..."
 
     put_metric_alarm \

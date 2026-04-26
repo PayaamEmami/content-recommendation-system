@@ -34,15 +34,13 @@ All resources prefixed with `crs-` for clear separation:
 - 1 ECS Express service (API) - `crs-api`
 - 1 S3 bucket + CloudFront (Web) - `crs-web-*`
 - 1 ECS Cluster - `crs-cluster`
-- 1 ECS Fargate OTEL collector service - `crs-otel-collector`
 - 1 private Cloud Map namespace - `crs.internal`
 - RDS PostgreSQL - `crs-db`
 - ECR repositories - `crs-api`, `crs-jobs`
 - EventBridge Scheduler - `crs-cloudfront-invalidation` (configured in `deploy.sh` for daily CloudFront invalidation at 1:00 PM `America/Los_Angeles`)
 - Secrets Manager - `crs-secrets/*` including `openai-api-key`, `jwt-secret`, `connection-string`, and `x-client-secret`
 - CloudWatch logs - `/crs/api` for the ECS Express API and `/crs/*` for ECS/local-job/agent logs
-- CloudWatch dashboards - `crs-platform-overview`, `crs-api-observability`, `crs-jobs-observability`, `crs-dependency-frontend-observability`
-- X-Ray tracing - ECS Express API traces route to `otel-collector.crs.internal:4317`, and local/ECS jobs use an OTLP collector/agent
+- CloudWatch dashboards/alarms/OTEL collector are disabled by default in `infrastructure/aws/deploy.sh` for lower-cost personal use deployments
 - CloudWatch RUM - optional `crs-web` app monitor for the Blazor frontend when Cognito auth details are configured
 - OpenAI API (direct, not AWS Bedrock)
 - AWS OpenSearch Serverless - **not currently deployed** (enable with `ENABLE_OPENSEARCH=true` in `deploy.sh`)
@@ -76,8 +74,8 @@ SQL_CONNECTION_STRING
 ### Observability Configuration
 
 - `Observability__ExecutionEnvironment` is `aws` for ECS-hosted services and `local` for the Windows scheduled-job host.
-- API production trace sampling defaults to `0.2`; jobs default to `1.0` unless overridden by environment variables.
-- ECS Express API tasks set `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.crs.internal:4317` and trust `ReverseProxy__KnownNetworks__0=10.1.0.0/16` for ALB forwarded headers.
+- API production trace sampling defaults to `0.2`; deploy-time cost-focused AWS defaults set tracing sample ratio to `0` and disable CloudWatch custom metrics unless explicitly re-enabled.
+- ECS Express API tasks trust `ReverseProxy__KnownNetworks__0=10.1.0.0/16` for ALB forwarded headers. OTLP export is only configured when the OTEL collector is explicitly enabled.
 - Blazor frontend RUM is configured through `src/Crs.Web/wwwroot/appsettings*.json` under `Observability:Rum`.
 - Local scheduled jobs write newline-delimited JSON logs to `C:\ProgramData\CRS\observability\jobs\<job-name>\YYYY-MM-DD.jsonl`.
 - The Windows CloudWatch Agent template for the local jobs host lives at `infrastructure/aws/cloudwatch-agent/windows-config.json`.
