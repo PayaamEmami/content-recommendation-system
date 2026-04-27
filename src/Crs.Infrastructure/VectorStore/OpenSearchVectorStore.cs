@@ -276,28 +276,31 @@ public class OpenSearchVectorStore : IVectorStore
             activity?.SetTag(CrsTelemetry.Tags.Dependency, "opensearch");
             activity?.SetTag(CrsTelemetry.Tags.FeedType, request.ContentType?.ToString());
             var stopwatch = Stopwatch.StartNew();
-            // Build filter queries
-            var mustQueries = new List<Func<QueryContainerDescriptor<ContentSearchDocument>, QueryContainer>>();
+
+            // Metadata predicates go into `filter` so they restrict the candidate set
+            // without contributing to `_score`. This leaves vector similarity as the
+            // sole scoring signal returned to the engine.
+            var filterQueries = new List<Func<QueryContainerDescriptor<ContentSearchDocument>, QueryContainer>>();
             var mustNotQueries = new List<Func<QueryContainerDescriptor<ContentSearchDocument>, QueryContainer>>();
 
             if (request.ContentType.HasValue)
             {
-                mustQueries.Add(q => q.Term(t => t.Field(f => f.Type).Value(request.ContentType.Value.ToString())));
+                filterQueries.Add(q => q.Term(t => t.Field(f => f.Type).Value(request.ContentType.Value.ToString())));
             }
 
             if (request.SourceIds != null && request.SourceIds.Any())
             {
-                mustQueries.Add(q => q.Terms(t => t.Field(f => f.SourceId).Terms(request.SourceIds.Select(id => id.ToString()))));
+                filterQueries.Add(q => q.Terms(t => t.Field(f => f.SourceId).Terms(request.SourceIds.Select(id => id.ToString()))));
             }
 
             if (request.PublishedAfter.HasValue)
             {
-                mustQueries.Add(q => q.DateRange(dr => dr.Field(f => f.PublishedDate).GreaterThanOrEquals(request.PublishedAfter.Value)));
+                filterQueries.Add(q => q.DateRange(dr => dr.Field(f => f.PublishedDate).GreaterThanOrEquals(request.PublishedAfter.Value)));
             }
 
             if (request.PublishedBefore.HasValue)
             {
-                mustQueries.Add(q => q.DateRange(dr => dr.Field(f => f.PublishedDate).LessThanOrEquals(request.PublishedBefore.Value)));
+                filterQueries.Add(q => q.DateRange(dr => dr.Field(f => f.PublishedDate).LessThanOrEquals(request.PublishedBefore.Value)));
             }
 
             if (request.ExcludeContentIds != null && request.ExcludeContentIds.Any())
@@ -307,28 +310,26 @@ public class OpenSearchVectorStore : IVectorStore
                     .Terms(request.ExcludeContentIds.Select(id => id.ToString()))));
             }
 
-            // Build the k-NN query with filters
+            // The k-NN clause must be in `must` so its cosine similarity drives `_score`.
+            // Placing it in `filter` makes _score collapse to a constant (only the must
+            // clauses contribute), which forces OpenSearch to break ties by docId/insertion
+            // order and effectively returns the oldest matching documents instead of the
+            // most similar ones.
             var searchResponse = await _client.SearchAsync<ContentSearchDocument>(s => s
                 .Index(_settings.IndexName)
                 .Size(request.TopK)
                 .Query(q => q
-                    .Bool(b =>
-                    {
-                        var boolQuery = b
-                            .Must(mustQueries.ToArray())
-                            .MustNot(mustNotQueries.ToArray());
-
-                        // Add k-NN query
-                        boolQuery.Filter(f => f
+                    .Bool(b => b
+                        .Must(m => m
                             .Knn(knn => knn
                                 .Field(field => field.Embedding)
                                 .Vector(request.QueryVector)
                                 .K(request.TopK)
                             )
-                        );
-
-                        return boolQuery;
-                    })
+                        )
+                        .Filter(filterQueries.ToArray())
+                        .MustNot(mustNotQueries.ToArray())
+                    )
                 ),
                 cancellationToken
             );
