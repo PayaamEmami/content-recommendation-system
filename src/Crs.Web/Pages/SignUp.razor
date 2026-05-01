@@ -8,7 +8,6 @@
 <div class="auth-container">
     <div class="auth-card">
         <h1>Sign Up</h1>
-        <p class="subtitle">Create your CRS account</p>
 
         @if (!AuthService.IsRegistrationEnabled)
         {
@@ -22,7 +21,7 @@
             </div>
 
             <p class="auth-footer">
-                Already have an account? <a href="/login">Login</a>
+                Already have an account? <a href="/login">Sign In</a>
             </p>
         }
         else
@@ -72,7 +71,7 @@
             </EditForm>
 
             <p class="auth-footer">
-                Already have an account? <a href="/login">Login</a>
+                Already have an account? <a href="/login">Sign In</a>
             </p>
         }
     </div>
