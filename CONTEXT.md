@@ -117,10 +117,10 @@ Jobs currently run locally via **Windows Task Scheduler**, using `run-job.ps1` a
 
 Use **UTC as the canonical schedule** in this document so DST changes do not require doc updates. This PC's scheduled tasks are:
 
-- **CRS - Ingestion**: Daily at **19:00 UTC** (currently 12:00 PM in `America/Los_Angeles`), action: `powershell.exe ... run-job.ps1 -JobName ingestion`
-- **CRS - X Ingestion**: Daily at **19:30 UTC** (currently 12:30 PM in `America/Los_Angeles`), action: `powershell.exe ... run-job.ps1 -JobName x-ingestion`
-- **CRS - Feed Generation**: Daily at **20:00 UTC** (currently 1:00 PM in `America/Los_Angeles`), action: `powershell.exe ... run-job.ps1 -JobName feed`
-- **CloudFront Cache Invalidation**: Configured in AWS Scheduler at **1:00 PM `America/Los_Angeles`** via `crs-cloudfront-invalidation`; AWS handles DST automatically because the schedule has an explicit timezone
+- **CRS - Ingestion**: Daily at **05:00 UTC** (currently 9:00 PM PST in `America/Los_Angeles`), action: `powershell.exe ... run-job.ps1 -JobName ingestion`
+- **CRS - X Ingestion**: Daily at **06:00 UTC** (currently 10:00 PM PST in `America/Los_Angeles`), action: `powershell.exe ... run-job.ps1 -JobName x-ingestion`
+- **CRS - Feed Generation**: Daily at **06:00 UTC** (currently 10:00 PM PST in `America/Los_Angeles`), action: `powershell.exe ... run-job.ps1 -JobName feed`
+- **CloudFront Cache Invalidation**: Configured in AWS Scheduler at **10:30 PM `America/Los_Angeles`** via `crs-cloudfront-invalidation`; AWS handles DST automatically because the schedule has an explicit timezone
 
 The CloudFront invalidation runs as an AWS EventBridge Scheduler (`crs-cloudfront-invalidation`) since it only needs AWS access, not the local environment.
 
