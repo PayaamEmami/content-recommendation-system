@@ -149,27 +149,14 @@ Enable-ScheduledTask -TaskName "CRS - Ingestion"
 Unregister-ScheduledTask -TaskName "CRS - Ingestion" -Confirm:$false
 ```
 
-## Bulk Import
-
-**API**: `POST /api/v1/sources/bulk-import`
-**Format**:
-
-```json
-{
-  "sources": [
-    {
-      "name": "...",
-      "url": "...",
-      "category": "Paper|Video|BlogPost",
-      "description": "..."
-    }
-  ]
-}
-```
-
 ## Development
 
-**Available Tools**: AWS CLI (`aws`) and GitHub CLI (`gh`) are available for automation and deployment tasks.
+### AWS CLI Access
+
+The AWS CLI is available in the local environment and can be used directly to interact with AWS resources. Credentials are configured via the default profile; no extra setup is needed.
+
+### GitHub CLI
+The GitHub CLI is available for interacting with repositories, pull requests, issues, releases, and workflow runs. Authentication is already configured, so commands can be used directly without additional setup.
 
 ### Infrastructure Scripts
 
@@ -208,9 +195,3 @@ aws logs tail /crs/local-jobs --follow --region us-west-2
 - **Clean Architecture**: Core -> Infrastructure -> API/Web/Jobs
 - **Repository Pattern**: All data access through interfaces
 - **OpenSearch**: Local Docker mode is the current default; AWS OpenSearch Serverless remains an optional deployment target
-
-## Important Rules
-
-- **NO standalone markdown files** (no `TROUBLESHOOTING.md`, `DEPLOYMENT_GUIDE.md`, etc.)
-- **NEVER auto-commit** - only when user explicitly requests
-- Update this file as needed whenever behavior, configuration, infrastructure, or workflows change
