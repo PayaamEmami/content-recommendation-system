@@ -21,14 +21,18 @@ public sealed class ContentServiceTests
     }
 
     [TestMethod]
-    public async Task GetContentAsync_WhenTypeProvided_OrdersAndPaginates()
+    public async Task GetContentAsync_WhenTypeProvided_DelegatesToPagedRepo()
     {
         var service = CreateService(out var contentRepository, out _);
         var newest = new Video { Id = Guid.NewGuid(), Title = "New", CreatedAt = DateTime.UtcNow.AddDays(1) };
-        var older = new Video { Id = Guid.NewGuid(), Title = "Old", CreatedAt = DateTime.UtcNow.AddDays(-1) };
 
-        contentRepository.Setup(repo => repo.GetByTypeAsync(ContentType.Video, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Content> { older, newest });
+        contentRepository.Setup(repo => repo.GetPagedAsync(
+                1,
+                1,
+                ContentType.Video,
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(((IReadOnlyList<Content>)new List<Content> { newest }, 2));
 
         var response = await service.GetContentAsync(1, 1, ContentType.Video, null, CancellationToken.None);
 
@@ -38,23 +42,25 @@ public sealed class ContentServiceTests
     }
 
     [TestMethod]
-    public async Task GetContentAsync_WhenSourceFilterApplied_ReturnsFiltered()
+    public async Task GetContentAsync_WhenSourceFilterApplied_PassesSourceIdsToRepo()
     {
         var service = CreateService(out var contentRepository, out _);
         var sourceId = Guid.NewGuid();
+        var item = new BlogPost
+        {
+            Id = Guid.NewGuid(),
+            SourceId = sourceId,
+            Source = new Source { Id = sourceId },
+            CreatedAt = DateTime.UtcNow
+        };
 
-        contentRepository.Setup(repo => repo.GetAllAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Content>
-            {
-                new BlogPost
-                {
-                    Id = Guid.NewGuid(),
-                    SourceId = sourceId,
-                    Source = new Source { Id = sourceId },
-                    CreatedAt = DateTime.UtcNow
-                },
-                new BlogPost { Id = Guid.NewGuid(), SourceId = Guid.NewGuid(), CreatedAt = DateTime.UtcNow }
-            });
+        contentRepository.Setup(repo => repo.GetPagedAsync(
+                1,
+                10,
+                null,
+                It.Is<IReadOnlyCollection<Guid>?>(ids => ids != null && ids.Contains(sourceId)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(((IReadOnlyList<Content>)new List<Content> { item }, 1));
 
         var response = await service.GetContentAsync(1, 10, null, new List<Guid> { sourceId }, CancellationToken.None);
 

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Crs.Core.Entities;
 using Crs.Core.Enums;
+using Crs.Core.Exceptions;
 using Crs.Core.Interfaces;
 using Crs.Infrastructure.Data;
 
@@ -48,6 +49,37 @@ public class ContentRepository : IContentRepository
             .Where(r => r.Type == type)
             .Include(r => r.Source)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<(IReadOnlyList<Content> Items, int TotalCount)> GetPagedAsync(
+        int pageNumber,
+        int pageSize,
+        ContentType? type,
+        IReadOnlyCollection<Guid>? sourceIds,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<Content> query = _context.Content;
+
+        if (type.HasValue)
+        {
+            query = query.Where(c => c.Type == type.Value);
+        }
+
+        if (sourceIds is { Count: > 0 })
+        {
+            query = query.Where(c => c.SourceId.HasValue && sourceIds.Contains(c.SourceId.Value));
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .OrderByDescending(c => c.CreatedAt)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .Include(c => c.Source)
+            .ToListAsync(cancellationToken);
+
+        return (items, totalCount);
     }
 
     public async Task<IEnumerable<Content>> GetByTopicAsync(Guid topicId, CancellationToken cancellationToken = default)
@@ -99,7 +131,29 @@ public class ContentRepository : IContentRepository
     public async Task AddAsync(Content content, CancellationToken cancellationToken = default)
     {
         _context.Content.Add(content);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            // Detach so the change tracker doesn't retry the failed insert on the next SaveChanges.
+            _context.Content.Remove(content);
+            throw new DuplicateContentException(content.Url, ex);
+        }
+    }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        var inner = ex.InnerException?.Message;
+        if (string.IsNullOrEmpty(inner))
+        {
+            return false;
+        }
+
+        return inner.Contains("duplicate", StringComparison.OrdinalIgnoreCase)
+            || inner.Contains("unique constraint", StringComparison.OrdinalIgnoreCase)
+            || inner.Contains("UNIQUE", StringComparison.Ordinal);
     }
 }
 

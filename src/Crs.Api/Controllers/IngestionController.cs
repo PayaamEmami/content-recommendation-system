@@ -1,10 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Crs.Api.DTOs.Ingestion.Requests;
-using Crs.Api.DTOs.Content.Requests;
-using Crs.Api.DTOs.Content.Responses;
 using Crs.Api.Extensions;
-using Crs.Api.Services;
+using Crs.Core.Interfaces;
 using Crs.Llm.Services;
 
 namespace Crs.Api.Controllers;
@@ -18,25 +16,30 @@ namespace Crs.Api.Controllers;
 public class IngestionController : ControllerBase
 {
     private readonly IIngestionAgent _ingestionAgent;
-    private readonly ISourceService _sourceService;
-    private readonly IContentService _contentService;
+    private readonly ISourceIngestionService _sourceIngestionService;
+    private readonly ISourceRepository _sourceRepository;
     private readonly ILogger<IngestionController> _logger;
 
     public IngestionController(
         IIngestionAgent ingestionAgent,
-        ISourceService sourceService,
-        IContentService contentService,
+        ISourceIngestionService sourceIngestionService,
+        ISourceRepository sourceRepository,
         ILogger<IngestionController> logger)
     {
         _ingestionAgent = ingestionAgent;
-        _sourceService = sourceService;
-        _contentService = contentService;
+        _sourceIngestionService = sourceIngestionService;
+        _sourceRepository = sourceRepository;
         _logger = logger;
     }
 
     /// <summary>
     /// Ingests content from a URL using the LLM agent.
     /// </summary>
+    /// <remarks>
+    /// Preview-only endpoint: extracts content via the LLM agent but does NOT persist it
+    /// to the database or index it in the vector store. For production ingestion of a
+    /// configured source, use <c>POST /ingestion/ingest-source/{sourceId}</c>.
+    /// </remarks>
     [HttpPost("ingest-url")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -86,8 +89,15 @@ public class IngestionController : ControllerBase
     /// <summary>
     /// Ingests and saves content from a source by source ID.
     /// </summary>
+    /// <remarks>
+    /// Runs the same ingestion pipeline as the background <c>SourceIngestionJob</c>:
+    /// extracts content, applies URL policy, deduplicates by URL, persists new items,
+    /// and indexes them in the vector store.
+    /// </remarks>
     [HttpPost("ingest-source/{sourceId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> IngestFromSource(
@@ -95,82 +105,52 @@ public class IngestionController : ControllerBase
         CancellationToken cancellationToken)
     {
         var userId = User.GetUserId();
-        if (userId == Guid.Empty)
+        if (userId == null)
         {
             return Unauthorized(new { message = "User ID not found in token." });
         }
 
-        // Get the source and verify ownership
-        var source = await _sourceService.GetSourceByIdAsync(sourceId, cancellationToken);
+        var source = await _sourceRepository.GetByIdAsync(sourceId, cancellationToken);
         if (source == null)
         {
             return NotFound(new { message = $"Source with ID {sourceId} not found." });
         }
 
-        if (source.UserId != userId)
+        if (source.UserId != userId.Value)
         {
             return Forbid();
         }
 
-        _logger.LogInformation("Starting ingestion from source {SourceId}: {SourceUrl}",
-            sourceId, source.Url);
-
-        // Run the LLM agent
-        var result = await _ingestionAgent.IngestFromUrlAsync(
-            source.Url,
+        _logger.LogInformation(
+            "Starting ingestion from source {SourceId}: {SourceUrl}",
             sourceId,
-            cancellationToken);
+            source.Url);
 
-        if (!result.Success)
+        var summary = await _sourceIngestionService.IngestSourceAsync(source, cancellationToken);
+
+        if (!summary.Success)
         {
-            _logger.LogError("Ingestion failed: {Error}", result.ErrorMessage);
-
+            _logger.LogError("Ingestion failed: {Error}", summary.ErrorMessage);
             return StatusCode(StatusCodes.Status500InternalServerError, new
             {
                 message = "Ingestion failed",
-                error = result.ErrorMessage
+                error = summary.ErrorMessage
             });
         }
 
-        // Save new content to database
-        var savedContent = new List<ContentResponse>();
-        foreach (var extractedContent in result.Content)
-        {
-            try
-            {
-                var createRequest = new CreateContentRequest
-                {
-                    Title = extractedContent.Title,
-                    Url = extractedContent.Url,
-                    Description = extractedContent.Description,
-                    SourceId = sourceId,
-                    ContentType = extractedContent.Type
-                };
-
-                var saved = await _contentService.CreateContentAsync(createRequest, cancellationToken);
-                savedContent.Add(saved);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to save content: {Title}", extractedContent.Title);
-            }
-        }
-
-        // Log successful ingestion
         _logger.LogInformation(
             "Successfully ingested {Count} content from source {SourceId}",
-            savedContent.Count, sourceId);
+            summary.Saved,
+            sourceId);
 
         return Ok(new
         {
             success = true,
-            totalFound = result.TotalFound,
-            newContent = result.NewContent,
-            duplicatesSkipped = result.DuplicatesSkipped,
-            savedCount = savedContent.Count,
-            content = savedContent
+            extracted = summary.Extracted,
+            saved = summary.Saved,
+            duplicates = summary.Duplicates,
+            errors = summary.Errors,
+            embedded = summary.Embedded
         });
     }
-
 }
-

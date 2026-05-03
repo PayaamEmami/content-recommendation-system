@@ -32,6 +32,7 @@ public static class DependencyInjection
         // Register agent services
         services.AddScoped<AgentTools>();
         services.AddScoped<IIngestionAgent, IngestionAgent>();
+        services.AddScoped<ISourceIngestionService, SourceIngestionService>();
 
         return services;
     }

@@ -19,9 +19,21 @@ public sealed class SourcesControllerTests
     }
 
     [TestMethod]
+    public async Task GetSourceById_WhenMissingUser_ReturnsUnauthorized()
+    {
+        var controller = CreateController(out _);
+        ControllerTestHelpers.SetUser(controller, null);
+
+        var result = await controller.GetSourceById(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsInstanceOfType<UnauthorizedResult>(result);
+    }
+
+    [TestMethod]
     public async Task GetSourceById_WhenMissing_ReturnsNotFound()
     {
         var controller = CreateController(out var sourceService);
+        ControllerTestHelpers.SetUser(controller, Guid.NewGuid());
         var id = Guid.NewGuid();
 
         sourceService.Setup(service => service.GetSourceByIdAsync(id, It.IsAny<CancellationToken>()))
@@ -30,6 +42,53 @@ public sealed class SourcesControllerTests
         var result = await controller.GetSourceById(id, CancellationToken.None);
 
         Assert.IsInstanceOfType<NotFoundObjectResult>(result);
+    }
+
+    [TestMethod]
+    public async Task GetSourceById_WhenDifferentOwner_ReturnsForbid()
+    {
+        var controller = CreateController(out var sourceService);
+        var userId = Guid.NewGuid();
+        ControllerTestHelpers.SetUser(controller, userId);
+        var id = Guid.NewGuid();
+
+        sourceService.Setup(service => service.GetSourceByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SourceResponse
+            {
+                Id = id,
+                UserId = Guid.NewGuid(),
+                Name = "Other user's source",
+                Url = "https://example.com"
+            });
+
+        var result = await controller.GetSourceById(id, CancellationToken.None);
+
+        Assert.IsInstanceOfType<ForbidResult>(result);
+    }
+
+    [TestMethod]
+    public async Task GetSourceById_WhenOwner_ReturnsOk()
+    {
+        var controller = CreateController(out var sourceService);
+        var userId = Guid.NewGuid();
+        ControllerTestHelpers.SetUser(controller, userId);
+        var id = Guid.NewGuid();
+        var response = new SourceResponse
+        {
+            Id = id,
+            UserId = userId,
+            Name = "My source",
+            Url = "https://example.com"
+        };
+
+        sourceService.Setup(service => service.GetSourceByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(response);
+
+        var result = await controller.GetSourceById(id, CancellationToken.None);
+
+        var okResult = result as OkObjectResult;
+        Assert.IsNotNull(okResult);
+        Assert.AreSame(response, okResult.Value);
     }
 
     [TestMethod]
@@ -159,17 +218,18 @@ public sealed class SourcesControllerTests
     }
 
     [TestMethod]
-    public async Task UpdateSource_WhenNotFound_ReturnsNotFound()
+    public async Task UpdateSource_WhenNotFound_PropagatesKeyNotFound()
     {
+        // The controller no longer catches not-found; the global ExceptionHandlingMiddleware maps
+        // KeyNotFoundException to a 404 ProblemDetails response.
         var controller = CreateController(out var sourceService);
         var id = Guid.NewGuid();
 
         sourceService.Setup(service => service.UpdateSourceAsync(id, It.IsAny<UpdateSourceRequest>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new ArgumentException("missing"));
+            .ThrowsAsync(new KeyNotFoundException("missing"));
 
-        var result = await controller.UpdateSource(id, new UpdateSourceRequest(), CancellationToken.None);
-
-        Assert.IsInstanceOfType<NotFoundObjectResult>(result);
+        await TestAssert.ThrowsAsync<KeyNotFoundException>(() =>
+            controller.UpdateSource(id, new UpdateSourceRequest(), CancellationToken.None));
     }
 
     [TestMethod]
@@ -204,17 +264,18 @@ public sealed class SourcesControllerTests
     }
 
     [TestMethod]
-    public async Task DeleteSource_WhenNotFound_ReturnsNotFound()
+    public async Task DeleteSource_WhenNotFound_PropagatesKeyNotFound()
     {
+        // The controller no longer catches not-found; the global ExceptionHandlingMiddleware maps
+        // KeyNotFoundException to a 404 ProblemDetails response.
         var controller = CreateController(out var sourceService);
         var id = Guid.NewGuid();
 
         sourceService.Setup(service => service.DeleteSourceAsync(id, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new ArgumentException("missing"));
+            .ThrowsAsync(new KeyNotFoundException("missing"));
 
-        var result = await controller.DeleteSource(id, CancellationToken.None);
-
-        Assert.IsInstanceOfType<NotFoundObjectResult>(result);
+        await TestAssert.ThrowsAsync<KeyNotFoundException>(() =>
+            controller.DeleteSource(id, CancellationToken.None));
     }
 
     [TestMethod]
@@ -243,18 +304,19 @@ public sealed class SourcesControllerTests
     }
 
     [TestMethod]
-    public async Task BulkImportSources_WhenServiceThrows_ReturnsBadRequest()
+    public async Task BulkImportSources_WhenUserMissing_PropagatesKeyNotFound()
     {
+        // The controller no longer catches not-found; the global ExceptionHandlingMiddleware maps
+        // KeyNotFoundException to a 404 ProblemDetails response.
         var controller = CreateController(out var sourceService);
         var userId = Guid.NewGuid();
         ControllerTestHelpers.SetUser(controller, userId);
 
         sourceService.Setup(service => service.BulkImportSourcesAsync(userId, It.IsAny<BulkImportSourcesRequest>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new ArgumentException("invalid"));
+            .ThrowsAsync(new KeyNotFoundException("user not found"));
 
-        var result = await controller.BulkImportSources(new BulkImportSourcesRequest(), CancellationToken.None);
-
-        Assert.IsInstanceOfType<BadRequestObjectResult>(result);
+        await TestAssert.ThrowsAsync<KeyNotFoundException>(() =>
+            controller.BulkImportSources(new BulkImportSourcesRequest(), CancellationToken.None));
     }
 
     [TestMethod]

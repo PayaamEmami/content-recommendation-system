@@ -45,7 +45,7 @@ public class IngestionAgent : IIngestionAgent
 
                 return new IngestionResult
                 {
-                    Success = true,
+                    Success = false,
                     SourceUrl = sourceUrl,
                     Content = new List<ExtractedContent>(),
                     TotalFound = 0,
@@ -84,7 +84,7 @@ public class IngestionAgent : IIngestionAgent
             _logger.LogError(ex, "Error during ingestion from {SourceUrl}", sourceUrl);
             return new IngestionResult
             {
-                Success = true,
+                Success = false,
                 SourceUrl = sourceUrl,
                 Content = new List<ExtractedContent>(),
                 TotalFound = 0,
@@ -96,6 +96,10 @@ public class IngestionAgent : IIngestionAgent
     }
 
 
+    // Note: parse-level issues (missing/malformed JSON, parse errors) intentionally return
+    // Success = true with an empty Content list. Some sources legitimately contain no
+    // extractable items, and we don't want callers to treat that as a pipeline failure.
+    // Only infrastructure-level failures (fetch error, unexpected exception) return Success = false.
     private IngestionResult ParseIngestionResult(LlmResponse response, string sourceUrl)
     {
         var llmResponse = response.Content;

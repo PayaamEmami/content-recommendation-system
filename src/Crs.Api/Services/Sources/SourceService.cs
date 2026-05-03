@@ -50,7 +50,7 @@ public class SourceService : ISourceService
         var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
         if (user == null)
         {
-            throw new ArgumentException($"User with ID {userId} not found.", nameof(userId));
+            throw new KeyNotFoundException($"User with ID {userId} not found.");
         }
 
         // Check if URL already exists for this user
@@ -79,7 +79,7 @@ public class SourceService : ISourceService
         var source = await _sourceRepository.GetByIdAsync(id, cancellationToken);
         if (source == null)
         {
-            throw new ArgumentException($"Source with ID {id} not found.", nameof(id));
+            throw new KeyNotFoundException($"Source with ID {id} not found.");
         }
 
         // Update only provided fields
@@ -123,7 +123,7 @@ public class SourceService : ISourceService
         var source = await _sourceRepository.GetByIdAsync(id, cancellationToken);
         if (source == null)
         {
-            throw new ArgumentException($"Source with ID {id} not found.", nameof(id));
+            throw new KeyNotFoundException($"Source with ID {id} not found.");
         }
 
         await _sourceRepository.DeleteAsync(id, cancellationToken);
@@ -135,7 +135,7 @@ public class SourceService : ISourceService
         var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
         if (user == null)
         {
-            throw new ArgumentException($"User with ID {userId} not found.", nameof(userId));
+            throw new KeyNotFoundException($"User with ID {userId} not found.");
         }
 
         var result = new BulkImportResult();

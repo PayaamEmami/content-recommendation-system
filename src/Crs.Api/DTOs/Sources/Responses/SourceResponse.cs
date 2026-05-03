@@ -1,3 +1,4 @@
+using Crs.Core.Entities;
 using Crs.Core.Enums;
 
 namespace Crs.Api.DTOs.Sources.Responses;
@@ -56,5 +57,25 @@ public class SourceResponse
     /// Number of content ingested from this source.
     /// </summary>
     public int ContentCount { get; set; }
+
+    /// <summary>
+    /// Maps a <see cref="Source"/> entity to a <see cref="SourceResponse"/> DTO.
+    /// </summary>
+    public static SourceResponse FromEntity(Source source)
+    {
+        return new SourceResponse
+        {
+            Id = source.Id,
+            UserId = source.UserId,
+            Name = source.Name,
+            Url = source.Url,
+            Description = source.Description,
+            Category = source.Category,
+            IsActive = source.IsActive,
+            CreatedAt = source.CreatedAt,
+            UpdatedAt = source.UpdatedAt,
+            ContentCount = source.Content?.Count ?? 0
+        };
+    }
 }
 

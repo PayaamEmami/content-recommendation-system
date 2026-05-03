@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Crs.Core.Entities;
 using Crs.Core.Interfaces;
-using Crs.Core.Models;
 using Crs.Core.Observability;
 using Crs.Jobs.Jobs;
 using Crs.Llm.Models;
@@ -18,74 +17,77 @@ public sealed class SourceIngestionJobTests
     public async Task ExecuteAsync_WhenNoActiveSources_ReturnsEarly()
     {
         var sourceRepository = new Mock<ISourceRepository>(MockBehavior.Strict);
-        var contentRepository = new Mock<IContentRepository>(MockBehavior.Strict);
-        var ingestionAgent = new Mock<IIngestionAgent>(MockBehavior.Strict);
-        var embeddingService = new Mock<IEmbeddingService>(MockBehavior.Strict);
-        var vectorStore = new Mock<IVectorStore>(MockBehavior.Strict);
+        var ingestionService = new Mock<ISourceIngestionService>(MockBehavior.Strict);
 
         sourceRepository.Setup(repo => repo.GetActiveSourcesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Source>());
 
-        var provider = BuildProvider(
-            sourceRepository.Object,
-            contentRepository.Object,
-            ingestionAgent.Object,
-            embeddingService.Object,
-            vectorStore.Object);
-
+        var provider = BuildProvider(sourceRepository.Object, ingestionService.Object);
         var job = new SourceIngestionJob(provider, NullLogger<SourceIngestionJob>.Instance, NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 
-        ingestionAgent.VerifyNoOtherCalls();
-        contentRepository.VerifyNoOtherCalls();
-        vectorStore.VerifyNoOtherCalls();
+        ingestionService.Verify(
+            svc => svc.IngestSourceAsync(It.IsAny<Source>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [TestMethod]
-    public async Task ExecuteAsync_WhenIngestionFails_SkipsContentSave()
+    public async Task ExecuteAsync_DelegatesEachSourceToIngestionService()
     {
         var sourceRepository = new Mock<ISourceRepository>(MockBehavior.Strict);
-        var contentRepository = new Mock<IContentRepository>(MockBehavior.Strict);
-        var ingestionAgent = new Mock<IIngestionAgent>(MockBehavior.Strict);
-        var embeddingService = new Mock<IEmbeddingService>(MockBehavior.Strict);
-        var vectorStore = new Mock<IVectorStore>(MockBehavior.Strict);
+        var ingestionService = new Mock<ISourceIngestionService>(MockBehavior.Strict);
 
-        var source = new Source { Id = Guid.NewGuid(), Name = "Test", Url = "https://example.com" };
+        var source1 = new Source { Id = Guid.NewGuid(), Name = "A", Url = "https://example.com/a" };
+        var source2 = new Source { Id = Guid.NewGuid(), Name = "B", Url = "https://example.com/b" };
+
         sourceRepository.Setup(repo => repo.GetActiveSourcesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Source> { source });
+            .ReturnsAsync(new List<Source> { source1, source2 });
 
-        ingestionAgent.Setup(agent => agent.IngestFromUrlAsync(source.Url, source.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new IngestionResult { Success = false, ErrorMessage = "failed" });
+        ingestionService.Setup(svc => svc.IngestSourceAsync(It.IsAny<Source>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SourceIngestionSummary { Success = true, Saved = 3, Embedded = 3 });
 
-        var provider = BuildProvider(
-            sourceRepository.Object,
-            contentRepository.Object,
-            ingestionAgent.Object,
-            embeddingService.Object,
-            vectorStore.Object);
-
+        var provider = BuildProvider(sourceRepository.Object, ingestionService.Object);
         var job = new SourceIngestionJob(provider, NullLogger<SourceIngestionJob>.Instance, NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 
-        contentRepository.Verify(repo => repo.AddAsync(It.IsAny<Content>(), It.IsAny<CancellationToken>()), Times.Never);
-        vectorStore.Verify(store => store.UpsertDocumentsAsync(It.IsAny<IEnumerable<ContentDocument>>(), It.IsAny<CancellationToken>()), Times.Never);
+        ingestionService.Verify(svc => svc.IngestSourceAsync(source1, It.IsAny<CancellationToken>()), Times.Once);
+        ingestionService.Verify(svc => svc.IngestSourceAsync(source2, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_ContinuesWhenSourceThrows()
+    {
+        var sourceRepository = new Mock<ISourceRepository>(MockBehavior.Strict);
+        var ingestionService = new Mock<ISourceIngestionService>(MockBehavior.Strict);
+
+        var source1 = new Source { Id = Guid.NewGuid(), Name = "A", Url = "https://example.com/a" };
+        var source2 = new Source { Id = Guid.NewGuid(), Name = "B", Url = "https://example.com/b" };
+
+        sourceRepository.Setup(repo => repo.GetActiveSourcesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Source> { source1, source2 });
+
+        ingestionService.Setup(svc => svc.IngestSourceAsync(source1, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("boom"));
+        ingestionService.Setup(svc => svc.IngestSourceAsync(source2, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SourceIngestionSummary { Success = true, Saved = 1, Embedded = 1 });
+
+        var provider = BuildProvider(sourceRepository.Object, ingestionService.Object);
+        var job = new SourceIngestionJob(provider, NullLogger<SourceIngestionJob>.Instance, NullObservabilityMetrics.Instance);
+
+        await job.ExecuteAsync(CancellationToken.None);
+
+        ingestionService.Verify(svc => svc.IngestSourceAsync(source2, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private static ServiceProvider BuildProvider(
         ISourceRepository sourceRepository,
-        IContentRepository contentRepository,
-        IIngestionAgent ingestionAgent,
-        IEmbeddingService embeddingService,
-        IVectorStore vectorStore)
+        ISourceIngestionService ingestionService)
     {
         var services = new ServiceCollection();
         services.AddSingleton(sourceRepository);
-        services.AddSingleton(contentRepository);
-        services.AddSingleton(ingestionAgent);
-        services.AddSingleton(embeddingService);
-        services.AddSingleton(vectorStore);
+        services.AddSingleton(ingestionService);
         return services.BuildServiceProvider();
     }
 }

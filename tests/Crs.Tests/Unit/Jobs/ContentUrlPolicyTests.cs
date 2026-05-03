@@ -1,5 +1,5 @@
 using Crs.Core.Enums;
-using Crs.Jobs.Validation;
+using Crs.Llm.Validation;
 
 namespace Crs.Tests.Unit.Jobs;
 

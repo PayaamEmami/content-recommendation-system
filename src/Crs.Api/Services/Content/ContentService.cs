@@ -1,7 +1,6 @@
 using Crs.Api.DTOs.Common;
 using Crs.Api.DTOs.Content.Requests;
 using Crs.Api.DTOs.Content.Responses;
-using Crs.Api.DTOs.Sources.Responses;
 using Crs.Core.Entities;
 using Crs.Core.Enums;
 using Crs.Core.Interfaces;
@@ -34,37 +33,16 @@ public class ContentService : IContentService
         List<Guid>? sourceIds = null,
         CancellationToken cancellationToken = default)
     {
-        // Get content (apply type filter if specified)
-        IEnumerable<Content> content;
-
-        if (type.HasValue)
-        {
-            content = await _contentRepository.GetByTypeAsync(type.Value, cancellationToken);
-        }
-        else
-        {
-            content = await _contentRepository.GetAllAsync(cancellationToken);
-        }
-
-        // Apply source filter if specified
-        if (sourceIds != null && sourceIds.Any())
-        {
-            content = content.Where(r => r.SourceId.HasValue && sourceIds.Contains(r.SourceId.Value));
-        }
-
-        // Get total count before pagination
-        var totalCount = content.Count();
-
-        // Apply pagination
-        var pagedContent = content
-            .OrderByDescending(r => r.CreatedAt)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .ToList();
+        var (items, totalCount) = await _contentRepository.GetPagedAsync(
+            pageNumber,
+            pageSize,
+            type,
+            sourceIds,
+            cancellationToken);
 
         return new PagedResponse<ContentResponse>
         {
-            Items = pagedContent.Select(MapToContentResponse).ToList(),
+            Items = items.Select(MapToContentResponse).ToList(),
             PageNumber = pageNumber,
             PageSize = pageSize,
             TotalCount = totalCount,
@@ -183,31 +161,5 @@ public class ContentService : IContentService
         _logger.LogInformation("Deleted content {ContentId}", contentId);
     }
 
-    private static ContentResponse MapToContentResponse(Content content)
-    {
-        return new ContentResponse
-        {
-            Id = content.Id,
-            Title = content.Title,
-            Description = content.Description,
-            Url = content.Url,
-            Type = content.Type,
-            PublishedDate = null,
-            CreatedAt = content.CreatedAt,
-            UpdatedAt = content.UpdatedAt,
-            SourceInfo = content.Source != null ? new SourceResponse
-            {
-                Id = content.Source.Id,
-                UserId = content.Source.UserId,
-                Name = content.Source.Name,
-                Url = content.Source.Url,
-                Description = content.Source.Description,
-                Category = content.Source.Category,
-                IsActive = content.Source.IsActive,
-                CreatedAt = content.Source.CreatedAt,
-                UpdatedAt = content.Source.UpdatedAt,
-                ContentCount = content.Source.Content?.Count ?? 0
-            } : null
-        };
-    }
+    private static ContentResponse MapToContentResponse(Content content) => ContentResponse.FromEntity(content);
 }

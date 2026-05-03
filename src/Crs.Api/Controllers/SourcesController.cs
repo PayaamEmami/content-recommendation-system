@@ -29,13 +29,26 @@ public class SourcesController : ControllerBase
     /// </summary>
     [HttpGet("{id}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSourceById(Guid id, CancellationToken cancellationToken)
     {
+        var userId = User.GetUserId();
+        if (!userId.HasValue)
+        {
+            return Unauthorized();
+        }
+
         var source = await _sourceService.GetSourceByIdAsync(id, cancellationToken);
         if (source == null)
         {
             return NotFound(new { message = $"Source with ID {id} not found." });
+        }
+
+        if (source.UserId != userId.Value)
+        {
+            return Forbid();
         }
 
         return Ok(source);
@@ -131,10 +144,6 @@ public class SourcesController : ControllerBase
             var source = await _sourceService.UpdateSourceAsync(id, request, cancellationToken);
             return Ok(source);
         }
-        catch (ArgumentException)
-        {
-            return NotFound(new { message = $"Source with ID {id} not found." });
-        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { message = ex.Message });
@@ -149,15 +158,8 @@ public class SourcesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteSource(Guid id, CancellationToken cancellationToken)
     {
-        try
-        {
-            await _sourceService.DeleteSourceAsync(id, cancellationToken);
-            return NoContent();
-        }
-        catch (ArgumentException)
-        {
-            return NotFound(new { message = $"Source with ID {id} not found." });
-        }
+        await _sourceService.DeleteSourceAsync(id, cancellationToken);
+        return NoContent();
     }
 
     /// <summary>
@@ -169,25 +171,17 @@ public class SourcesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> BulkImportSources([FromBody] BulkImportSourcesRequest request, CancellationToken cancellationToken)
     {
-        try
+        var userId = User.GetUserId();
+        if (!userId.HasValue)
         {
-            var userId = User.GetUserId();
-            if (!userId.HasValue)
-            {
-                _logger.LogWarning("BulkImportSources: User ID not found in claims");
-                return Unauthorized();
-            }
+            _logger.LogWarning("BulkImportSources: User ID not found in claims");
+            return Unauthorized();
+        }
 
-            _logger.LogInformation("BulkImportSources: Starting bulk import of {Count} sources for user {UserId}", request.Sources.Count, userId.Value);
-            var result = await _sourceService.BulkImportSourcesAsync(userId.Value, request, cancellationToken);
-            _logger.LogInformation("BulkImportSources: Completed - {Imported} imported, {Failed} failed for user {UserId}", result.Imported, result.Failed, userId.Value);
-            return Ok(result);
-        }
-        catch (ArgumentException ex)
-        {
-            _logger.LogError(ex, "BulkImportSources: ArgumentException during bulk import");
-            return BadRequest(new { message = ex.Message });
-        }
+        _logger.LogInformation("BulkImportSources: Starting bulk import of {Count} sources for user {UserId}", request.Sources.Count, userId.Value);
+        var result = await _sourceService.BulkImportSourcesAsync(userId.Value, request, cancellationToken);
+        _logger.LogInformation("BulkImportSources: Completed - {Imported} imported, {Failed} failed for user {UserId}", result.Imported, result.Failed, userId.Value);
+        return Ok(result);
     }
 }
 

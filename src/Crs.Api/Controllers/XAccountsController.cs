@@ -172,19 +172,7 @@ public class XAccountsController : ControllerBase
             return BadRequest(ex.Message);
         }
 
-        var selected = await _xAccountService.GetSelectedAccountsAsync(userId.Value, cancellationToken);
-        var selectedIds = selected.Select(s => s.XFollowedAccountId).ToHashSet();
-
-        var response = followed.Select(account => new XFollowedAccountResponse
-        {
-            Id = account.Id,
-            XUserId = account.XUserId,
-            Handle = account.Handle,
-            DisplayName = account.DisplayName,
-            ProfileImageUrl = account.ProfileImageUrl,
-            IsSelected = selectedIds.Contains(account.Id)
-        }).ToList();
-
+        var response = await BuildFollowedAccountsResponseAsync(userId.Value, followed, cancellationToken);
         return Ok(response);
     }
 
@@ -211,10 +199,21 @@ public class XAccountsController : ControllerBase
         }
 
         var followed = await _xAccountService.GetFollowedAccountsAsync(userId.Value, cancellationToken);
-        var selected = await _xAccountService.GetSelectedAccountsAsync(userId.Value, cancellationToken);
+        var response = await BuildFollowedAccountsResponseAsync(userId.Value, followed, cancellationToken);
+
+        _logger.LogInformation("Updated X selected accounts for user {UserId}", userId.Value);
+        return Ok(response);
+    }
+
+    private async Task<List<XFollowedAccountResponse>> BuildFollowedAccountsResponseAsync(
+        Guid userId,
+        IEnumerable<Crs.Core.Entities.XFollowedAccount> followed,
+        CancellationToken cancellationToken)
+    {
+        var selected = await _xAccountService.GetSelectedAccountsAsync(userId, cancellationToken);
         var selectedIds = selected.Select(s => s.XFollowedAccountId).ToHashSet();
 
-        var response = followed.Select(account => new XFollowedAccountResponse
+        return followed.Select(account => new XFollowedAccountResponse
         {
             Id = account.Id,
             XUserId = account.XUserId,
@@ -223,9 +222,6 @@ public class XAccountsController : ControllerBase
             ProfileImageUrl = account.ProfileImageUrl,
             IsSelected = selectedIds.Contains(account.Id)
         }).ToList();
-
-        _logger.LogInformation("Updated X selected accounts for user {UserId}", userId.Value);
-        return Ok(response);
     }
 
     /// <summary>

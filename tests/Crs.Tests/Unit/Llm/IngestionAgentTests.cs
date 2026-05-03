@@ -88,7 +88,7 @@ public class IngestionAgentTests
     }
 
     [TestMethod]
-    public async Task IngestFromUrlAsync_ContentFetchFails_ReturnsEmptyResult()
+    public async Task IngestFromUrlAsync_ContentFetchFails_ReturnsFailure()
     {
         // Arrange
         var sourceUrl = "https://example.com/feed";
@@ -104,8 +104,8 @@ public class IngestionAgentTests
         // Act
         var result = await _agent.IngestFromUrlAsync(sourceUrl);
 
-        // Assert
-        Assert.IsTrue(result.Success); // Still returns success, but with 0 content
+        // Assert: fetch failure is an infrastructure error, so Success must be false
+        Assert.IsFalse(result.Success);
         Assert.AreEqual(sourceUrl, result.SourceUrl);
         Assert.IsEmpty(result.Content);
         Assert.AreEqual(0, result.TotalFound);
@@ -114,7 +114,7 @@ public class IngestionAgentTests
     }
 
     [TestMethod]
-    public async Task IngestFromUrlAsync_EmptyContent_ReturnsEmptyResult()
+    public async Task IngestFromUrlAsync_EmptyContent_ReturnsFailure()
     {
         // Arrange
         var sourceUrl = "https://example.com/feed";
@@ -130,8 +130,8 @@ public class IngestionAgentTests
         // Act
         var result = await _agent.IngestFromUrlAsync(sourceUrl);
 
-        // Assert
-        Assert.IsTrue(result.Success);
+        // Assert: empty content is treated as a fetch failure (handled by the same branch)
+        Assert.IsFalse(result.Success);
         Assert.IsEmpty(result.Content);
         Assert.IsNotNull(result.ErrorMessage);
     }
@@ -502,8 +502,8 @@ public class IngestionAgentTests
         // Act
         var result = await _agent.IngestFromUrlAsync(sourceUrl);
 
-        // Assert
-        Assert.IsTrue(result.Success);
+        // Assert: an unexpected exception is an infrastructure error, so Success must be false
+        Assert.IsFalse(result.Success);
         Assert.IsEmpty(result.Content);
         Assert.IsNotNull(result.ErrorMessage);
         Assert.Contains("Unexpected error", result.ErrorMessage);

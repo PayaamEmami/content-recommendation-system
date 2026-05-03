@@ -27,7 +27,7 @@ public sealed class SourceServiceTests
         userRepository.Setup(repo => repo.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
 
-        await TestAssert.ThrowsAsync<ArgumentException>(() =>
+        await TestAssert.ThrowsAsync<KeyNotFoundException>(() =>
             service.CreateSourceAsync(Guid.NewGuid(), new CreateSourceRequest(), CancellationToken.None));
     }
 
@@ -95,7 +95,7 @@ public sealed class SourceServiceTests
         sourceRepository.Setup(repo => repo.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Source?)null);
 
-        await TestAssert.ThrowsAsync<ArgumentException>(() =>
+        await TestAssert.ThrowsAsync<KeyNotFoundException>(() =>
             service.UpdateSourceAsync(Guid.NewGuid(), new UpdateSourceRequest(), CancellationToken.None));
     }
 
@@ -158,7 +158,7 @@ public sealed class SourceServiceTests
         sourceRepository.Setup(repo => repo.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Source?)null);
 
-        await TestAssert.ThrowsAsync<ArgumentException>(() =>
+        await TestAssert.ThrowsAsync<KeyNotFoundException>(() =>
             service.DeleteSourceAsync(Guid.NewGuid(), CancellationToken.None));
     }
 
@@ -184,7 +184,7 @@ public sealed class SourceServiceTests
         userRepository.Setup(repo => repo.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
 
-        await TestAssert.ThrowsAsync<ArgumentException>(() =>
+        await TestAssert.ThrowsAsync<KeyNotFoundException>(() =>
             service.BulkImportSourcesAsync(Guid.NewGuid(), new BulkImportSourcesRequest(), CancellationToken.None));
     }
 

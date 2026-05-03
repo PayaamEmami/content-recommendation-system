@@ -1,5 +1,6 @@
 using Crs.Api.DTOs.Sources.Responses;
 using Crs.Core.Enums;
+using ContentEntity = Crs.Core.Entities.Content;
 
 namespace Crs.Api.DTOs.Content.Responses;
 
@@ -52,4 +53,23 @@ public class ContentResponse
     /// The source this content was ingested from (if any).
     /// </summary>
     public SourceResponse? SourceInfo { get; set; }
+
+    /// <summary>
+    /// Maps a <see cref="ContentEntity"/> entity to a <see cref="ContentResponse"/> DTO.
+    /// </summary>
+    public static ContentResponse FromEntity(ContentEntity content)
+    {
+        return new ContentResponse
+        {
+            Id = content.Id,
+            Title = content.Title,
+            Description = content.Description,
+            Url = content.Url,
+            Type = content.Type,
+            PublishedDate = null,
+            CreatedAt = content.CreatedAt,
+            UpdatedAt = content.UpdatedAt,
+            SourceInfo = content.Source != null ? SourceResponse.FromEntity(content.Source) : null
+        };
+    }
 }

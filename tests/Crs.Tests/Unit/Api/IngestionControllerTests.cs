@@ -4,11 +4,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Crs.Api.Controllers;
 using Crs.Api.DTOs.Ingestion.Requests;
-using Crs.Api.DTOs.Content.Requests;
-using Crs.Api.DTOs.Content.Responses;
-using Crs.Api.DTOs.Sources.Responses;
-using Crs.Api.Services;
+using Crs.Core.Entities;
 using Crs.Core.Enums;
+using Crs.Core.Interfaces;
 using Crs.Llm.Models;
 using Crs.Llm.Services;
 
@@ -19,16 +17,16 @@ public sealed class IngestionControllerTests
 {
     private static IngestionController CreateController(
         out Mock<IIngestionAgent> ingestionAgent,
-        out Mock<ISourceService> sourceService,
-        out Mock<IContentService> contentService)
+        out Mock<ISourceIngestionService> sourceIngestionService,
+        out Mock<ISourceRepository> sourceRepository)
     {
         ingestionAgent = new Mock<IIngestionAgent>(MockBehavior.Strict);
-        sourceService = new Mock<ISourceService>(MockBehavior.Strict);
-        contentService = new Mock<IContentService>(MockBehavior.Strict);
+        sourceIngestionService = new Mock<ISourceIngestionService>(MockBehavior.Strict);
+        sourceRepository = new Mock<ISourceRepository>(MockBehavior.Strict);
         return new IngestionController(
             ingestionAgent.Object,
-            sourceService.Object,
-            contentService.Object,
+            sourceIngestionService.Object,
+            sourceRepository.Object,
             NullLogger<IngestionController>.Instance);
     }
 
@@ -98,7 +96,7 @@ public sealed class IngestionControllerTests
     public async Task IngestFromSource_WhenMissingUser_ReturnsUnauthorized()
     {
         var controller = CreateController(out _, out _, out _);
-        ControllerTestHelpers.SetUser(controller, Guid.Empty);
+        ControllerTestHelpers.SetUser(controller, null);
 
         var result = await controller.IngestFromSource(Guid.NewGuid(), CancellationToken.None);
 
@@ -108,13 +106,13 @@ public sealed class IngestionControllerTests
     [TestMethod]
     public async Task IngestFromSource_WhenSourceMissing_ReturnsNotFound()
     {
-        var controller = CreateController(out _, out var sourceService, out _);
+        var controller = CreateController(out _, out _, out var sourceRepository);
         var userId = Guid.NewGuid();
         ControllerTestHelpers.SetUser(controller, userId);
         var sourceId = Guid.NewGuid();
 
-        sourceService.Setup(service => service.GetSourceByIdAsync(sourceId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((SourceResponse?)null);
+        sourceRepository.Setup(repo => repo.GetByIdAsync(sourceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Source?)null);
 
         var result = await controller.IngestFromSource(sourceId, CancellationToken.None);
 
@@ -124,13 +122,13 @@ public sealed class IngestionControllerTests
     [TestMethod]
     public async Task IngestFromSource_WhenDifferentOwner_ReturnsForbid()
     {
-        var controller = CreateController(out _, out var sourceService, out _);
+        var controller = CreateController(out _, out _, out var sourceRepository);
         var userId = Guid.NewGuid();
         ControllerTestHelpers.SetUser(controller, userId);
         var sourceId = Guid.NewGuid();
 
-        sourceService.Setup(service => service.GetSourceByIdAsync(sourceId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SourceResponse
+        sourceRepository.Setup(repo => repo.GetByIdAsync(sourceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Source
             {
                 Id = sourceId,
                 UserId = Guid.NewGuid(),
@@ -145,41 +143,29 @@ public sealed class IngestionControllerTests
     [TestMethod]
     public async Task IngestFromSource_WhenSuccess_ReturnsOk()
     {
-        var controller = CreateController(out var ingestionAgent, out var sourceService, out var contentService);
+        var controller = CreateController(out _, out var sourceIngestionService, out var sourceRepository);
         var userId = Guid.NewGuid();
         ControllerTestHelpers.SetUser(controller, userId);
         var sourceId = Guid.NewGuid();
+        var source = new Source
+        {
+            Id = sourceId,
+            UserId = userId,
+            Url = "https://example.com"
+        };
 
-        sourceService.Setup(service => service.GetSourceByIdAsync(sourceId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SourceResponse
-            {
-                Id = sourceId,
-                UserId = userId,
-                Url = "https://example.com"
-            });
+        sourceRepository.Setup(repo => repo.GetByIdAsync(sourceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(source);
 
-        ingestionAgent.Setup(agent => agent.IngestFromUrlAsync("https://example.com", sourceId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new IngestionResult
+        sourceIngestionService.Setup(service => service.IngestSourceAsync(source, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SourceIngestionSummary
             {
                 Success = true,
-                TotalFound = 1,
-                NewContent = 1,
-                DuplicatesSkipped = 0,
-                Content = new List<ExtractedContent>
-                {
-                    new() { Title = "One", Url = "https://example.com/1", Description = "Desc", Type = ContentType.Video }
-                }
-            });
-
-        contentService.Setup(service => service.CreateContentAsync(It.IsAny<CreateContentRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ContentResponse
-            {
-                Id = Guid.NewGuid(),
-                Title = "One",
-                Url = "https://example.com/1",
-                Type = ContentType.Video,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                Extracted = 1,
+                Saved = 1,
+                Duplicates = 0,
+                Errors = 0,
+                Embedded = 1
             });
 
         var result = await controller.IngestFromSource(sourceId, CancellationToken.None);
@@ -187,7 +173,39 @@ public sealed class IngestionControllerTests
         var okResult = result as OkObjectResult;
         Assert.IsNotNull(okResult);
         Assert.IsTrue(GetProperty<bool>(okResult.Value!, "success"));
-        Assert.AreEqual(1, GetProperty<int>(okResult.Value!, "savedCount"));
+        Assert.AreEqual(1, GetProperty<int>(okResult.Value!, "saved"));
+        Assert.AreEqual(1, GetProperty<int>(okResult.Value!, "embedded"));
+    }
+
+    [TestMethod]
+    public async Task IngestFromSource_WhenServiceFails_ReturnsServerError()
+    {
+        var controller = CreateController(out _, out var sourceIngestionService, out var sourceRepository);
+        var userId = Guid.NewGuid();
+        ControllerTestHelpers.SetUser(controller, userId);
+        var sourceId = Guid.NewGuid();
+        var source = new Source
+        {
+            Id = sourceId,
+            UserId = userId,
+            Url = "https://example.com"
+        };
+
+        sourceRepository.Setup(repo => repo.GetByIdAsync(sourceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(source);
+
+        sourceIngestionService.Setup(service => service.IngestSourceAsync(source, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SourceIngestionSummary
+            {
+                Success = false,
+                ErrorMessage = "fetch failed"
+            });
+
+        var result = await controller.IngestFromSource(sourceId, CancellationToken.None);
+
+        var objectResult = result as ObjectResult;
+        Assert.IsNotNull(objectResult);
+        Assert.AreEqual(StatusCodes.Status500InternalServerError, objectResult.StatusCode);
     }
 
     private static T? GetProperty<T>(object instance, string name)

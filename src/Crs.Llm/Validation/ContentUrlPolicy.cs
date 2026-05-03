@@ -2,7 +2,7 @@ using System.Collections.Specialized;
 using System.Web;
 using Crs.Core.Enums;
 
-namespace Crs.Jobs.Validation;
+namespace Crs.Llm.Validation;
 
 /// <summary>
 /// Heuristics for excluding non-content pages (tag indexes, archives, categories, etc.)
