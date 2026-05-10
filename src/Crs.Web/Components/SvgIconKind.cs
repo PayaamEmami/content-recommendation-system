@@ -17,5 +17,9 @@ public enum SvgIconKind
     Check,
     Cross,
     Filter,
-    Settings
+    Settings,
+    ExternalLink,
+    ArrowUp,
+    ArrowDown,
+    Sparkles
 }

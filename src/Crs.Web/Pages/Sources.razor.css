@@ -10,38 +10,14 @@
 .add-source-panel {
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    padding: var(--space-5);
-    margin-bottom: var(--space-6);
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    margin-bottom: var(--space-8);
+    box-shadow: var(--shadow-card);
 }
 
 .add-source-tabs {
-    display: flex;
-    gap: 0;
     margin-bottom: var(--space-5);
-    border-bottom: 1px solid var(--border-color);
-}
-
-.tab-btn {
-    padding: 0.625rem var(--space-5);
-    background: transparent;
-    border: none;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    transition: color var(--transition-fast), border-color var(--transition-fast);
-}
-
-.tab-btn:hover {
-    color: var(--text-primary);
-}
-
-.tab-btn.active {
-    color: var(--accent-color);
-    border-bottom-color: var(--accent-color);
 }
 
 .add-source-form .form-grid,
@@ -91,7 +67,7 @@
 .json-example {
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-xl);
     padding: var(--space-3) var(--space-4);
     font-size: 0.8rem;
     overflow-x: auto;
@@ -172,8 +148,9 @@
 .sources-container {
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-xl);
     overflow: hidden;
+    box-shadow: var(--shadow-card);
 }
 
 .sources-empty {
@@ -199,7 +176,7 @@
 }
 
 .source-row:hover:not(.editing) {
-    background-color: var(--bg-secondary);
+    background-color: var(--surface-hover);
 }
 
 .source-row.inactive {
@@ -240,15 +217,6 @@
     font-weight: 600;
     color: var(--text-primary);
     font-size: 0.95rem;
-}
-
-.status-badge {
-    font-size: 0.7rem;
-    padding: 0.125rem var(--space-2);
-    border-radius: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
 }
 
 .status-badge.inactive {

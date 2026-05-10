@@ -1,0 +1,31 @@
+<div class="@CssClass">
+    @if (!string.IsNullOrWhiteSpace(Eyebrow))
+    {
+        <div class="page-eyebrow">@Eyebrow</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Title))
+    {
+        <h1>@Title</h1>
+    }
+    @if (!string.IsNullOrWhiteSpace(Subtitle))
+    {
+        <p class="subtitle">@Subtitle</p>
+    }
+    @if (ChildContent is not null)
+    {
+        <div class="ui-toolbar">
+            @ChildContent
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Eyebrow { get; set; }
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private string CssClass => string.Join(" ", new[] { "page-header", Class }
+        .Where(value => !string.IsNullOrWhiteSpace(value)));
+}

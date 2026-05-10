@@ -16,14 +16,16 @@
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            background-color: #181818;
-            color: #cccccc;
+            background:
+                radial-gradient(circle at top, rgba(0, 120, 212, 0.22), transparent 30rem),
+                var(--bg-secondary, #181818);
+            color: var(--text-primary, #cccccc);
         }
         .loading-spinner {
             width: 40px;
             height: 40px;
-            border: 3px solid #2b2b2b;
-            border-top-color: #0078d4;
+            border: 3px solid var(--border-color, #2b2b2b);
+            border-top-color: var(--accent-color, #0078d4);
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin-bottom: 1rem;
@@ -33,7 +35,12 @@
         }
         .loading-container p {
             font-size: 1rem;
-            color: #9d9d9d;
+            color: var(--text-secondary, #9d9d9d);
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .loading-spinner {
+                animation: none;
+            }
         }
     </style>
 </head>
@@ -49,7 +56,7 @@
     <div id="blazor-error-ui" data-nosnippet>
         An unhandled error has occurred.
         <a href="" class="reload">Reload</a>
-        <a class="dismiss">🗙</a>
+        <a class="dismiss">Dismiss</a>
     </div>
 
     <script src="js/observability.js"></script>

@@ -15,17 +15,6 @@
     padding: var(--space-5) var(--space-6) 0;
 }
 
-.preferences-section-header h2 {
-    margin-bottom: 0;
-    font-size: 1.4rem;
-}
-
-.preferences-section-subtitle {
-    margin: 0.35rem 0 0;
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-}
-
 .preferences-section-body {
     padding: var(--space-5) var(--space-6) var(--space-6);
 }
@@ -58,7 +47,7 @@
 .preferences-content-form-shell {
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-xl);
     padding: var(--space-5);
 }
 
@@ -103,14 +92,14 @@
 }
 
 .preferences-filter-btn {
-    width: 40px;
-    height: 40px;
+    width: 2.5rem;
+    height: 2.5rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background-color: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 999px;
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-xl);
     color: var(--text-secondary);
     cursor: pointer;
     transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
@@ -118,13 +107,14 @@
 
 .preferences-filter-btn:hover {
     color: var(--text-primary);
-    border-color: var(--text-secondary);
-    background-color: var(--bg-tertiary);
+    border-color: var(--border-subtle);
+    background-color: var(--surface-hover);
 }
 
 .preferences-filter-btn[aria-expanded="true"] {
     color: var(--text-primary);
-    border-color: var(--text-secondary);
+    border-color: var(--border-subtle);
+    background-color: var(--surface-hover);
 }
 
 .preferences-filter-btn ::deep .preferences-filter-icon {
@@ -162,7 +152,7 @@
 
 .preferences-filter-option:hover,
 .preferences-filter-option.active {
-    background-color: var(--bg-secondary);
+    background-color: var(--surface-hover);
     color: var(--text-primary);
 }
 
@@ -191,18 +181,6 @@
 .content-type-badge {
     font-size: 1rem;
     line-height: 1;
-}
-
-.preferences-cleared-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.18rem 0.55rem;
-    border-radius: 999px;
-    background-color: var(--bg-tertiary);
-    color: var(--text-secondary);
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.01em;
 }
 
 @media (max-width: 640px) {

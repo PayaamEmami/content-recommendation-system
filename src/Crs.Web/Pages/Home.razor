@@ -5,25 +5,131 @@
 <PageTitle>Welcome - CRS</PageTitle>
 
 <div class="landing-container">
-  <div class="landing-content">
-    <h1 class="landing-title">Content Recommendation System</h1>
-    <p class="landing-description">
-      Discover papers, videos, blogs, and more from your favorite sources,
-      all in one place with personalized recommendations.
-    </p>
-    <div class="landing-actions">
-      <a href="/signup" class="btn-primary btn-large">Get Started</a>
-      <a href="/login" class="btn-secondary btn-large">Sign In</a>
+  <div class="landing-grid">
+    <section class="landing-card landing-copy-card">
+      <p class="landing-eyebrow">Content Recommendation System</p>
+      <h1 class="landing-title">Welcome</h1>
+      <p class="landing-description">
+        Sign in to discover papers, videos, blogs, and more from your favorite sources,
+        all in one private personalized feed.
+      </p>
+    </section>
+
+    <section class="landing-card landing-auth-card">
+      <p class="landing-eyebrow">Sign in</p>
+
+      @if (!string.IsNullOrEmpty(_errorMessage))
+      {
+        <AlertMessage Variant="AlertVariant.Error">@_errorMessage</AlertMessage>
+      }
+
+      <EditForm Model="@_model" OnValidSubmit="HandleLogin" class="landing-login-form">
+        <DataAnnotationsValidator />
+
+        <div class="form-group">
+          <label for="home-email">Email</label>
+          <InputText id="home-email" @bind-Value="_model.Email" class="form-input" placeholder="you@example.com" />
+          <ValidationMessage For="@(() => _model.Email)" />
+        </div>
+
+        <div class="form-group">
+          <label for="home-password">Password</label>
+          <InputText id="home-password" type="password" @bind-Value="_model.Password" class="form-input" placeholder="••••••••" />
+          <ValidationMessage For="@(() => _model.Password)" />
+        </div>
+
+        <button type="submit" class="btn-primary landing-submit" disabled="@_isLoading">
+          @(_isLoading ? "Working..." : "Sign in")
+        </button>
+      </EditForm>
+
+      @if (ShowDevelopmentLogin)
+      {
+        <button type="button" class="btn-secondary landing-dev-login" @onclick="HandleDevelopmentLogin" disabled="@_isLoading">
+          Use development login
+        </button>
+      }
+
+      @if (AuthService.IsRegistrationEnabled)
+      {
+        <p class="auth-footer">
+          Don't have an account? <a href="/signup">Sign up</a>
+        </p>
+      }
+    </section>
     </div>
-  </div>
 </div>
 
 @code {
+  private LoginModel _model = new();
+  private string? _errorMessage;
+  private bool _isLoading;
+  private bool ShowDevelopmentLogin => AuthService.IsDevelopmentLoginEnabled || IsLocalBrowser();
+
   protected override async Task OnInitializedAsync()
   {
     if (await AuthService.EnsureAuthenticatedAsync())
     {
       Navigation.NavigateTo("/feeds");
     }
+  }
+
+  private async Task HandleLogin()
+  {
+    _isLoading = true;
+    _errorMessage = null;
+
+    var result = await AuthService.LoginAsync(_model.Email, _model.Password);
+
+    if (result.Success)
+    {
+      Navigation.NavigateTo("/feeds");
+    }
+    else
+    {
+      _errorMessage = result.ErrorMessage;
+    }
+
+    _isLoading = false;
+  }
+
+  private async Task HandleDevelopmentLogin()
+  {
+    _isLoading = true;
+    _errorMessage = null;
+
+    var result = await AuthService.UseDevelopmentLoginAsync();
+    if (result.Success)
+    {
+      Navigation.NavigateTo("/feeds");
+    }
+    else
+    {
+      _errorMessage = result.ErrorMessage;
+    }
+
+    _isLoading = false;
+  }
+
+  private bool IsLocalBrowser()
+  {
+    if (!Uri.TryCreate(Navigation.Uri, UriKind.Absolute, out var uri))
+    {
+      return false;
+    }
+
+    return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+           uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+           uri.Host.Equals("[::1]", StringComparison.OrdinalIgnoreCase);
+  }
+
+  private class LoginModel
+  {
+    [Required(ErrorMessage = "Email is required")]
+    [EmailAddress(ErrorMessage = "Invalid email address")]
+    public string Email { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Password is required")]
+    public string Password { get; set; } = string.Empty;
   }
 }

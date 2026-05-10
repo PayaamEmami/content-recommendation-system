@@ -15,7 +15,7 @@
             aria-label="Upvote content"
             aria-busy="@IsSyncing"
             title="Upvote">
-        <span class="vote-icon">&#9650;</span>
+        <UiSvgIcon Kind="SvgIconKind.ArrowUp" Class="vote-icon" />
     </button>
     <button type="button"
             class="vote-btn vote-down @(CurrentVote == VoteType.Downvote ? "active" : "")"
@@ -26,7 +26,7 @@
             aria-label="Downvote content"
             aria-busy="@IsSyncing"
             title="Downvote">
-        <span class="vote-icon">&#9660;</span>
+        <UiSvgIcon Kind="SvgIconKind.ArrowDown" Class="vote-icon" />
     </button>
 </div>
 

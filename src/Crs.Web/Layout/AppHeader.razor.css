@@ -1,11 +1,12 @@
 .app-header {
-    background-color: var(--bg-primary);
+    background-color: color-mix(in srgb, var(--bg-primary) 92%, transparent);
     border-bottom: 1px solid var(--border-color);
     padding: 0 var(--space-8);
     position: sticky;
     top: 0;
     z-index: 100;
     width: 100%;
+    backdrop-filter: blur(16px);
 }
 
 .header-content {
@@ -18,35 +19,55 @@
 }
 
 .logo {
-    font-size: 1.5rem;
-    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 1.15rem;
+    font-weight: 750;
     color: var(--text-primary);
     text-decoration: none;
+    letter-spacing: -0.03em;
+}
+
+.logo-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    background-color: var(--surface-accent);
+    color: var(--link);
+}
+
+.logo-mark ::deep .ui-svg {
+    width: 1rem;
+    height: 1rem;
 }
 
 .main-nav {
     display: flex;
-    gap: var(--space-8);
+    gap: var(--space-2);
     align-items: center;
 }
 
 .main-nav ::deep .nav-link {
     color: var(--text-secondary);
-    font-weight: 500;
-    padding: var(--space-2) 0;
-    border-bottom: 2px solid transparent;
-    cursor: pointer;
-    transition: color var(--transition-base), border-color var(--transition-base);
+    font-weight: 600;
+    padding: 0.55rem 0.8rem;
+    border-radius: var(--radius-lg);
+    transition: color var(--transition-base), background-color var(--transition-base);
 }
 
 .main-nav ::deep .nav-link:hover {
     color: var(--text-primary);
-    border-bottom-color: var(--accent-color);
+    background-color: var(--surface-hover);
 }
 
 .main-nav ::deep .nav-link.active {
     color: var(--text-primary);
-    border-bottom-color: var(--accent-color);
+    background-color: var(--bg-tertiary);
 }
 
 .header-actions {
@@ -69,19 +90,29 @@
     align-items: center;
     gap: var(--space-2);
     background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    border-radius: 0;
-    padding: var(--space-2) 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-xl);
+    padding: 0.5rem 0.75rem;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: color var(--transition-base), border-color var(--transition-base);
+    transition: color var(--transition-base), border-color var(--transition-base), background-color var(--transition-base);
 }
 
 .user-menu-trigger:hover,
 .user-menu-trigger[aria-expanded="true"] {
     color: var(--text-primary);
-    border-bottom-color: var(--accent-color);
+    border-color: var(--border-subtle);
+    background-color: var(--surface-hover);
+}
+
+.user-menu-chevron {
+    width: 1rem;
+    height: 1rem;
+    transition: transform var(--transition-fast);
+}
+
+.user-menu-trigger[aria-expanded="true"] .user-menu-chevron {
+    transform: rotate(180deg);
 }
 
 .user-menu-dropdown {
@@ -114,7 +145,7 @@
 
 .user-menu-item:hover {
     color: var(--text-primary);
-    background-color: var(--bg-secondary);
+    background-color: var(--surface-hover);
 }
 
 @media (max-width: 768px) {

@@ -4,7 +4,12 @@
 
 <header class="app-header">
     <div class="header-content">
-        <a href="/feeds" class="logo">CRS</a>
+        <a href="/feeds" class="logo" aria-label="CRS feed">
+            <span class="logo-mark">
+                <UiSvgIcon Kind="SvgIconKind.Sparkles" />
+            </span>
+            <span>CRS</span>
+        </a>
 
         <nav class="main-nav">
             <NavLink href="/feeds" class="nav-link" Match="NavLinkMatch.All">Feeds</NavLink>
@@ -15,6 +20,7 @@
             <div class="user-menu" tabindex="0" @ref="_userMenuRef" @onfocusout="HandleUserMenuFocusOut" @onkeydown="HandleUserMenuKeyDown">
                 <button class="user-menu-trigger" @onclick="ToggleUserMenu" aria-expanded="@_isUserMenuOpen" aria-haspopup="menu">
                     <span class="user-name">@AuthService.CurrentState.DisplayName</span>
+                    <UiSvgIcon Kind="SvgIconKind.ChevronDown" Class="user-menu-chevron" />
                 </button>
 
                 @if (_isUserMenuOpen)

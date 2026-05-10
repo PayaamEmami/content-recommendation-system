@@ -10,11 +10,14 @@
 <PageTitle>Preferences - CRS</PageTitle>
 
 <div class="page-container preferences-page">
+    <UiPageHeader Eyebrow="Personalization"
+                  Title="Preferences"
+                  Subtitle="Tune the recommendation experience and review the content signals CRS has learned from." />
+
     <section class="preferences-section">
-        <div class="preferences-section-header">
-            <h2>General Settings</h2>
-            <p class="preferences-section-subtitle">Manage your account preferences and personalize how the app works for you.</p>
-        </div>
+        <UiSectionHeader Class="preferences-section-header"
+                         Title="General Settings"
+                         Subtitle="Manage your account preferences and personalize how the app works for you." />
 
         <div class="preferences-section-body">
             <div class="preferences-setting-row">
@@ -34,10 +37,9 @@
     </section>
 
     <section class="preferences-section">
-        <div class="preferences-section-header">
-            <h2>Content Examples</h2>
-            <p class="preferences-section-subtitle">Add specific content to give the recommendation system more examples to learn from.</p>
-        </div>
+        <UiSectionHeader Class="preferences-section-header"
+                         Title="Content Examples"
+                         Subtitle="Add specific content to give the recommendation system more examples to learn from." />
 
         <div class="preferences-section-body">
             @if (!string.IsNullOrWhiteSpace(_errorMessage))
@@ -137,14 +139,14 @@
                                     <MetaContent>
                                         @if (content.ContentType.HasValue)
                                         {
-                                            <span class="content-type-badge">@GetContentTypeDisplay(content.ContentType.Value)</span>
+                                            <UiBadge Class="content-type-badge">@GetContentTypeDisplay(content.ContentType.Value)</UiBadge>
                                         }
                                     </MetaContent>
                                     <ActionsContent>
                                         @if (!string.IsNullOrWhiteSpace(content.Url))
                                         {
                                             <a href="@content.Url" target="_blank" rel="noopener" class="content-open-btn" title="Open content">
-                                                &#8599;
+                                                <UiSvgIcon Kind="SvgIconKind.ExternalLink" />
                                             </a>
                                         }
                                         <button type="button"
@@ -172,10 +174,10 @@
     </section>
 
     <section class="preferences-section">
-        <div class="preferences-section-header preferences-history-section-header">
+        <div class="preferences-section-header preferences-history-section-header section-header">
             <div>
-                <h2>Voting History</h2>
-                <p class="preferences-section-subtitle">Browse your voting history to see what content has influenced your recommendations.</p>
+                <h2 class="section-title">Voting History</h2>
+                <p class="section-subtitle">Browse your voting history to see what content has influenced your recommendations.</p>
             </div>
             <div class="preferences-history-filter-shell">
                 <button class="preferences-filter-btn"
@@ -235,10 +237,10 @@
                                         OnVote="voteType => HandleVoteHistoryVote(content.ContentId, voteType)"
                                         IsSyncing="@_syncingVoteHistoryContentIds.Contains(content.ContentId)">
                                 <MetaContent>
-                                    <span class="content-type-badge">@GetContentTypeDisplay(content.Type)</span>
+                                    <UiBadge Class="content-type-badge">@GetContentTypeDisplay(content.Type)</UiBadge>
                                     @if (content.VoteType is null)
                                     {
-                                        <span class="preferences-cleared-badge">Vote cleared</span>
+                                        <UiBadge Class="preferences-cleared-badge">Vote cleared</UiBadge>
                                     }
                                 </MetaContent>
                             </ContentRow>
@@ -273,7 +275,7 @@
     {
         if (!await AuthService.EnsureAuthenticatedAsync())
         {
-            Navigation.NavigateTo("/login");
+            Navigation.NavigateTo("/");
             return;
         }
 

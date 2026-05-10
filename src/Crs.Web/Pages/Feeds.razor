@@ -11,6 +11,10 @@
 <PageTitle>My Feed - CRS</PageTitle>
 
 <div class="page-container">
+    <UiPageHeader Eyebrow="Recommendations"
+                  Title="My Feed"
+                  Subtitle="Personalized content from your saved sources and social connections." />
+
     <div class="feed-container">
         @if (_content == null)
         {
@@ -58,7 +62,7 @@
                     @if (contentOfType.Any())
                     {
                         <div class="feed-section">
-                            <h2 class="section-title">@GetContentTypeDisplay(type)</h2>
+                            <UiSectionHeader Title="@GetContentTypeDisplay(type)" />
                             <div class="content-table">
                                 @foreach (var content in contentOfType)
                                 {
@@ -77,7 +81,7 @@
             }
 
             <div class="feed-section">
-                <h2 class="section-title">Socials</h2>
+                <UiSectionHeader Title="Socials" Subtitle="Recent posts from the accounts you follow." />
                 <div class="x-feed-container">
                     <div class="x-feed-header">
                         @if (_followedAccounts.Any())
@@ -216,7 +220,7 @@
     {
         if (!await AuthService.EnsureAuthenticatedAsync())
         {
-            Navigation.NavigateTo("/login");
+            Navigation.NavigateTo("/");
             return;
         }
 
@@ -565,7 +569,7 @@
     {
         if (!AuthService.CurrentState.IsAuthenticated)
         {
-            Navigation.NavigateTo("/login");
+            Navigation.NavigateTo("/");
         }
     }
 

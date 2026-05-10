@@ -12,13 +12,6 @@
     margin-bottom: 0;
 }
 
-.section-title {
-    font-size: 1.5rem;
-    margin-bottom: var(--space-4);
-    color: var(--text-primary);
-    font-weight: 600;
-}
-
 .x-feed-container {
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
@@ -36,14 +29,14 @@
 }
 
 .x-feed-settings-btn {
-    width: 40px;
-    height: 40px;
+    width: 2.5rem;
+    height: 2.5rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background-color: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 999px;
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-xl);
     color: var(--text-secondary);
     cursor: pointer;
     transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
@@ -51,8 +44,8 @@
 
 .x-feed-settings-btn:hover {
     color: var(--text-primary);
-    border-color: var(--text-secondary);
-    background-color: var(--bg-tertiary);
+    border-color: var(--border-subtle);
+    background-color: var(--surface-hover);
 }
 
 .x-feed-settings-btn ::deep .x-feed-settings-icon {
@@ -121,8 +114,14 @@
     gap: var(--space-3);
     border: 1px solid var(--border-color);
     padding: var(--space-2) var(--space-3);
-    border-radius: 10px;
+    border-radius: var(--radius-xl);
     background-color: var(--bg-secondary);
+    transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.x-followed-item:hover {
+    border-color: var(--border-subtle);
+    background-color: var(--surface-hover);
 }
 
 .x-followed-item > div {
@@ -195,6 +194,12 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+    transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.x-post-card:hover {
+    border-color: var(--border-subtle);
+    background-color: var(--surface-overlay);
 }
 
 .x-post-header {
@@ -224,7 +229,7 @@
 
 .x-post-media {
     width: 100%;
-    border-radius: 10px;
+    border-radius: var(--radius-xl);
     max-height: 180px;
     object-fit: cover;
 }

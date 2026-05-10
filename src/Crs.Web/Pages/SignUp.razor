@@ -7,6 +7,7 @@
 <div class="auth-container">
     <div class="auth-card">
         <h1>Sign Up</h1>
+        <p class="subtitle">Create an account to start building your recommendation profile.</p>
 
         @if (!AuthService.IsRegistrationEnabled)
         {
@@ -20,7 +21,7 @@
             </AlertMessage>
 
             <p class="auth-footer">
-                Already have an account? <a href="/login">Sign In</a>
+                Already have an account? <a href="/">Sign In</a>
             </p>
         }
         else
@@ -70,7 +71,7 @@
             </EditForm>
 
             <p class="auth-footer">
-                Already have an account? <a href="/login">Sign In</a>
+                Already have an account? <a href="/">Sign In</a>
             </p>
         }
     </div>

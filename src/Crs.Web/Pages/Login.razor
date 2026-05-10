@@ -4,125 +4,17 @@
 
 <PageTitle>Sign In - CRS</PageTitle>
 
-<div class="auth-container">
-    <div class="auth-card">
-        <h1>Sign In</h1>
-
-        @if (!string.IsNullOrEmpty(_errorMessage))
-        {
-            <AlertMessage Variant="AlertVariant.Error">@_errorMessage</AlertMessage>
-        }
-
-        <EditForm Model="@_model" OnValidSubmit="HandleLogin">
-            <DataAnnotationsValidator />
-
-            <div class="form-group">
-                <label for="email">Email</label>
-                <InputText id="email" @bind-Value="_model.Email" class="form-input" placeholder="your@email.com" />
-                <ValidationMessage For="@(() => _model.Email)" />
-            </div>
-
-            <div class="form-group">
-                <label for="password">Password</label>
-                <InputText id="password" type="password" @bind-Value="_model.Password" class="form-input" placeholder="••••••••" />
-                <ValidationMessage For="@(() => _model.Password)" />
-            </div>
-
-            <button type="submit" class="btn-primary" disabled="@_isLoading">
-                @if (_isLoading)
-                {
-                    <span>Signing in...</span>
-                }
-                else
-                {
-                    <span>Sign In</span>
-                }
-            </button>
-        </EditForm>
-
-        @if (ShowDevelopmentLogin)
-        {
-            <button type="button" class="btn-secondary auth-secondary-action" @onclick="HandleDevelopmentLogin" disabled="@_isLoading">
-                Use development login
-            </button>
-        }
-
-        <p class="auth-footer">
-            Don't have an account? <a href="/signup">Sign up</a>
-        </p>
-    </div>
-</div>
+<LoadingSpinner Title="Redirecting" Subtitle="Taking you to the sign-in page." />
 
 @code {
-    private LoginModel _model = new();
-    private string? _errorMessage;
-    private bool _isLoading;
-    private bool ShowDevelopmentLogin => AuthService.IsDevelopmentLoginEnabled || IsLocalBrowser();
-
     protected override async Task OnInitializedAsync()
     {
         if (await AuthService.EnsureAuthenticatedAsync())
         {
             Navigation.NavigateTo("/feeds");
-        }
-    }
-
-    private async Task HandleLogin()
-    {
-        _isLoading = true;
-        _errorMessage = null;
-
-        var result = await AuthService.LoginAsync(_model.Email, _model.Password);
-
-        if (result.Success)
-        {
-            Navigation.NavigateTo("/feeds");
-        }
-        else
-        {
-            _errorMessage = result.ErrorMessage;
+            return;
         }
 
-        _isLoading = false;
-    }
-
-    private async Task HandleDevelopmentLogin()
-    {
-        _isLoading = true;
-        _errorMessage = null;
-
-        var result = await AuthService.UseDevelopmentLoginAsync();
-        if (result.Success)
-        {
-            Navigation.NavigateTo("/feeds");
-        }
-        else
-        {
-            _errorMessage = result.ErrorMessage;
-        }
-
-        _isLoading = false;
-    }
-
-    private bool IsLocalBrowser()
-    {
-        if (!Uri.TryCreate(Navigation.Uri, UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
-
-        return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-               uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
-               uri.Host.Equals("[::1]", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private class LoginModel
-    {
-        [Required(ErrorMessage = "Email is required")]
-        [EmailAddress(ErrorMessage = "Invalid email address")]
-        public string Email { get; set; } = string.Empty;
-
-        [Required(ErrorMessage = "Password is required")]
-        public string Password { get; set; } = string.Empty;
+        Navigation.NavigateTo("/", replace: true);
     }
 }

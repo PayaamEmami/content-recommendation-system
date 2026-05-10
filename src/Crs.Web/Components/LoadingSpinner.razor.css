@@ -13,18 +13,18 @@
     padding: var(--space-4) var(--space-5);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-xl);
-    background: linear-gradient(135deg, var(--bg-primary), var(--bg-secondary));
+    background: var(--bg-primary);
     box-shadow: var(--shadow-card);
 }
 
 .loading-spinner-wheel {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2.25rem;
+    height: 2.25rem;
     flex-shrink: 0;
     border-radius: 50%;
     border: 3px solid var(--border-color);
     border-top-color: var(--accent-color);
-    box-shadow: 0 0 0 4px var(--bg-secondary);
+    box-shadow: 0 0 0 4px var(--surface-accent);
     animation: loading-spinner-spin 0.85s linear infinite;
 }
 
@@ -50,6 +50,12 @@
 @keyframes loading-spinner-spin {
     to {
         transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .loading-spinner-wheel {
+        animation: none;
     }
 }
 

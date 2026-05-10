@@ -13,10 +13,9 @@
     }
     else
     {
-        <div class="page-header">
-            <h1>Connecting your X account</h1>
-            <p class="subtitle">@_statusMessage</p>
-        </div>
+        <UiPageHeader Eyebrow="Socials"
+                      Title="Connecting your X account"
+                      Subtitle="@_statusMessage" />
     }
 </div>
 
@@ -36,7 +35,7 @@
 
         if (!AuthService.CurrentState.IsAuthenticated)
         {
-            Navigation.NavigateTo("/login");
+            Navigation.NavigateTo("/");
             return;
         }
 
