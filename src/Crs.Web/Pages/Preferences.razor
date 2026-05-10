@@ -1,7 +1,6 @@
 @page "/preferences"
 @using Crs.Core.Enums
 @inject AuthService AuthService
-@inject FeedService FeedService
 @inject PreferencesService PreferencesService
 @inject ThemeService ThemeService
 @inject NavigationManager Navigation
@@ -9,15 +8,13 @@
 
 <PageTitle>Preferences - CRS</PageTitle>
 
-<div class="page-container preferences-page">
-    <UiPageHeader Eyebrow="Personalization"
-                  Title="Preferences"
-                  Subtitle="Tune the recommendation experience and review the content signals CRS has learned from." />
+<div class="page-container preferences-page settings-page">
+    <UiPageHeader Title="Preferences" Class="compact-page-header" />
+    <div class="settings-page-divider"></div>
 
     <section class="preferences-section">
         <UiSectionHeader Class="preferences-section-header"
-                         Title="General Settings"
-                         Subtitle="Manage your account preferences and personalize how the app works for you." />
+                         Title="General Settings" />
 
         <div class="preferences-section-body">
             <div class="preferences-setting-row">
@@ -25,11 +22,19 @@
                     <h3>Theme</h3>
                 </div>
                 <div class="theme-options">
-                    <button class="@(ThemeService.IsDarkMode ? "btn-primary" : "btn-secondary")" @onclick="() => SetThemeAsync(true)">
-                        Dark
+                    <button class="theme-option-btn @(ThemeService.IsDarkMode ? "active" : "")"
+                            type="button"
+                            @onclick="() => SetThemeAsync(true)"
+                            aria-label="Use dark theme"
+                            title="Dark theme">
+                        <UiSvgIcon Kind="SvgIconKind.Moon" Class="theme-option-icon" />
                     </button>
-                    <button class="@(!ThemeService.IsDarkMode ? "btn-primary" : "btn-secondary")" @onclick="() => SetThemeAsync(false)">
-                        Light
+                    <button class="theme-option-btn @(!ThemeService.IsDarkMode ? "active" : "")"
+                            type="button"
+                            @onclick="() => SetThemeAsync(false)"
+                            aria-label="Use light theme"
+                            title="Light theme">
+                        <UiSvgIcon Kind="SvgIconKind.Sun" Class="theme-option-icon" />
                     </button>
                 </div>
             </div>
@@ -38,8 +43,7 @@
 
     <section class="preferences-section">
         <UiSectionHeader Class="preferences-section-header"
-                         Title="Content Examples"
-                         Subtitle="Add specific content to give the recommendation system more examples to learn from." />
+                         Title="Content Examples" />
 
         <div class="preferences-section-body">
             @if (!string.IsNullOrWhiteSpace(_errorMessage))
@@ -67,21 +71,21 @@
 
                                     <div class="form-group">
                                         <label for="content-type">Content Type</label>
-                                        <InputSelect id="content-type" @bind-Value="_formModel.ContentType" class="form-input">
-                                            <option value="">Select...</option>
-                                            @foreach (var type in Enum.GetValues<ContentType>())
-                                            {
-                                                <option value="@type">@GetContentTypeDisplay(type)</option>
-                                            }
-                                        </InputSelect>
+                                        <UiSelect Id="content-type"
+                                                  TValue="ContentType?"
+                                                  Value="@_formModel.ContentType"
+                                                  ValueChanged="value => _formModel.ContentType = value"
+                                                  Options="@ContentTypeOptions"
+                                                  Placeholder="Select..." />
                                     </div>
 
                                     <div class="form-group">
                                         <label for="content-vote">Feedback</label>
-                                        <InputSelect id="content-vote" @bind-Value="_formModel.VoteType" class="form-input">
-                                            <option value="@VoteType.Upvote">Upvote</option>
-                                            <option value="@VoteType.Downvote">Downvote</option>
-                                        </InputSelect>
+                                        <UiSelect Id="content-vote"
+                                                  TValue="VoteType"
+                                                  Value="@_formModel.VoteType"
+                                                  ValueChanged="value => _formModel.VoteType = value"
+                                                  Options="@VoteTypeOptions" />
                                     </div>
 
                                     <div class="form-group form-group-wide">
@@ -173,103 +177,24 @@
         </div>
     </section>
 
-    <section class="preferences-section">
-        <div class="preferences-section-header preferences-history-section-header section-header">
-            <div>
-                <h2 class="section-title">Voting History</h2>
-                <p class="section-subtitle">Browse your voting history to see what content has influenced your recommendations.</p>
-            </div>
-            <div class="preferences-history-filter-shell">
-                <button class="preferences-filter-btn"
-                        type="button"
-                        @onclick="ToggleVoteHistoryFilters"
-                        aria-label="Filter voting history"
-                        aria-expanded="@_showVoteHistoryFilters"
-                        title="@($"Filter voting history: {GetVoteHistoryFilterLabel(_activeVoteHistoryFilter)}")">
-                    <UiSvgIcon Kind="SvgIconKind.Filter" Class="preferences-filter-icon" />
-                </button>
-
-                @if (_showVoteHistoryFilters)
-                {
-                    <div class="preferences-filter-menu" role="menu" aria-label="Voting history filter">
-                        @foreach (var filter in Enum.GetValues<VoteHistoryFilter>())
-                        {
-                            <button class="preferences-filter-option @(_activeVoteHistoryFilter == filter ? "active" : "")"
-                                    type="button"
-                                    @onclick="() => SetVoteHistoryFilter(filter)">
-                                @GetVoteHistoryFilterLabel(filter)
-                            </button>
-                        }
-                    </div>
-                }
-            </div>
-        </div>
-
-        <div class="preferences-section-body">
-                @{
-                    var visibleVoteHistory = GetVisibleVoteHistory();
-                }
-
-                @if (!string.IsNullOrWhiteSpace(_voteHistoryError))
-                {
-                    <AlertMessage Variant="AlertVariant.Error">@_voteHistoryError</AlertMessage>
-                }
-
-                @if (_isVoteHistoryLoading)
-                {
-                    <LoadingSpinner Title="Loading voting history" Subtitle="Pulling in the content you have voted on so you can review it here." />
-                }
-                else if (!visibleVoteHistory.Any())
-                {
-                    <EmptyState Message="No voting history yet" />
-                }
-                else
-                {
-                    <div class="content-table preferences-history-list themed-scrollbar">
-                        @foreach (var content in visibleVoteHistory)
-                        {
-                            <ContentRow Class="@(content.VoteType is null ? "preferences-history-row vote-cleared" : "preferences-history-row")"
-                                        Title="@content.Title"
-                                        Url="@content.Url"
-                                        DateText="@FormatDate(content.ContentDate)"
-                                        Description="@content.Description"
-                                        CurrentVote="@content.VoteType"
-                                        OnVote="voteType => HandleVoteHistoryVote(content.ContentId, voteType)"
-                                        IsSyncing="@_syncingVoteHistoryContentIds.Contains(content.ContentId)">
-                                <MetaContent>
-                                    <UiBadge Class="content-type-badge">@GetContentTypeDisplay(content.Type)</UiBadge>
-                                    @if (content.VoteType is null)
-                                    {
-                                        <UiBadge Class="preferences-cleared-badge">Vote cleared</UiBadge>
-                                    }
-                                </MetaContent>
-                            </ContentRow>
-                        }
-                    </div>
-                }
-        </div>
-    </section>
 </div>
 
 @code {
     private readonly List<PreferenceItem> _content = new();
-    private readonly List<VoteHistoryItem> _voteHistory = new();
-    private readonly Dictionary<Guid, VoteType> _serverVoteHistoryStates = new();
-    private readonly HashSet<Guid> _syncingVoteHistoryContentIds = new();
-    private readonly Dictionary<Guid, VoteType?> _desiredVoteHistoryStates = new();
-    private readonly Dictionary<Guid, DateTime> _lastVoteHistoryActionAt = new();
-    private readonly HashSet<Guid> _sessionClearedVoteHistoryContentIds = new();
-    private static readonly TimeSpan VoteHistoryActionDebounceWindow = TimeSpan.FromMilliseconds(400);
     private ContentFormModel _formModel = new();
     private Guid? _editingContentId;
     private bool _isLoading = true;
-    private bool _isVoteHistoryLoading = true;
     private bool _isSaving;
-    private bool _showVoteHistoryFilters;
     private string? _errorMessage;
     private string? _successMessage;
-    private string? _voteHistoryError;
-    private VoteHistoryFilter _activeVoteHistoryFilter = VoteHistoryFilter.All;
+    private static readonly IReadOnlyList<UiSelectOption<ContentType?>> ContentTypeOptions = Enum.GetValues<ContentType>()
+        .Select(type => new UiSelectOption<ContentType?>((ContentType?)type, GetContentTypeDisplay(type)))
+        .ToArray();
+    private static readonly IReadOnlyList<UiSelectOption<VoteType>> VoteTypeOptions = new[]
+    {
+        new UiSelectOption<VoteType>(VoteType.Upvote, "Upvote"),
+        new UiSelectOption<VoteType>(VoteType.Downvote, "Downvote")
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -285,7 +210,7 @@
 
     private async Task LoadPageDataAsync()
     {
-        await Task.WhenAll(LoadContentAsync(), LoadVoteHistoryAsync());
+        await LoadContentAsync();
     }
 
     private async Task LoadContentAsync()
@@ -294,31 +219,6 @@
         _content.Clear();
         _content.AddRange(await PreferencesService.GetPreferencesAsync());
         _isLoading = false;
-    }
-
-    private async Task LoadVoteHistoryAsync()
-    {
-        _isVoteHistoryLoading = true;
-        _voteHistoryError = null;
-        _showVoteHistoryFilters = false;
-        _voteHistory.Clear();
-        _serverVoteHistoryStates.Clear();
-        _desiredVoteHistoryStates.Clear();
-        _syncingVoteHistoryContentIds.Clear();
-        _lastVoteHistoryActionAt.Clear();
-        _sessionClearedVoteHistoryContentIds.Clear();
-
-        var history = await FeedService.GetVoteHistoryAsync();
-        foreach (var item in history.OrderByDescending(GetVoteHistorySortDate))
-        {
-            _voteHistory.Add(item);
-            if (item.VoteType is { } voteType)
-            {
-                _serverVoteHistoryStates[item.ContentId] = voteType;
-            }
-        }
-
-        _isVoteHistoryLoading = false;
     }
 
     private async Task HandleSubmitAsync()
@@ -395,151 +295,6 @@
         await ThemeService.SetThemeAsync(isDarkMode);
     }
 
-    private void ToggleVoteHistoryFilters()
-    {
-        _showVoteHistoryFilters = !_showVoteHistoryFilters;
-    }
-
-    private void SetVoteHistoryFilter(VoteHistoryFilter filter)
-    {
-        _activeVoteHistoryFilter = filter;
-        _showVoteHistoryFilters = false;
-    }
-
-    private Task HandleVoteHistoryVote(Guid contentId, VoteType voteType)
-    {
-        if (_lastVoteHistoryActionAt.TryGetValue(contentId, out var lastActionAt) &&
-            DateTime.UtcNow - lastActionAt < VoteHistoryActionDebounceWindow)
-        {
-            return Task.CompletedTask;
-        }
-
-        var historyItem = _voteHistory.FirstOrDefault(item => item.ContentId == contentId);
-        if (historyItem == null)
-        {
-            return Task.CompletedTask;
-        }
-
-        _voteHistoryError = null;
-        _lastVoteHistoryActionAt[contentId] = DateTime.UtcNow;
-
-        var currentVote = historyItem.VoteType;
-        VoteType? nextVote = currentVote == voteType ? null : voteType;
-
-        historyItem.VoteType = nextVote;
-        if (nextVote is null)
-        {
-            _sessionClearedVoteHistoryContentIds.Add(contentId);
-        }
-        else
-        {
-            _sessionClearedVoteHistoryContentIds.Remove(contentId);
-        }
-
-        _desiredVoteHistoryStates[contentId] = nextVote;
-
-        if (!_syncingVoteHistoryContentIds.Contains(contentId))
-        {
-            _ = SyncVoteHistoryStateAsync(contentId);
-        }
-
-        StateHasChanged();
-        return Task.CompletedTask;
-    }
-
-    private async Task SyncVoteHistoryStateAsync(Guid contentId)
-    {
-        _syncingVoteHistoryContentIds.Add(contentId);
-
-        try
-        {
-            while (_desiredVoteHistoryStates.TryGetValue(contentId, out var desiredVoteState))
-            {
-                var previousServerVoteState = _serverVoteHistoryStates.TryGetValue(contentId, out var serverVote)
-                    ? serverVote
-                    : (VoteType?)null;
-
-                var succeeded = await PersistVoteHistoryStateAsync(contentId, desiredVoteState);
-                if (!succeeded)
-                {
-                    ApplyVoteHistoryState(contentId, previousServerVoteState);
-                    _desiredVoteHistoryStates[contentId] = previousServerVoteState;
-                    _voteHistoryError = "We couldn't update that vote. Please try again.";
-                    break;
-                }
-
-                if (desiredVoteState is { } persistedVote)
-                {
-                    _serverVoteHistoryStates[contentId] = persistedVote;
-                    _sessionClearedVoteHistoryContentIds.Remove(contentId);
-                }
-                else
-                {
-                    _serverVoteHistoryStates.Remove(contentId);
-                    _sessionClearedVoteHistoryContentIds.Add(contentId);
-                }
-
-                if (_desiredVoteHistoryStates.TryGetValue(contentId, out var latestDesiredState) &&
-                    latestDesiredState == desiredVoteState)
-                {
-                    _desiredVoteHistoryStates.Remove(contentId);
-                }
-            }
-        }
-        finally
-        {
-            _syncingVoteHistoryContentIds.Remove(contentId);
-            StateHasChanged();
-        }
-    }
-
-    private async Task<bool> PersistVoteHistoryStateAsync(Guid contentId, VoteType? desiredVoteState)
-    {
-        var historyItem = _voteHistory.FirstOrDefault(item => item.ContentId == contentId);
-        if (historyItem == null)
-        {
-            return false;
-        }
-
-        if (desiredVoteState is null)
-        {
-            return await FeedService.RemoveVoteAsync(contentId);
-        }
-
-        var result = await FeedService.VoteAsync(contentId, desiredVoteState.Value);
-        if (result == null)
-        {
-            return false;
-        }
-
-        if (_desiredVoteHistoryStates.TryGetValue(contentId, out var latestDesiredState) && latestDesiredState == desiredVoteState)
-        {
-            historyItem.VoteType = result.VoteType;
-            historyItem.VoteCreatedAt = result.CreatedAt;
-            historyItem.VoteUpdatedAt = result.UpdatedAt;
-        }
-
-        return true;
-    }
-
-    private void ApplyVoteHistoryState(Guid contentId, VoteType? voteState)
-    {
-        var historyItem = _voteHistory.FirstOrDefault(item => item.ContentId == contentId);
-        if (historyItem == null)
-        {
-            return;
-        }
-
-        historyItem.VoteType = voteState;
-        if (voteState is null)
-        {
-            _sessionClearedVoteHistoryContentIds.Add(contentId);
-            return;
-        }
-
-        _sessionClearedVoteHistoryContentIds.Remove(contentId);
-    }
-
     private void ResetForm()
     {
         _editingContentId = null;
@@ -551,44 +306,6 @@
         ContentType.BlogPost => "Blog Post",
         _ => type.ToString()
     };
-
-    private List<VoteHistoryItem> GetVisibleVoteHistory()
-    {
-        return _voteHistory
-            .Where(ShouldShowVoteHistoryItem)
-            .OrderByDescending(GetVoteHistorySortDate)
-            .ToList();
-    }
-
-    private bool ShouldShowVoteHistoryItem(VoteHistoryItem item)
-    {
-        if (item.VoteType is null)
-        {
-            return _sessionClearedVoteHistoryContentIds.Contains(item.ContentId);
-        }
-
-        return _activeVoteHistoryFilter switch
-        {
-            VoteHistoryFilter.Upvoted => item.VoteType == VoteType.Upvote,
-            VoteHistoryFilter.Downvoted => item.VoteType == VoteType.Downvote,
-            _ => true
-        };
-    }
-
-    private static string GetVoteHistoryFilterLabel(VoteHistoryFilter filter)
-    {
-        return filter switch
-        {
-            VoteHistoryFilter.Upvoted => "Upvoted",
-            VoteHistoryFilter.Downvoted => "Downvoted",
-            _ => "All"
-        };
-    }
-
-    private static DateTime GetVoteHistorySortDate(VoteHistoryItem item)
-    {
-        return item.VoteUpdatedAt ?? item.VoteCreatedAt;
-    }
 
     private static string FormatDate(DateTime dateTime)
     {
@@ -619,10 +336,4 @@
         public VoteType VoteType { get; set; } = VoteType.Upvote;
     }
 
-    private enum VoteHistoryFilter
-    {
-        All,
-        Upvoted,
-        Downvoted
-    }
 }

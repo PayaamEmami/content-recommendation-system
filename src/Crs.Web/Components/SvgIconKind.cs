@@ -21,5 +21,7 @@ public enum SvgIconKind
     ExternalLink,
     ArrowUp,
     ArrowDown,
-    Sparkles
+    Sparkles,
+    Sun,
+    Moon
 }

@@ -10,13 +10,19 @@
 .add-source-panel {
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-2xl);
     padding: var(--space-6);
     margin-bottom: var(--space-8);
     box-shadow: var(--shadow-card);
 }
 
 .add-source-tabs {
+    margin-bottom: var(--space-5);
+}
+
+.sources-page > .section-header {
+    border-top: 1px solid var(--border-color);
+    padding-top: var(--space-6);
     margin-bottom: var(--space-5);
 }
 
@@ -62,6 +68,36 @@
     cursor: pointer;
     padding: 0;
     text-decoration: underline;
+}
+
+.format-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-lg);
+    background: transparent;
+    color: var(--text-secondary);
+    transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.format-toggle-btn:hover,
+.format-toggle-btn.expanded {
+    color: var(--text-primary);
+    border-color: var(--border-subtle);
+    background-color: var(--surface-hover);
+}
+
+.format-toggle-btn ::deep .format-toggle-icon {
+    width: 1rem;
+    height: 1rem;
+    transition: transform var(--transition-fast);
+}
+
+.format-toggle-btn.expanded ::deep .format-toggle-icon {
+    transform: rotate(180deg);
 }
 
 .json-example {
@@ -148,7 +184,7 @@
 .sources-container {
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-2xl);
     overflow: hidden;
     box-shadow: var(--shadow-card);
 }

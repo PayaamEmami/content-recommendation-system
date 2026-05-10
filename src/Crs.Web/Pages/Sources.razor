@@ -7,10 +7,9 @@
 
 <PageTitle>My Sources - CRS</PageTitle>
 
-<div class="page-container">
-  <UiPageHeader Eyebrow="Library"
-                Title="My Sources"
-                Subtitle="Connect, import, export, and manage the sources that power your recommendations." />
+<div class="page-container sources-page settings-page">
+  <UiPageHeader Title="Sources" Class="compact-page-header" />
+  <div class="settings-page-divider"></div>
 
   <div class="add-source-panel">
     <div class="add-source-tabs ui-tabs">
@@ -47,13 +46,11 @@
             </div>
             <div class="form-group">
               <label for="category">Category</label>
-              <InputSelect id="category" @bind-Value="_newSource.Category" class="form-input">
-                <option value="">Select...</option>
-                @foreach (var type in Enum.GetValues<ContentType>())
-                {
-                  <option value="@type">@GetContentTypeDisplay(type)</option>
-                }
-              </InputSelect>
+              <UiSelect Id="category"
+                        TValue="ContentType"
+                        Value="@_newSource.Category"
+                        ValueChanged="value => _newSource.Category = value"
+                        Options="@ContentTypeOptions" />
               <ValidationMessage For="@(() => _newSource.Category)" />
             </div>
             <div class="form-group form-group-wide">
@@ -92,8 +89,13 @@
           <div class="import-section">
             <div class="import-section-header">
               <label for="source-import-json" class="import-section-title">Paste JSON</label>
-              <button type="button" class="link-btn"
-                @onclick="() => _showJsonExample = !_showJsonExample">@(_showJsonExample ? "Hide" : "Show") format</button>
+              <button type="button"
+                      class="format-toggle-btn @(_showJsonExample ? "expanded" : "")"
+                      @onclick="() => _showJsonExample = !_showJsonExample"
+                      aria-label="@(_showJsonExample ? "Hide JSON format example" : "Show JSON format example")"
+                      title="@(_showJsonExample ? "Hide format" : "Show format")">
+                <UiSvgIcon Kind="SvgIconKind.ChevronDown" Class="format-toggle-icon" />
+              </button>
             </div>
             <p class="bulk-hint">Paste a JSON object containing a <code>sources</code> array.</p>
 
@@ -157,8 +159,6 @@
       }
     </div>
 
-  <!-- Sources List -->
-  <UiSectionHeader Title="Connected Sources" Subtitle="Review source health, activity, and sync settings." />
   <div class="sources-container">
     @if (_isLoadingSources && _sources == null)
     {
@@ -208,12 +208,10 @@
                       <InputText @bind-Value="_editModel.Name" class="form-input" placeholder="Name" />
                     </div>
                     <div class="form-group">
-                      <InputSelect @bind-Value="_editModel.Category" class="form-input">
-                        @foreach (var type in Enum.GetValues<ContentType>())
-                        {
-                          <option value="@type">@GetContentTypeDisplay(type)</option>
-                        }
-                      </InputSelect>
+                      <UiSelect TValue="ContentType"
+                                Value="@_editModel.Category"
+                                ValueChanged="value => _editModel.Category = value"
+                                Options="@ContentTypeOptions" />
                     </div>
                     <div class="form-group form-group-url">
                       <InputText @bind-Value="_editModel.Url" class="form-input" placeholder="URL" />
@@ -331,6 +329,9 @@
   private string? _exportSuccessMessage;
   private bool _isLoadingSources = true;
   private string? _loadSourcesError;
+  private static readonly IReadOnlyList<UiSelectOption<ContentType>> ContentTypeOptions = Enum.GetValues<ContentType>()
+    .Select(type => new UiSelectOption<ContentType>(type, GetContentTypeDisplay(type)))
+    .ToArray();
   private bool HasLoadedSources => _sources != null && _sources.Count > 0;
   private bool CanExport => !_isExporting && HasLoadedSources;
 

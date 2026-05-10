@@ -11,9 +11,8 @@
 <PageTitle>My Feed - CRS</PageTitle>
 
 <div class="page-container">
-    <UiPageHeader Eyebrow="Recommendations"
-                  Title="My Feed"
-                  Subtitle="Personalized content from your saved sources and social connections." />
+    <UiPageHeader Title="Feeds" Class="compact-page-header" />
+    <div class="settings-page-divider"></div>
 
     <div class="feed-container">
         @if (_content == null)
@@ -81,17 +80,15 @@
             }
 
             <div class="feed-section">
-                <UiSectionHeader Title="Socials" Subtitle="Recent posts from the accounts you follow." />
+                <UiSectionHeader Title="Socials">
+                    @if (_followedAccounts.Any())
+                    {
+                        <button class="x-feed-settings-btn" @onclick="ToggleXSettings" aria-label="X feed settings">
+                            <UiSvgIcon Kind="SvgIconKind.Settings" Class="x-feed-settings-icon" />
+                        </button>
+                    }
+                </UiSectionHeader>
                 <div class="x-feed-container">
-                    <div class="x-feed-header">
-                        @if (_followedAccounts.Any())
-                        {
-                            <button class="x-feed-settings-btn" @onclick="ToggleXSettings" aria-label="X feed settings">
-                                <UiSvgIcon Kind="SvgIconKind.Settings" Class="x-feed-settings-icon" />
-                            </button>
-                        }
-                    </div>
-
                     @if (!string.IsNullOrEmpty(_xError))
                     {
                         <AlertMessage Variant="AlertVariant.Error">@_xError</AlertMessage>

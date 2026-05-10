@@ -5,28 +5,22 @@
 <header class="app-header">
     <div class="header-content">
         <a href="/feeds" class="logo" aria-label="CRS feed">
-            <span class="logo-mark">
-                <UiSvgIcon Kind="SvgIconKind.Sparkles" />
-            </span>
-            <span>CRS</span>
+            CRS
         </a>
-
-        <nav class="main-nav">
-            <NavLink href="/feeds" class="nav-link" Match="NavLinkMatch.All">Feeds</NavLink>
-            <NavLink href="/sources" class="nav-link" Match="NavLinkMatch.Prefix">Sources</NavLink>
-        </nav>
 
         <div class="header-actions">
             <div class="user-menu" tabindex="0" @ref="_userMenuRef" @onfocusout="HandleUserMenuFocusOut" @onkeydown="HandleUserMenuKeyDown">
                 <button class="user-menu-trigger" @onclick="ToggleUserMenu" aria-expanded="@_isUserMenuOpen" aria-haspopup="menu">
+                    <span class="user-avatar" aria-hidden="true">@UserInitial</span>
                     <span class="user-name">@AuthService.CurrentState.DisplayName</span>
-                    <UiSvgIcon Kind="SvgIconKind.ChevronDown" Class="user-menu-chevron" />
                 </button>
 
                 @if (_isUserMenuOpen)
                 {
                     <div class="user-menu-dropdown" role="menu">
+                        <a href="/sources" class="user-menu-item" @onclick="CloseUserMenu">Sources</a>
                         <a href="/preferences" class="user-menu-item" @onclick="CloseUserMenu">Preferences</a>
+                        <a href="/history" class="user-menu-item" @onclick="CloseUserMenu">History</a>
                         <button class="user-menu-item" @onclick="HandleLogout">Logout</button>
                     </div>
                 }
@@ -38,6 +32,7 @@
 @code {
     private bool _isUserMenuOpen;
     private ElementReference _userMenuRef;
+    private string UserInitial => GetInitial(AuthService.CurrentState.DisplayName);
 
     private void ToggleUserMenu()
     {
@@ -78,5 +73,11 @@
         _isUserMenuOpen = false;
         await AuthService.LogoutAsync();
         NavigationManager.NavigateTo("/", forceLoad: true);
+    }
+
+    private static string GetInitial(string? value)
+    {
+        var trimmed = value?.Trim();
+        return string.IsNullOrEmpty(trimmed) ? "U" : trimmed[..1].ToUpperInvariant();
     }
 }

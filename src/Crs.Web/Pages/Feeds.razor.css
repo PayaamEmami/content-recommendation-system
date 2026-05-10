@@ -12,20 +12,17 @@
     margin-bottom: 0;
 }
 
+.feed-section .section-title {
+    font-size: 1rem;
+    font-weight: 500;
+}
+
 .x-feed-container {
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-xl);
     padding: var(--space-6);
     box-shadow: var(--shadow-card);
-}
-
-.x-feed-header {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: var(--space-6);
-    margin-bottom: var(--space-6);
 }
 
 .x-feed-settings-btn {

@@ -1,0 +1,12 @@
+<div class="@CssClass">
+    @ChildContent
+    <UiSvgIcon Kind="SvgIconKind.ChevronDown" Class="ui-select-chevron" />
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private string CssClass => string.Join(" ", new[] { "ui-select-shell", Class }
+        .Where(value => !string.IsNullOrWhiteSpace(value)));
+}
