@@ -42,12 +42,12 @@
         <div class="preferences-section-body">
             @if (!string.IsNullOrWhiteSpace(_errorMessage))
             {
-                <div class="error-message">@_errorMessage</div>
+                <AlertMessage Variant="AlertVariant.Error">@_errorMessage</AlertMessage>
             }
 
             @if (!string.IsNullOrWhiteSpace(_successMessage))
             {
-                <div class="success-message">@_successMessage</div>
+                <AlertMessage Variant="AlertVariant.Success">@_successMessage</AlertMessage>
             }
 
             <div class="preferences-content-stack">
@@ -116,57 +116,31 @@
                     }
                     else if (!_content.Any())
                     {
-                        <div class="empty-state">
-                            <p>No content yet</p>
-                        </div>
+                        <EmptyState Message="No content yet" />
                     }
                     else
                     {
                         <div class="content-table preferences-saved-list themed-scrollbar">
                             @foreach (var content in _content.OrderByDescending(item => item.UpdatedAt))
                             {
-                                <div class="content-row preferences-saved-row">
-                                    <div class="content-vote-controls preferences-example-vote" aria-label="Saved feedback">
-                                        <span class="preferences-sr-only">Saved as @(content.VoteType == VoteType.Upvote ? "upvote" : "downvote") feedback</span>
-                                        <button type="button"
-                                                class="vote-btn vote-up @(content.VoteType == VoteType.Upvote ? "active" : "")"
-                                                disabled
-                                                tabindex="-1"
-                                                aria-hidden="true">
-                                            <span class="vote-icon">&#9650;</span>
-                                        </button>
-                                        <button type="button"
-                                                class="vote-btn vote-down @(content.VoteType == VoteType.Downvote ? "active" : "")"
-                                                disabled
-                                                tabindex="-1"
-                                                aria-hidden="true">
-                                            <span class="vote-icon">&#9660;</span>
-                                        </button>
-                                    </div>
-                                    <div class="content-content">
+                                <ContentRow Class="preferences-saved-row"
+                                            Title="@content.Title"
+                                            Url="@content.Url"
+                                            DateText="@FormatDate(content.UpdatedAt)"
+                                            Description="@content.Description"
+                                            CurrentVote="@content.VoteType"
+                                            VoteControlsDisabled="true"
+                                            HideVoteControlsFromAssistiveTech="true"
+                                            VoteAriaLabel="Saved feedback"
+                                            VoteScreenReaderText="@(content.VoteType == VoteType.Upvote ? "Saved as upvote feedback" : "Saved as downvote feedback")"
+                                            ActionsClass="preferences-content-actions">
+                                    <MetaContent>
                                         @if (content.ContentType.HasValue)
                                         {
-                                            <div class="content-meta">
-                                                <span class="content-type-badge">@GetContentTypeDisplay(content.ContentType.Value)</span>
-                                            </div>
+                                            <span class="content-type-badge">@GetContentTypeDisplay(content.ContentType.Value)</span>
                                         }
-                                        <h3 class="content-row-title">
-                                            @if (!string.IsNullOrWhiteSpace(content.Url))
-                                            {
-                                                <a href="@content.Url" target="_blank" rel="noopener">@content.Title</a>
-                                            }
-                                            else
-                                            {
-                                                <span>@content.Title</span>
-                                            }
-                                            <span class="content-date">@FormatDate(content.UpdatedAt)</span>
-                                        </h3>
-                                        @if (!string.IsNullOrWhiteSpace(content.Description))
-                                        {
-                                            <p class="content-row-description">@content.Description</p>
-                                        }
-                                    </div>
-                                    <div class="content-actions preferences-content-actions">
+                                    </MetaContent>
+                                    <ActionsContent>
                                         @if (!string.IsNullOrWhiteSpace(content.Url))
                                         {
                                             <a href="@content.Url" target="_blank" rel="noopener" class="content-open-btn" title="Open content">
@@ -187,8 +161,8 @@
                                                 title="Delete">
                                             <UiSvgIcon Kind="SvgIconKind.Delete" />
                                         </button>
-                                    </div>
-                                </div>
+                                    </ActionsContent>
+                                </ContentRow>
                             }
                         </div>
                     }
@@ -236,7 +210,7 @@
 
                 @if (!string.IsNullOrWhiteSpace(_voteHistoryError))
                 {
-                    <div class="error-message">@_voteHistoryError</div>
+                    <AlertMessage Variant="AlertVariant.Error">@_voteHistoryError</AlertMessage>
                 }
 
                 @if (_isVoteHistoryLoading)
@@ -245,55 +219,29 @@
                 }
                 else if (!visibleVoteHistory.Any())
                 {
-                    <div class="empty-state">
-                        <p>No voting history yet</p>
-                    </div>
+                    <EmptyState Message="No voting history yet" />
                 }
                 else
                 {
                     <div class="content-table preferences-history-list themed-scrollbar">
                         @foreach (var content in visibleVoteHistory)
                         {
-                            <div class="content-row preferences-history-row @(content.VoteType is null ? "vote-cleared" : string.Empty)">
-                                <div class="content-vote-controls">
-                                    <button class="vote-btn vote-up @(content.VoteType == VoteType.Upvote ? "active" : "")"
-                                            @onclick="() => HandleVoteHistoryVote(content.ContentId, VoteType.Upvote)"
-                                            aria-label="Upvote content"
-                                            aria-busy="@_syncingVoteHistoryContentIds.Contains(content.ContentId)"
-                                            title="Upvote">
-                                        <span class="vote-icon">&#9650;</span>
-                                    </button>
-                                    <button class="vote-btn vote-down @(content.VoteType == VoteType.Downvote ? "active" : "")"
-                                            @onclick="() => HandleVoteHistoryVote(content.ContentId, VoteType.Downvote)"
-                                            aria-label="Downvote content"
-                                            aria-busy="@_syncingVoteHistoryContentIds.Contains(content.ContentId)"
-                                            title="Downvote">
-                                        <span class="vote-icon">&#9660;</span>
-                                    </button>
-                                </div>
-                                <div class="content-content">
-                                    <div class="content-meta">
-                                        <span class="content-type-badge">@GetContentTypeDisplay(content.Type)</span>
-                                        @if (content.VoteType is null)
-                                        {
-                                            <span class="preferences-cleared-badge">Vote cleared</span>
-                                        }
-                                    </div>
-                                    <h3 class="content-row-title">
-                                        <a href="@content.Url" target="_blank" rel="noopener">@content.Title</a>
-                                        <span class="content-date">@FormatDate(content.ContentDate)</span>
-                                    </h3>
-                                    @if (!string.IsNullOrWhiteSpace(content.Description))
+                            <ContentRow Class="@(content.VoteType is null ? "preferences-history-row vote-cleared" : "preferences-history-row")"
+                                        Title="@content.Title"
+                                        Url="@content.Url"
+                                        DateText="@FormatDate(content.ContentDate)"
+                                        Description="@content.Description"
+                                        CurrentVote="@content.VoteType"
+                                        OnVote="voteType => HandleVoteHistoryVote(content.ContentId, voteType)"
+                                        IsSyncing="@_syncingVoteHistoryContentIds.Contains(content.ContentId)">
+                                <MetaContent>
+                                    <span class="content-type-badge">@GetContentTypeDisplay(content.Type)</span>
+                                    @if (content.VoteType is null)
                                     {
-                                        <p class="content-row-description">@content.Description</p>
+                                        <span class="preferences-cleared-badge">Vote cleared</span>
                                     }
-                                </div>
-                                <div class="content-actions">
-                                    <a href="@content.Url" target="_blank" rel="noopener" class="content-open-btn" title="Open content">
-                                        &#8599;
-                                    </a>
-                                </div>
-                            </div>
+                                </MetaContent>
+                            </ContentRow>
                         }
                     </div>
                 }
@@ -321,15 +269,6 @@
     private string? _voteHistoryError;
     private VoteHistoryFilter _activeVoteHistoryFilter = VoteHistoryFilter.All;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            await ThemeService.InitializeAsync();
-            ThemeService.OnThemeChanged += StateHasChanged;
-        }
-    }
-
     protected override async Task OnInitializedAsync()
     {
         if (!await AuthService.EnsureAuthenticatedAsync())
@@ -338,6 +277,7 @@
             return;
         }
 
+        ThemeService.OnThemeChanged += StateHasChanged;
         await LoadPageDataAsync();
     }
 

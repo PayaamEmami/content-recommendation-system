@@ -1,7 +1,6 @@
 @page "/"
 @inject NavigationManager Navigation
 @inject AuthService AuthService
-@inject ThemeService ThemeService
 
 <PageTitle>Welcome - CRS</PageTitle>
 
@@ -25,14 +24,6 @@
     if (await AuthService.EnsureAuthenticatedAsync())
     {
       Navigation.NavigateTo("/feeds");
-    }
-  }
-
-  protected override async Task OnAfterRenderAsync(bool firstRender)
-  {
-    if (firstRender)
-    {
-      await ThemeService.InitializeAsync();
     }
   }
 }

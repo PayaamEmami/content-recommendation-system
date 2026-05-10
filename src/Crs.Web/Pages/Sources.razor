@@ -2,7 +2,6 @@
 @using Crs.Core.Enums
 @inject AuthService AuthService
 @inject SourceService SourceService
-@inject ThemeService ThemeService
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -27,11 +26,11 @@
       <div class="add-source-form">
         @if (!string.IsNullOrEmpty(_errorMessage))
         {
-          <div class="error-message">@_errorMessage</div>
+          <AlertMessage Variant="AlertVariant.Error">@_errorMessage</AlertMessage>
         }
         @if (!string.IsNullOrEmpty(_successMessage))
         {
-          <div class="success-message">@_successMessage</div>
+          <AlertMessage Variant="AlertVariant.Success">@_successMessage</AlertMessage>
         }
 
         <EditForm Model="@_newSource" OnValidSubmit="HandleAddSource">
@@ -102,11 +101,11 @@
 
           @if (!string.IsNullOrEmpty(_importError))
           {
-            <div class="error-message">@_importError</div>
+            <AlertMessage Variant="AlertVariant.Error">@_importError</AlertMessage>
           }
           @if (!string.IsNullOrEmpty(_importSuccess))
           {
-            <div class="success-message">@_importSuccess</div>
+            <AlertMessage Variant="AlertVariant.Success">@_importSuccess</AlertMessage>
           }
 
           <textarea id="source-import-json" @bind="_importJson" class="form-input bulk-textarea" rows="8"
@@ -139,12 +138,12 @@
 
           @if (!HasLoadedSources && !string.IsNullOrEmpty(_loadSourcesError))
           {
-            <div class="error-message">Can't export until your sources load successfully. @_loadSourcesError</div>
+            <AlertMessage Variant="AlertVariant.Error">Can't export until your sources load successfully. @_loadSourcesError</AlertMessage>
           }
 
           @if (!string.IsNullOrEmpty(_exportSuccessMessage))
           {
-            <div class="success-message">@_exportSuccessMessage</div>
+            <AlertMessage Variant="AlertVariant.Success">@_exportSuccessMessage</AlertMessage>
           }
 
           <button type="button" @onclick="HandleExport" class="btn-primary" disabled="@(!CanExport)">
@@ -162,26 +161,26 @@
     }
     else if (!string.IsNullOrEmpty(_loadSourcesError))
     {
-      <div class="sources-empty">
-        <span class="empty-icon" aria-hidden="true">
+      <EmptyState Class="sources-empty"
+                  Title="Couldn't load your sources"
+                  Message="@_loadSourcesError">
+        <Icon>
           <UiSvgIcon Kind="SvgIconKind.Warning" />
-        </span>
-        <p>Couldn't load your sources</p>
-        <span class="empty-hint">@_loadSourcesError</span>
-        <div style="margin-top: 1rem;">
+        </Icon>
+        <ChildContent>
           <button class="btn-secondary" @onclick="LoadSources" disabled="@_isLoadingSources">Retry</button>
-        </div>
-      </div>
+        </ChildContent>
+      </EmptyState>
     }
     else if (_sources is { Count: 0 })
     {
-      <div class="sources-empty">
-        <span class="empty-icon" aria-hidden="true">
+      <EmptyState Class="sources-empty"
+                  Title="No sources yet"
+                  Message="Add your first source to get started">
+        <Icon>
           <UiSvgIcon Kind="SvgIconKind.Library" />
-        </span>
-        <p>No sources yet</p>
-        <span class="empty-hint">Add your first source to get started</span>
-      </div>
+        </Icon>
+      </EmptyState>
     }
     else if (HasLoadedSources)
     {
@@ -195,7 +194,7 @@
               <div class="source-edit-form">
                 @if (!string.IsNullOrEmpty(_editErrorMessage))
                 {
-                  <div class="error-message compact">@_editErrorMessage</div>
+                  <AlertMessage Variant="AlertVariant.Error" Class="alert-message-compact">@_editErrorMessage</AlertMessage>
                 }
                 <EditForm Model="@_editModel" OnValidSubmit="HandleUpdateSource">
                   <DataAnnotationsValidator />
@@ -329,14 +328,6 @@
   private string? _loadSourcesError;
   private bool HasLoadedSources => _sources != null && _sources.Count > 0;
   private bool CanExport => !_isExporting && HasLoadedSources;
-
-  protected override async Task OnAfterRenderAsync(bool firstRender)
-  {
-    if (firstRender)
-    {
-      await ThemeService.InitializeAsync();
-    }
-  }
 
   protected override async Task OnInitializedAsync()
   {

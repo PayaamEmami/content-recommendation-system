@@ -5,7 +5,6 @@
 @inject FeedService FeedService
 @inject SourceService SourceService
 @inject XFeedService XFeedService
-@inject ThemeService ThemeService
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -25,42 +24,27 @@
             }
             else if (!string.IsNullOrEmpty(_sourcesLoadError))
             {
-                <div class="empty-state" style="text-align: center; padding: 3rem 1rem;">
-                    <h2 style="margin-bottom: 1rem; color: var(--text-primary);">Couldn't Load Your Sources</h2>
-                    <p style="margin-bottom: 0.5rem; color: var(--text-secondary);">
-                        @_sourcesLoadError
-                    </p>
-                    <p style="margin-bottom: 2rem; color: var(--text-secondary);">
-                        Once your sources load successfully, we'll be able to show the right next step here.
-                    </p>
+                <EmptyState Title="Couldn't Load Your Sources"
+                            Message="@_sourcesLoadError"
+                            SecondaryMessage="Once your sources load successfully, we'll be able to show the right next step here.">
                     <a href="/sources" class="btn-primary">Go To Sources</a>
-                </div>
+                </EmptyState>
             }
             else if (!_sources.Any())
             {
-                <div class="empty-state" style="text-align: center; padding: 3rem 1rem;">
-                    <h2 style="margin-bottom: 1rem; color: var(--text-primary);">No Sources Yet</h2>
-                    <p style="margin-bottom: 0.5rem; color: var(--text-secondary);">
-                        Start by adding some learning sources like RSS feeds, YouTube channels, or blogs.
-                    </p>
-                    <p style="margin-bottom: 2rem; color: var(--text-secondary);">
-                        Our system will automatically fetch content daily and show personalized recommendations here.
-                    </p>
+                <EmptyState Title="No Sources Yet"
+                            Message="Start by adding some learning sources like RSS feeds, YouTube channels, or blogs."
+                            SecondaryMessage="Our system will automatically fetch content daily and show personalized recommendations here.">
                     <a href="/sources" class="btn-primary">Add Your First Source</a>
-                </div>
+                </EmptyState>
             }
             else
             {
-                <div class="empty-state" style="text-align: center; padding: 3rem 1rem;">
-                    <h2 style="margin-bottom: 1rem; color: var(--text-primary);">Processing Your Sources</h2>
-                    <p style="margin-bottom: 0.5rem; color: var(--text-secondary);">
-                        You have @_sources.Count source@(_sources.Count == 1 ? "" : "s") configured. Our system is working on fetching and analyzing content.
-                    </p>
-                    <p style="margin-bottom: 2rem; color: var(--text-secondary);">
-                        This process runs automatically every 24 hours. Check back soon for personalized recommendations!
-                    </p>
+                <EmptyState Title="Processing Your Sources"
+                            Message="@($"You have {_sources.Count} source{(_sources.Count == 1 ? "" : "s")} configured. Our system is working on fetching and analyzing content.")"
+                            SecondaryMessage="This process runs automatically every 24 hours. Check back soon for personalized recommendations!">
                     <a href="/sources" class="btn-primary">Manage Sources</a>
-                </div>
+                </EmptyState>
             }
         }
 
@@ -78,39 +62,13 @@
                             <div class="content-table">
                                 @foreach (var content in contentOfType)
                                 {
-                                    <div class="content-row">
-                                        <div class="content-vote-controls">
-                                            <button class="vote-btn vote-up @(GetVoteState(content.Id) == VoteType.Upvote ? "active" : "")"
-                                                    @onclick="() => HandleVote(content.Id, VoteType.Upvote)"
-                                                    aria-label="Upvote content"
-                                                    aria-busy="@_syncingVoteContentIds.Contains(content.Id)"
-                                                    title="Upvote">
-                                                <span class="vote-icon">&#9650;</span>
-                                            </button>
-                                            <button class="vote-btn vote-down @(GetVoteState(content.Id) == VoteType.Downvote ? "active" : "")"
-                                                    @onclick="() => HandleVote(content.Id, VoteType.Downvote)"
-                                                    aria-label="Downvote content"
-                                                    aria-busy="@_syncingVoteContentIds.Contains(content.Id)"
-                                                    title="Downvote">
-                                                <span class="vote-icon">&#9660;</span>
-                                            </button>
-                                        </div>
-                                        <div class="content-content">
-                                            <h3 class="content-row-title">
-                                                <a href="@content.Url" target="_blank" rel="noopener">@content.Title</a>
-                                                <span class="content-date">@FormatDate(content.PublishedAt)</span>
-                                            </h3>
-                                            @if (!string.IsNullOrEmpty(content.Description))
-                                            {
-                                                <p class="content-row-description">@content.Description</p>
-                                            }
-                                        </div>
-                                        <div class="content-actions">
-                                            <a href="@content.Url" target="_blank" rel="noopener" class="content-open-btn" title="Open content">
-                                                &#8599;
-                                            </a>
-                                        </div>
-                                    </div>
+                                    <ContentRow Title="@content.Title"
+                                                Url="@content.Url"
+                                                DateText="@FormatDate(content.PublishedAt)"
+                                                Description="@content.Description"
+                                                CurrentVote="@GetVoteState(content.Id)"
+                                                OnVote="voteType => HandleVote(content.Id, voteType)"
+                                                IsSyncing="@_syncingVoteContentIds.Contains(content.Id)" />
                                 }
                             </div>
                         </div>
@@ -132,7 +90,7 @@
 
                     @if (!string.IsNullOrEmpty(_xError))
                     {
-                        <div class="x-feed-error">@_xError</div>
+                        <AlertMessage Variant="AlertVariant.Error">@_xError</AlertMessage>
                     }
 
                     @if (_xLoading)
@@ -253,14 +211,6 @@
     private bool _showXSettings;
     private string? _xError;
     private string _xConnectButtonLabel = "Connect X";
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            await ThemeService.InitializeAsync();
-        }
-    }
 
     protected override async Task OnInitializedAsync()
     {

@@ -1,0 +1,43 @@
+<div class="@CssClass">
+    @if (Icon is not null)
+    {
+        <span class="empty-state-icon" aria-hidden="true">
+            @Icon
+        </span>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Title))
+    {
+        <h2>@Title</h2>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Message))
+    {
+        <p>@Message</p>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(SecondaryMessage))
+    {
+        <p class="empty-state-secondary">@SecondaryMessage</p>
+    }
+
+    @if (ChildContent is not null)
+    {
+        <div class="empty-state-actions">
+            @ChildContent
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public string? SecondaryMessage { get; set; }
+    [Parameter] public RenderFragment? Icon { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private string CssClass => string.Join(" ", new[] { "empty-state", Class }
+        .Where(value => !string.IsNullOrWhiteSpace(value)));
+}
+

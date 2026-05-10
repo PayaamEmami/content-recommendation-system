@@ -1,0 +1,135 @@
+.app-header {
+    background-color: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0 var(--space-8);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    width: 100%;
+}
+
+.header-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+}
+
+.logo {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+.main-nav {
+    display: flex;
+    gap: var(--space-8);
+    align-items: center;
+}
+
+.main-nav ::deep .nav-link {
+    color: var(--text-secondary);
+    font-weight: 500;
+    padding: var(--space-2) 0;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color var(--transition-base), border-color var(--transition-base);
+}
+
+.main-nav ::deep .nav-link:hover {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent-color);
+}
+
+.main-nav ::deep .nav-link.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent-color);
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+}
+
+.user-menu {
+    position: relative;
+}
+
+.user-name {
+    color: inherit;
+    font-size: 0.9rem;
+}
+
+.user-menu-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: var(--space-2) 0;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color var(--transition-base), border-color var(--transition-base);
+}
+
+.user-menu-trigger:hover,
+.user-menu-trigger[aria-expanded="true"] {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent-color);
+}
+
+.user-menu-dropdown {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    min-width: 180px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-menu);
+    padding: 0.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    z-index: 120;
+}
+
+.user-menu-item {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-lg);
+    color: var(--text-secondary);
+    padding: 0.7rem 0.85rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.user-menu-item:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-secondary);
+}
+
+@media (max-width: 768px) {
+    .header-content {
+        flex-wrap: wrap;
+        height: auto;
+        padding: var(--space-4) 0;
+    }
+
+    .main-nav {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+        padding-top: var(--space-4);
+        border-top: 1px solid var(--border-color);
+    }
+}
+

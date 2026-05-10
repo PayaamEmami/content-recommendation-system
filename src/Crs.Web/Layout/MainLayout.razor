@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @inject AuthService AuthService
+@inject ThemeService ThemeService
 @implements IDisposable
 
 <CascadingValue Value="AuthService">
@@ -24,6 +25,14 @@
 
         // Subscribe to auth state changes
         _authService.OnAuthStateChanged += StateHasChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await ThemeService.InitializeAsync();
+        }
     }
 
     public void Dispose()

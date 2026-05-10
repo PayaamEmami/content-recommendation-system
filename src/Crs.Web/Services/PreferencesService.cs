@@ -12,6 +12,7 @@ public class PreferencesService
     private readonly HttpClient _httpClient;
     private readonly AuthService _authService;
     private readonly ILogger<PreferencesService> _logger;
+    private readonly DevelopmentDataStore? _developmentData;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -20,11 +21,16 @@ public class PreferencesService
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public PreferencesService(HttpClient httpClient, AuthService authService, ILogger<PreferencesService> logger)
+    public PreferencesService(
+        HttpClient httpClient,
+        AuthService authService,
+        ILogger<PreferencesService> logger,
+        DevelopmentDataStore? developmentData = null)
     {
         _httpClient = httpClient;
         _authService = authService;
         _logger = logger;
+        _developmentData = developmentData;
     }
 
     private void SetAuthHeader()
@@ -66,6 +72,11 @@ public class PreferencesService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.GetPreferences();
+            }
+
             var response = await SendAuthorizedAsync(() => _httpClient.GetAsync("/api/v1/preferences"));
             if (response == null || !response.IsSuccessStatusCode)
             {
@@ -86,6 +97,11 @@ public class PreferencesService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.CreatePreference(request);
+            }
+
             var response = await SendAuthorizedAsync(() =>
                 _httpClient.PostAsJsonAsync("/api/v1/preferences", request, JsonOptions));
             if (response == null || !response.IsSuccessStatusCode)
@@ -106,6 +122,11 @@ public class PreferencesService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.UpdatePreference(id, request);
+            }
+
             var response = await SendAuthorizedAsync(() =>
                 _httpClient.PutAsJsonAsync($"/api/v1/preferences/{id}", request, JsonOptions));
             if (response == null || !response.IsSuccessStatusCode)
@@ -126,6 +147,11 @@ public class PreferencesService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.DeletePreference(id);
+            }
+
             var response = await SendAuthorizedAsync(() => _httpClient.DeleteAsync($"/api/v1/preferences/{id}"));
             return response != null && response.IsSuccessStatusCode;
         }

@@ -26,3 +26,10 @@ window.downloadFile = (fileName, contentType, content) => {
 window.userMenu = {
     hasFocusWithin: (element) => !!element && element.contains(document.activeElement)
 };
+
+window.theme = {
+    apply: (isDarkMode) => {
+        document.body.classList.toggle('dark-mode', isDarkMode);
+        document.body.classList.toggle('light-mode', !isDarkMode);
+    }
+};

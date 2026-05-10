@@ -15,6 +15,7 @@ public class FeedService
     private readonly HttpClient _httpClient;
     private readonly AuthService _authService;
     private readonly ILogger<FeedService> _logger;
+    private readonly DevelopmentDataStore? _developmentData;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -26,11 +27,13 @@ public class FeedService
     public FeedService(
         HttpClient httpClient,
         AuthService authService,
-        ILogger<FeedService> logger)
+        ILogger<FeedService> logger,
+        DevelopmentDataStore? developmentData = null)
     {
         _httpClient = httpClient;
         _authService = authService;
         _logger = logger;
+        _developmentData = developmentData;
     }
 
     private void SetAuthHeader()
@@ -72,6 +75,11 @@ public class FeedService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.GetFeed(type);
+            }
+
             var response = await SendAuthorizedAsync(() => _httpClient.GetAsync("/api/v1/recommendations"));
             if (response == null)
             {
@@ -128,6 +136,11 @@ public class FeedService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.GetVotes();
+            }
+
             var response = await SendAuthorizedAsync(() => _httpClient.GetAsync("/api/v1/users/me/votes"));
             if (response == null)
             {
@@ -154,6 +167,11 @@ public class FeedService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.GetVoteHistory();
+            }
+
             var response = await SendAuthorizedAsync(() => _httpClient.GetAsync("/api/v1/users/me/vote-history"));
             if (response == null)
             {
@@ -193,6 +211,11 @@ public class FeedService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.Vote(contentId, voteType);
+            }
+
             var request = new { voteType = voteType };
             var response = await SendAuthorizedAsync(() =>
                 _httpClient.PostAsJsonAsync($"/api/v1/content/{contentId}/vote", request, JsonOptions));
@@ -222,6 +245,11 @@ public class FeedService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.RemoveVote(contentId);
+            }
+
             var response = await SendAuthorizedAsync(() =>
                 _httpClient.DeleteAsync($"/api/v1/content/{contentId}/vote"));
             if (response == null)

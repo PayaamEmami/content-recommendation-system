@@ -13,6 +13,7 @@ public class XFeedService
     private readonly HttpClient _httpClient;
     private readonly AuthService _authService;
     private readonly ILogger<XFeedService> _logger;
+    private readonly DevelopmentDataStore? _developmentData;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -20,11 +21,16 @@ public class XFeedService
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public XFeedService(HttpClient httpClient, AuthService authService, ILogger<XFeedService> logger)
+    public XFeedService(
+        HttpClient httpClient,
+        AuthService authService,
+        ILogger<XFeedService> logger,
+        DevelopmentDataStore? developmentData = null)
     {
         _httpClient = httpClient;
         _authService = authService;
         _logger = logger;
+        _developmentData = developmentData;
     }
 
     private void SetAuthHeader()
@@ -66,6 +72,11 @@ public class XFeedService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin)
+            {
+                return null;
+            }
+
             var requestUri = string.IsNullOrWhiteSpace(redirectUri)
                 ? "/api/v1/x/connect-url"
                 : $"/api/v1/x/connect-url?redirectUri={Uri.EscapeDataString(redirectUri)}";
@@ -166,6 +177,11 @@ public class XFeedService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin)
+            {
+                return true;
+            }
+
             var response = await SendAuthorizedAsync(() =>
                 _httpClient.DeleteAsync("/api/v1/x/connection"));
             return response?.IsSuccessStatusCode ?? false;
@@ -181,6 +197,11 @@ public class XFeedService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.GetFollowedAccounts();
+            }
+
             var response = await SendAuthorizedAsync(() =>
                 _httpClient.GetAsync($"/api/v1/x/followed-accounts?refresh={refresh.ToString().ToLowerInvariant()}"));
             if (response == null)
@@ -220,6 +241,11 @@ public class XFeedService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.UpdateSelectedAccounts(followedAccountIds);
+            }
+
             var request = new XSelectedAccountsRequest
             {
                 FollowedAccountIds = followedAccountIds
@@ -264,6 +290,11 @@ public class XFeedService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.GetPosts(limit);
+            }
+
             var response = await SendAuthorizedAsync(() =>
                 _httpClient.GetAsync($"/api/v1/x/posts?limit={limit}"));
             if (response == null)

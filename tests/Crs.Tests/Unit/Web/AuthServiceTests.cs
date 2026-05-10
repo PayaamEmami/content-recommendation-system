@@ -128,17 +128,76 @@ public sealed class AuthServiceTests
         Assert.AreEqual("new-access", authService.CurrentState.AccessToken);
     }
 
+    [TestMethod]
+    public async Task UseDevelopmentLoginAsync_WhenEnabled_SetsDevelopmentAuthState()
+    {
+        var localStorage = new Mock<ILocalStorageService>(MockBehavior.Strict);
+        localStorage.Setup(store => store.SetItemAsync(It.IsAny<string>(), It.IsAny<AuthState>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var authService = CreateAuthService(
+            localStorage,
+            new HttpTestHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)),
+            configurationValues: new Dictionary<string, string?>
+            {
+                ["DevelopmentLogin:Enabled"] = "true"
+            });
+
+        var result = await authService.UseDevelopmentLoginAsync();
+
+        Assert.IsTrue(result.Success);
+        Assert.IsTrue(authService.CurrentState.IsAuthenticated);
+        Assert.IsTrue(authService.CurrentState.IsDevelopmentLogin);
+        Assert.AreEqual("dev-user@localhost", authService.CurrentState.Email);
+    }
+
+    [TestMethod]
+    public async Task UseDevelopmentLoginAsync_WhenDisabled_ReturnsFailure()
+    {
+        var localStorage = new Mock<ILocalStorageService>(MockBehavior.Strict);
+        var authService = CreateAuthService(localStorage, new HttpTestHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
+
+        var result = await authService.UseDevelopmentLoginAsync();
+
+        Assert.IsFalse(result.Success);
+        Assert.IsFalse(authService.CurrentState.IsAuthenticated);
+    }
+
+    [TestMethod]
+    public void IsDevelopmentLoginEnabled_WhenRunningOnLocalhost_ReturnsTrue()
+    {
+        var localStorage = new Mock<ILocalStorageService>(MockBehavior.Strict);
+        var authService = CreateAuthService(
+            localStorage,
+            new HttpTestHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)),
+            navigationManager: new TestNavigationManager("http://localhost:5250/"));
+
+        Assert.IsTrue(authService.IsDevelopmentLoginEnabled);
+    }
+
     private static AuthService CreateAuthService(
         Mock<ILocalStorageService> localStorage,
         HttpTestHandler handler,
-        ILogger<AuthService>? logger = null)
+        ILogger<AuthService>? logger = null,
+        Dictionary<string, string?>? configurationValues = null,
+        TestNavigationManager? navigationManager = null)
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+        var values = new Dictionary<string, string?>
+        {
+            ["Registration:Enabled"] = "true",
+            ["Registration:DisabledMessage"] = "off"
+        };
+
+        if (configurationValues != null)
+        {
+            foreach (var pair in configurationValues)
             {
-                ["Registration:Enabled"] = "true",
-                ["Registration:DisabledMessage"] = "off"
-            })
+                values[pair.Key] = pair.Value;
+            }
+        }
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
             .Build();
 
         var httpClient = new HttpClient(handler)
@@ -146,7 +205,12 @@ public sealed class AuthServiceTests
             BaseAddress = new Uri("https://example.com")
         };
 
-        return new AuthService(httpClient, localStorage.Object, configuration, logger ?? NullLogger<AuthService>.Instance);
+        return new AuthService(
+            httpClient,
+            localStorage.Object,
+            configuration,
+            navigationManager ?? new TestNavigationManager(),
+            logger ?? NullLogger<AuthService>.Instance);
     }
 
     private sealed class RecordingLogger<T> : ILogger<T>

@@ -17,6 +17,7 @@ public class SourceService
     private readonly AuthService _authService;
     private readonly ILogger<SourceService> _logger;
     private readonly IJSRuntime _jsRuntime;
+    private readonly DevelopmentDataStore? _developmentData;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -29,12 +30,14 @@ public class SourceService
         HttpClient httpClient,
         AuthService authService,
         ILogger<SourceService> logger,
-        IJSRuntime jsRuntime)
+        IJSRuntime jsRuntime,
+        DevelopmentDataStore? developmentData = null)
     {
         _httpClient = httpClient;
         _authService = authService;
         _logger = logger;
         _jsRuntime = jsRuntime;
+        _developmentData = developmentData;
     }
 
     public SourceService(
@@ -90,6 +93,11 @@ public class SourceService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.GetSources();
+            }
+
             var response = await SendAuthorizedAsync(() => _httpClient.GetAsync("/api/v1/sources"));
             if (response == null)
             {
@@ -138,6 +146,11 @@ public class SourceService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.AddSource(name, url, category, description);
+            }
+
             var request = new CreateSourceRequest
             {
                 Name = name,
@@ -173,6 +186,11 @@ public class SourceService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.DeleteSource(sourceId);
+            }
+
             var response = await SendAuthorizedAsync(() => _httpClient.DeleteAsync($"/api/v1/sources/{sourceId}"));
             if (response == null)
             {
@@ -200,6 +218,11 @@ public class SourceService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.ToggleSource(sourceId);
+            }
+
             // First, get the current source to determine its state
             var getResponse = await SendAuthorizedAsync(() => _httpClient.GetAsync($"/api/v1/sources/{sourceId}"));
             if (getResponse == null)
@@ -257,6 +280,11 @@ public class SourceService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.UpdateSource(sourceId, name, url, category, description);
+            }
+
             // First get the current source to preserve its IsActive state
             var getResponse = await SendAuthorizedAsync(() => _httpClient.GetAsync($"/api/v1/sources/{sourceId}"));
             if (getResponse == null)
@@ -313,6 +341,11 @@ public class SourceService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
+            {
+                return _developmentData.ImportSources(json);
+            }
+
             var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
             var response = await SendAuthorizedAsync(() => _httpClient.PostAsync("/api/v1/sources/bulk-import", content));
             if (response == null)

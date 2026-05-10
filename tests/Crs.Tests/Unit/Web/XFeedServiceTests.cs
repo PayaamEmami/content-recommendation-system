@@ -83,6 +83,11 @@ public sealed class XFeedServiceTests
         var authHandler = new HttpTestHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
         var authHttpClient = new HttpClient(authHandler) { BaseAddress = new Uri("https://example.com") };
 
-        return new AuthService(authHttpClient, localStorage.Object, configuration, NullLogger<AuthService>.Instance);
+        return new AuthService(
+            authHttpClient,
+            localStorage.Object,
+            configuration,
+            new TestNavigationManager(),
+            NullLogger<AuthService>.Instance);
     }
 }

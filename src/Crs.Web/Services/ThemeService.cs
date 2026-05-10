@@ -46,9 +46,7 @@ public class ThemeService
     {
         try
         {
-            // Apply theme class directly to body element
-            await _jsRuntime.InvokeVoidAsync("eval",
-                $"document.body.className = '{(_isDarkMode ? "dark-mode" : "light-mode")}';");
+            await _jsRuntime.InvokeVoidAsync("theme.apply", _isDarkMode);
         }
         catch
         {

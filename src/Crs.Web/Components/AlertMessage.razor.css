@@ -1,0 +1,40 @@
+.alert-message {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-4);
+}
+
+.alert-message ::deep p:last-child {
+    margin-bottom: 0;
+}
+
+.alert-message-error {
+    background-color: var(--error-bg);
+    color: var(--error-text);
+    border-color: var(--error-border);
+}
+
+.alert-message-success {
+    background-color: var(--success-bg);
+    color: var(--success-text);
+    border-color: var(--success-border);
+}
+
+.alert-message-warning {
+    background-color: var(--warning-bg);
+    color: var(--warning-text);
+    border-color: var(--warning-border);
+}
+
+.alert-message-info {
+    background-color: var(--info-bg);
+    color: var(--info-text);
+    border-color: var(--info-border);
+}
+
+.alert-message-compact {
+    padding: var(--space-2) var(--space-3);
+    font-size: 0.85rem;
+}
+

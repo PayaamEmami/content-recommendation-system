@@ -1,0 +1,84 @@
+@using Crs.Core.Enums
+
+<div class="@CssClass">
+    @if (ShowVoteControls)
+    {
+        <VoteControls CurrentVote="CurrentVote"
+                      OnVote="OnVote"
+                      IsSyncing="IsSyncing"
+                      Disabled="VoteControlsDisabled"
+                      HideFromAssistiveTech="HideVoteControlsFromAssistiveTech"
+                      ScreenReaderText="@VoteScreenReaderText"
+                      AriaLabel="@VoteAriaLabel" />
+    }
+
+    <div class="content-content">
+        @if (MetaContent is not null)
+        {
+            <div class="content-meta">
+                @MetaContent
+            </div>
+        }
+
+        <h3 class="content-row-title">
+            @if (!string.IsNullOrWhiteSpace(Url))
+            {
+                <a href="@Url" target="_blank" rel="noopener">@Title</a>
+            }
+            else
+            {
+                <span>@Title</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(DateText))
+            {
+                <span class="content-date">@DateText</span>
+            }
+        </h3>
+
+        @if (!string.IsNullOrWhiteSpace(Description))
+        {
+            <p class="content-row-description">@Description</p>
+        }
+    </div>
+
+    @if (ActionsContent is not null)
+    {
+        <div class="@ActionsCssClass">
+            @ActionsContent
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(Url))
+    {
+        <div class="content-actions">
+            <a href="@Url" target="_blank" rel="noopener" class="content-open-btn" title="Open content">
+                &#8599;
+            </a>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Url { get; set; }
+    [Parameter] public string? DateText { get; set; }
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public VoteType? CurrentVote { get; set; }
+    [Parameter] public EventCallback<VoteType> OnVote { get; set; }
+    [Parameter] public bool IsSyncing { get; set; }
+    [Parameter] public bool ShowVoteControls { get; set; } = true;
+    [Parameter] public bool VoteControlsDisabled { get; set; }
+    [Parameter] public bool HideVoteControlsFromAssistiveTech { get; set; }
+    [Parameter] public string VoteAriaLabel { get; set; } = "Content feedback";
+    [Parameter] public string? VoteScreenReaderText { get; set; }
+    [Parameter] public RenderFragment? MetaContent { get; set; }
+    [Parameter] public RenderFragment? ActionsContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? ActionsClass { get; set; }
+
+    private string CssClass => string.Join(" ", new[] { "content-row", Class }
+        .Where(value => !string.IsNullOrWhiteSpace(value)));
+
+    private string ActionsCssClass => string.Join(" ", new[] { "content-actions", ActionsClass }
+        .Where(value => !string.IsNullOrWhiteSpace(value)));
+}
+

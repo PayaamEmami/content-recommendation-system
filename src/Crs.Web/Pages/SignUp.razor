@@ -1,7 +1,6 @@
 @page "/signup"
 @inject AuthService AuthService
 @inject NavigationManager Navigation
-@inject ThemeService ThemeService
 
 <PageTitle>Sign Up - CRS</PageTitle>
 
@@ -11,14 +10,14 @@
 
         @if (!AuthService.IsRegistrationEnabled)
         {
-            <div class="info-message" style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 1rem; margin-bottom: 1.5rem; border-radius: 0.375rem;">
-                <p style="margin: 0; color: #92400e;">
+            <AlertMessage Variant="AlertVariant.Warning">
+                <p>
                     <strong>Registration Closed</strong>
                 </p>
-                <p style="margin: 0.5rem 0 0 0; color: #78350f;">
+                <p>
                     @AuthService.RegistrationDisabledMessage
                 </p>
-            </div>
+            </AlertMessage>
 
             <p class="auth-footer">
                 Already have an account? <a href="/login">Sign In</a>
@@ -28,7 +27,7 @@
         {
             @if (!string.IsNullOrEmpty(_errorMessage))
             {
-                <div class="error-message">@_errorMessage</div>
+                <AlertMessage Variant="AlertVariant.Error">@_errorMessage</AlertMessage>
             }
 
             <EditForm Model="@_model" OnValidSubmit="HandleSignUp">
@@ -117,15 +116,6 @@
 
         _isLoading = false;
     }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            await ThemeService.InitializeAsync();
-        }
-    }
-
     private class SignUpModel
     {
         public string? DisplayName { get; set; }

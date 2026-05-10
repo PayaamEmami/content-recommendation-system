@@ -14,10 +14,8 @@ public sealed class ThemeServiceTests
         await service.InitializeAsync();
 
         Assert.HasCount(1, jsRuntime.Calls);
-        Assert.AreEqual("eval", jsRuntime.Calls[0].Identifier);
-#pragma warning disable MSTEST0037
-        Assert.IsTrue(jsRuntime.Calls[0].Args?[0]?.ToString()?.Contains("dark-mode", StringComparison.Ordinal) == true);
-#pragma warning restore MSTEST0037
+        Assert.AreEqual("theme.apply", jsRuntime.Calls[0].Identifier);
+        Assert.IsTrue((bool)jsRuntime.Calls[0].Args![0]!);
     }
 
     [TestMethod]
@@ -30,8 +28,7 @@ public sealed class ThemeServiceTests
 
         Assert.IsFalse(service.IsDarkMode);
         Assert.HasCount(1, jsRuntime.Calls);
-#pragma warning disable MSTEST0037
-        Assert.IsTrue(jsRuntime.Calls[0].Args?[0]?.ToString()?.Contains("light-mode", StringComparison.Ordinal) == true);
-#pragma warning restore MSTEST0037
+        Assert.AreEqual("theme.apply", jsRuntime.Calls[0].Identifier);
+        Assert.IsFalse((bool)jsRuntime.Calls[0].Args![0]!);
     }
 }

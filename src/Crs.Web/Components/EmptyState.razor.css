@@ -1,0 +1,36 @@
+.empty-state {
+    text-align: center;
+    padding: var(--space-8) var(--space-4);
+    color: var(--text-secondary);
+}
+
+.empty-state-icon {
+    display: flex;
+    justify-content: center;
+    margin-bottom: var(--space-3);
+    color: var(--text-tertiary);
+}
+
+.empty-state-icon ::deep .ui-svg {
+    width: 2.5rem;
+    height: 2.5rem;
+}
+
+.empty-state h2 {
+    margin-bottom: var(--space-4);
+    color: var(--text-primary);
+}
+
+.empty-state p {
+    margin-bottom: var(--space-2);
+    color: var(--text-secondary);
+}
+
+.empty-state-secondary {
+    margin-bottom: var(--space-6);
+}
+
+.empty-state-actions {
+    margin-top: var(--space-4);
+}
+

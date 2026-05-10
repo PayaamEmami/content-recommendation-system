@@ -150,12 +150,45 @@ public sealed class FeedServiceTests
         Assert.AreEqual("/api/v1/users/me/vote-history", handler.Requests.Single().RequestUri!.AbsolutePath);
     }
 
-    private static AuthService CreateAuthService(Mock<ILocalStorageService> localStorage)
+    [TestMethod]
+    public async Task GetFeedAsync_WhenDevelopmentLogin_ReturnsFakeDataAndNoRequests()
     {
-        var configuration = new ConfigurationBuilder().Build();
+        var localStorage = new Mock<ILocalStorageService>(MockBehavior.Strict);
+        localStorage.Setup(store => store.SetItemAsync(It.IsAny<string>(), It.IsAny<AuthState>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var authService = CreateAuthService(localStorage, developmentLoginEnabled: true);
+        await authService.UseDevelopmentLoginAsync();
+
+        var handler = new HttpTestHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var service = new FeedService(
+            new HttpClient(handler) { BaseAddress = new Uri("https://example.com") },
+            authService,
+            NullLogger<FeedService>.Instance,
+            new DevelopmentDataStore());
+
+        var result = await service.GetFeedAsync();
+
+        Assert.IsNotEmpty(result);
+        Assert.HasCount(0, handler.Requests);
+    }
+
+    private static AuthService CreateAuthService(Mock<ILocalStorageService> localStorage, bool developmentLoginEnabled = false)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["DevelopmentLogin:Enabled"] = developmentLoginEnabled.ToString()
+            })
+            .Build();
         var authHandler = new HttpTestHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
         var authHttpClient = new HttpClient(authHandler) { BaseAddress = new Uri("https://example.com") };
 
-        return new AuthService(authHttpClient, localStorage.Object, configuration, NullLogger<AuthService>.Instance);
+        return new AuthService(
+            authHttpClient,
+            localStorage.Object,
+            configuration,
+            new TestNavigationManager(),
+            NullLogger<AuthService>.Instance);
     }
 }

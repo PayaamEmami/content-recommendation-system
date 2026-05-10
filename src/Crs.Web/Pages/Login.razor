@@ -1,7 +1,6 @@
 @page "/login"
 @inject AuthService AuthService
 @inject NavigationManager Navigation
-@inject ThemeService ThemeService
 
 <PageTitle>Sign In - CRS</PageTitle>
 
@@ -11,7 +10,7 @@
 
         @if (!string.IsNullOrEmpty(_errorMessage))
         {
-            <div class="error-message">@_errorMessage</div>
+            <AlertMessage Variant="AlertVariant.Error">@_errorMessage</AlertMessage>
         }
 
         <EditForm Model="@_model" OnValidSubmit="HandleLogin">
@@ -41,6 +40,13 @@
             </button>
         </EditForm>
 
+        @if (ShowDevelopmentLogin)
+        {
+            <button type="button" class="btn-secondary auth-secondary-action" @onclick="HandleDevelopmentLogin" disabled="@_isLoading">
+                Use development login
+            </button>
+        }
+
         <p class="auth-footer">
             Don't have an account? <a href="/signup">Sign up</a>
         </p>
@@ -51,6 +57,7 @@
     private LoginModel _model = new();
     private string? _errorMessage;
     private bool _isLoading;
+    private bool ShowDevelopmentLogin => AuthService.IsDevelopmentLoginEnabled || IsLocalBrowser();
 
     protected override async Task OnInitializedAsync()
     {
@@ -79,12 +86,34 @@
         _isLoading = false;
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private async Task HandleDevelopmentLogin()
     {
-        if (firstRender)
+        _isLoading = true;
+        _errorMessage = null;
+
+        var result = await AuthService.UseDevelopmentLoginAsync();
+        if (result.Success)
         {
-            await ThemeService.InitializeAsync();
+            Navigation.NavigateTo("/feeds");
         }
+        else
+        {
+            _errorMessage = result.ErrorMessage;
+        }
+
+        _isLoading = false;
+    }
+
+    private bool IsLocalBrowser()
+    {
+        if (!Uri.TryCreate(Navigation.Uri, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+               uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+               uri.Host.Equals("[::1]", StringComparison.OrdinalIgnoreCase);
     }
 
     private class LoginModel
