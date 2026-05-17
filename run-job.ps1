@@ -105,6 +105,77 @@ function Write-MetricEvent {
     }
 }
 
+function Write-ProcessOutputLog {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$OutputLine,
+        [Parameter(Mandatory = $true)]
+        [int]$LineNumber,
+        [Parameter(Mandatory = $true)]
+        [string]$Stream
+    )
+
+    $line = $OutputLine.ToString()
+    if ([string]::IsNullOrWhiteSpace($line)) {
+        return
+    }
+
+    $level = if ($line -match '(?i)\b(error|fail(ed|ure)?|exception)\b') {
+        "Error"
+    } elseif ($line -match '(?i)\b(warn|warning)\b') {
+        "Warning"
+    } else {
+        "Information"
+    }
+
+    Write-StructuredLog -Level $level -EventName "job.process.output" -Message $line -Properties @{
+        lineNumber = $LineNumber
+        stream = $Stream
+    }
+}
+
+function Invoke-JobProcess {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $stdoutPath = Join-Path $jobLogDirectory ("{0}-{1}-stdout.log" -f $runId, $Name)
+    $stderrPath = Join-Path $jobLogDirectory ("{0}-{1}-stderr.log" -f $runId, $Name)
+
+    try {
+        $process = Start-Process `
+            -FilePath "dotnet" `
+            -ArgumentList @("run", "--no-launch-profile", "--configuration", "Release", "--project", "src/Crs.Jobs", "--", $Name) `
+            -WorkingDirectory $repoRoot `
+            -NoNewWindow `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath `
+            -Wait `
+            -PassThru
+
+        $lineNumber = 0
+        if (Test-Path -LiteralPath $stdoutPath) {
+            Get-Content -LiteralPath $stdoutPath | ForEach-Object {
+                $lineNumber++
+                Write-ProcessOutputLog -OutputLine $_ -LineNumber $lineNumber -Stream "stdout"
+            }
+        }
+
+        if (Test-Path -LiteralPath $stderrPath) {
+            Get-Content -LiteralPath $stderrPath | ForEach-Object {
+                $lineNumber++
+                Write-ProcessOutputLog -OutputLine $_ -LineNumber $lineNumber -Stream "stderr"
+            }
+        }
+
+        return $process.ExitCode
+    }
+    finally {
+        Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Wait-ForDocker {
     Write-StructuredLog -Level "Information" -EventName "docker.check.started" -Message "Checking Docker Desktop"
     $dockerRunning = $false
@@ -212,8 +283,7 @@ try {
     }
 
     Set-Location $repoRoot
-    dotnet run --project src/Crs.Jobs -- $JobName
-    $exitCode = $LASTEXITCODE
+    $exitCode = Invoke-JobProcess -Name $JobName
 
     $elapsedMs = [Math]::Round(((Get-Date) - $startedAt).TotalMilliseconds, 2)
     Write-StructuredLog -Level "Information" -EventName "job.wrapper.completed" -Message "Scheduled job wrapper completed" -Properties @{
