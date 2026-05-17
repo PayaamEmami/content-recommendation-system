@@ -118,24 +118,22 @@ At a high level, CRS is composed of:
 
 ### ⏰ Background Jobs & Scheduling
 
-Jobs are implemented as **Amazon ECS Fargate tasks** with EventBridge cron scheduling:
+Jobs are implemented in `Crs.Jobs` and can run locally via script or through optional AWS job infrastructure:
 
-- **Source Ingestion Job**: Runs daily at midnight UTC
+- **Source Ingestion Job**:
 
   - Pulls new content from all active sources using LLM agent
   - Generates embeddings for new content via OpenAI API
   - Indexes content in AWS OpenSearch vector database
   - Handles duplicate detection automatically
-  - Container only runs during execution (cost-efficient)
 
-- **Daily Feed Generation Job**: Runs daily at 2 AM UTC
+- **Daily Feed Generation Job**:
   - Builds personalized feeds for each content type (5 recommendations per category)
   - Leverages vector similarity + heuristic signals
   - Pre-generates recommendations for fast UI access
   - Filters out already-seen and recently-recommended content
-  - Container only runs during execution (cost-efficient)
 
-**Benefits**: No retries on failure to prevent repeated API calls, schedule visible in AWS Console, can be triggered manually via AWS CLI
+AWS job infrastructure can be triggered manually via AWS CLI when configured.
 
 ### ☁️ Infrastructure (AWS)
 
