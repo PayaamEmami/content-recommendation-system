@@ -12,7 +12,7 @@ using RecommendationEntity = Crs.Core.Entities.Recommendation;
 namespace Crs.Tests.Unit.Jobs;
 
 [TestClass]
-public sealed class DailyFeedGenerationJobTests
+public sealed class FeedGenerationJobTests
 {
     [TestMethod]
     public async Task ExecuteAsync_WhenNoUsers_ReturnsEarly()
@@ -24,7 +24,7 @@ public sealed class DailyFeedGenerationJobTests
             .ReturnsAsync(Array.Empty<User>());
 
         var provider = BuildProvider(userRepository.Object, feedGenerator.Object);
-        var job = new DailyFeedGenerationJob(provider, NullLogger<DailyFeedGenerationJob>.Instance, NullObservabilityMetrics.Instance);
+        var job = new FeedGenerationJob(provider, NullLogger<FeedGenerationJob>.Instance, NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 
@@ -44,12 +44,12 @@ public sealed class DailyFeedGenerationJobTests
                 user.Id,
                 It.IsAny<ContentType>(),
                 It.IsAny<DateOnly>(),
-                5,
+                15,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecommendationEntity> { new() });
 
         var provider = BuildProvider(userRepository.Object, feedGenerator.Object);
-        var job = new DailyFeedGenerationJob(provider, NullLogger<DailyFeedGenerationJob>.Instance, NullObservabilityMetrics.Instance);
+        var job = new FeedGenerationJob(provider, NullLogger<FeedGenerationJob>.Instance, NullObservabilityMetrics.Instance);
 
         await job.ExecuteAsync(CancellationToken.None);
 
@@ -57,7 +57,7 @@ public sealed class DailyFeedGenerationJobTests
             user.Id,
             It.IsAny<ContentType>(),
             It.IsAny<DateOnly>(),
-            5,
+            15,
             It.IsAny<CancellationToken>()), Times.Exactly(Enum.GetValues<ContentType>().Length));
     }
 
@@ -73,7 +73,7 @@ public sealed class DailyFeedGenerationJobTests
             .ReturnsAsync(new List<RecommendationEntity>());
 
         var provider = BuildProvider(userRepository.Object, feedGenerator.Object);
-        var job = new DailyFeedGenerationJob(provider, NullLogger<DailyFeedGenerationJob>.Instance, NullObservabilityMetrics.Instance);
+        var job = new FeedGenerationJob(provider, NullLogger<FeedGenerationJob>.Instance, NullObservabilityMetrics.Instance);
 
         await job.ExecuteForUserAsync(userId, targetDate, CancellationToken.None);
 

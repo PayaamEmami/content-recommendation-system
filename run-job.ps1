@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet("ingestion", "x-ingestion", "feed", "reindex", "sync-index")]
-    [string]$JobName
+    [string]$JobName,
+    [switch]$Interactive
 )
 
 $ErrorActionPreference = "Stop"
@@ -137,8 +138,22 @@ function Write-ProcessOutputLog {
 function Invoke-JobProcess {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Name
+        [string]$Name,
+        [switch]$StreamToConsole
     )
+
+    $arguments = @("run", "--no-launch-profile", "--configuration", "Release", "--project", "src/Crs.Jobs", "--", $Name)
+
+    if ($StreamToConsole) {
+        Push-Location $repoRoot
+        try {
+            & dotnet @arguments
+            return $LASTEXITCODE
+        }
+        finally {
+            Pop-Location
+        }
+    }
 
     $stdoutPath = Join-Path $jobLogDirectory ("{0}-{1}-stdout.log" -f $runId, $Name)
     $stderrPath = Join-Path $jobLogDirectory ("{0}-{1}-stderr.log" -f $runId, $Name)
@@ -146,7 +161,7 @@ function Invoke-JobProcess {
     try {
         $process = Start-Process `
             -FilePath "dotnet" `
-            -ArgumentList @("run", "--no-launch-profile", "--configuration", "Release", "--project", "src/Crs.Jobs", "--", $Name) `
+            -ArgumentList $arguments `
             -WorkingDirectory $repoRoot `
             -NoNewWindow `
             -RedirectStandardOutput $stdoutPath `
@@ -283,7 +298,7 @@ try {
     }
 
     Set-Location $repoRoot
-    $exitCode = Invoke-JobProcess -Name $JobName
+    $exitCode = Invoke-JobProcess -Name $JobName -StreamToConsole:$Interactive
 
     $elapsedMs = [Math]::Round(((Get-Date) - $startedAt).TotalMilliseconds, 2)
     Write-StructuredLog -Level "Information" -EventName "job.wrapper.completed" -Message "Scheduled job wrapper completed" -Properties @{

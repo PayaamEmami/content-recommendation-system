@@ -40,7 +40,7 @@ public class FeedGenerator : IFeedGenerator
         Guid userId,
         ContentType feedType,
         DateOnly date,
-        int count = 5,
+        int count = 15,
         CancellationToken cancellationToken = default)
     {
         using var activity = CrsTelemetry.ActivitySource.StartActivity("feed.generate");
@@ -196,7 +196,7 @@ public class FeedGenerator : IFeedGenerator
         foreach (var feedType in feedTypes)
         {
             var feedRecommendations = await GenerateFeedAsync(
-                userId, feedType, date, count: 5, cancellationToken);
+                userId, feedType, date, count: 15, cancellationToken);
 
             allRecommendations.AddRange(feedRecommendations);
         }

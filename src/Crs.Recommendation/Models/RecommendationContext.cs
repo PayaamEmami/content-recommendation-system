@@ -26,7 +26,7 @@ public class RecommendationContext
     /// <summary>
     /// Number of recommendations to generate.
     /// </summary>
-    public int Count { get; set; } = 5;
+    public int Count { get; set; } = 15;
 
     /// <summary>
     /// User's interest profile (calculated from history).

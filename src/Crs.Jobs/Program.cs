@@ -20,7 +20,7 @@ builder.Services.AddRecommendationEngine();
 
 // Jobs
 builder.Services.AddScoped<SourceIngestionJob>();
-builder.Services.AddScoped<DailyFeedGenerationJob>();
+builder.Services.AddScoped<FeedGenerationJob>();
 builder.Services.AddScoped<ReindexJob>();
 builder.Services.AddScoped<XIngestionJob>();
 builder.Services.AddScoped<LocalVectorIndexSyncJob>();
@@ -92,7 +92,7 @@ if (string.IsNullOrWhiteSpace(jobName))
   Console.WriteLine("Usage: Crs.Jobs <job-name>");
   Console.WriteLine("Available jobs:");
   Console.WriteLine("  ingestion     - Run source ingestion job");
-  Console.WriteLine("  feed          - Run daily feed generation job");
+  Console.WriteLine("  feed          - Run feed generation job");
   Console.WriteLine("  reindex       - Reindex all content in vector store");
   Console.WriteLine("  sync-index    - Reconcile local vector index with database content");
   Console.WriteLine("  x-ingestion   - Run X post ingestion job");
@@ -150,7 +150,7 @@ using (var scope = host.Services.CreateScope())
         break;
 
       case "feed":
-        var feedJob = scope.ServiceProvider.GetRequiredService<DailyFeedGenerationJob>();
+        var feedJob = scope.ServiceProvider.GetRequiredService<FeedGenerationJob>();
         await feedJob.ExecuteAsync(CancellationToken.None);
         logger.LogInformation("Feed generation job completed successfully");
         break;

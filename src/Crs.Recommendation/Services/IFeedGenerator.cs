@@ -20,7 +20,7 @@ public interface IFeedGenerator
         Guid userId,
         ContentType feedType,
         DateOnly date,
-        int count = 5,
+        int count = 15,
         CancellationToken cancellationToken = default);
 
     /// <summary>

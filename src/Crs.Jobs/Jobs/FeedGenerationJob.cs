@@ -9,17 +9,17 @@ using Crs.Recommendation.Services;
 namespace Crs.Jobs.Jobs;
 
 /// <summary>
-/// Background job that generates daily personalized feeds for all users.
+/// Background job that generates personalized feeds for all users.
 /// </summary>
-public class DailyFeedGenerationJob
+public class FeedGenerationJob
 {
     private readonly IServiceProvider _serviceProvider;
-    private readonly ILogger<DailyFeedGenerationJob> _logger;
+    private readonly ILogger<FeedGenerationJob> _logger;
     private readonly IObservabilityMetrics _metrics;
 
-    public DailyFeedGenerationJob(
+    public FeedGenerationJob(
         IServiceProvider serviceProvider,
-        ILogger<DailyFeedGenerationJob> logger,
+        ILogger<FeedGenerationJob> logger,
         IObservabilityMetrics metrics)
     {
         _serviceProvider = serviceProvider;
@@ -28,7 +28,7 @@ public class DailyFeedGenerationJob
     }
 
     /// <summary>
-    /// Execute the daily feed generation job for all users.
+    /// Execute the feed generation job for all users.
     /// </summary>
     public async Task ExecuteAsync(CancellationToken cancellationToken = default)
     {
@@ -43,7 +43,7 @@ public class DailyFeedGenerationJob
             ["job.trigger"] = "manual"
         });
 
-        _logger.LogInformation("Starting daily feed generation job");
+        _logger.LogInformation("Starting feed generation job");
 
         using var scope = _serviceProvider.CreateScope();
         var userRepository = scope.ServiceProvider.GetRequiredService<IUserRepository>();
@@ -93,7 +93,7 @@ public class DailyFeedGenerationJob
                                 user.Id,
                                 feedType,
                                 today,
-                                count: 5, // Generate 5 recommendations per feed
+                                count: 15, // Generate 15 recommendations per feed
                                 cancellationToken);
 
                             userFeedCount += recommendations.Count;
@@ -128,7 +128,7 @@ public class DailyFeedGenerationJob
             }
 
             _logger.LogInformation(
-                "Daily feed generation job completed: {UsersProcessed} users processed, {TotalFeeds} recommendations generated",
+                "Feed generation job completed: {UsersProcessed} users processed, {TotalFeeds} recommendations generated",
                 usersProcessed,
                 totalFeedsGenerated);
             stopwatch.Stop();
@@ -137,7 +137,7 @@ public class DailyFeedGenerationJob
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in daily feed generation job");
+            _logger.LogError(ex, "Error in feed generation job");
             stopwatch.Stop();
             _metrics.Increment("job.failure.count", context: BuildContext("feed", "failed"));
             _metrics.RecordDuration("job.duration", stopwatch.Elapsed, BuildContext("feed", "failed"));

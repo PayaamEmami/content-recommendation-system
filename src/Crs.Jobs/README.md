@@ -19,9 +19,9 @@ Jobs runs as a scheduled container task that orchestrates periodic tasks for con
   4. Index content in OpenSearch vector store
   5. Save new content to database
 
-### Daily Feed Generation Job
+### Feed Generation Job
 
-- **Schedule:** Runs daily at 2:00 AM
+- **Schedule:** Run on-demand via `run-feed.cmd`
 - **Purpose:** Pre-generates personalized recommendation feeds for all users
 - **Steps:**
   1. For each user and content type (Papers, Videos, Blogs, etc.):
@@ -61,7 +61,7 @@ From the repo root:
 # Source ingestion
 dotnet run --project src/Crs.Jobs -- ingestion
 
-# Daily feed generation
+# Feed generation
 dotnet run --project src/Crs.Jobs -- feed
 
 # X post ingestion
