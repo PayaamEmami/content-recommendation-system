@@ -77,8 +77,60 @@ function Write-StructuredLog {
     }
 
     $json = $payload | ConvertTo-Json -Compress -Depth 8
-    Add-Content -LiteralPath $jobLogPath -Value $json
+    Write-JobLogLine -Path $jobLogPath -Line $json
     Write-Output $json
+}
+
+function Write-JobLogLine {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [string]$Line
+    )
+
+    # Open the file with FileShare.ReadWrite so concurrent writers (e.g. an
+    # interactive run and a leftover scheduled task firing at the same time)
+    # can both append without crashing each other. Wrap in a brief retry to
+    # cover momentary handle contention. Logging failures must never abort
+    # the job itself.
+    $maxAttempts = 5
+    $attempt = 0
+    while ($attempt -lt $maxAttempts) {
+        try {
+            $stream = [System.IO.File]::Open(
+                $Path,
+                [System.IO.FileMode]::Append,
+                [System.IO.FileAccess]::Write,
+                [System.IO.FileShare]::ReadWrite)
+            try {
+                $writer = New-Object System.IO.StreamWriter($stream, [System.Text.Encoding]::UTF8)
+                try {
+                    $writer.WriteLine($Line)
+                    $writer.Flush()
+                }
+                finally {
+                    $writer.Dispose()
+                }
+            }
+            finally {
+                $stream.Dispose()
+            }
+            return
+        }
+        catch [System.IO.IOException] {
+            $attempt++
+            if ($attempt -ge $maxAttempts) {
+                Write-Warning ("Failed to write log line after {0} attempts: {1}" -f $attempt, $_.Exception.Message)
+                return
+            }
+            Start-Sleep -Milliseconds (50 * $attempt)
+        }
+        catch {
+            Write-Warning ("Unexpected error writing log line: {0}" -f $_.Exception.Message)
+            return
+        }
+    }
 }
 
 function Write-MetricEvent {
