@@ -1,15 +1,10 @@
-# CONTEXT
+# AGENTS.md
 
-This file is a quick orientation guide for coding agents working in this repository. Keep it focused on the facts needed to navigate, edit, and verify code safely.
+This file orients AI coding agents and human readers to this repository. It explains what the project is, how it is organized, and the guidance to follow when working here.
 
-## Project Snapshot
+## Overview
 
-- **Purpose**: Personalized recommendation system that ingests learning content from user-defined sources and generates a ranked feed.
-- **Backend**: .NET 10, ASP.NET Core, Entity Framework Core
-- **Frontend**: Blazor WebAssembly
-- **Tests**: MSTest with Testcontainers-backed PostgreSQL integration coverage
-- **Cloud**: AWS hosts the API and web app; some job infrastructure also exists in AWS, but that is not the primary runtime today
-- **AI**: OpenAI API (`gpt-5-nano`, `text-embedding-3-small`)
+Content Recommendation System is a personalized learning feed application that ingests content from user-defined sources and ranks recommendations with a hybrid engine. It is built with .NET and Blazor WebAssembly, uses OpenAI for ingestion and embeddings, and deploys primarily on AWS.
 
 ## Solution Layout
 
@@ -88,7 +83,7 @@ Agents should run additional verification when the touched area makes it relevan
 
 ## Useful References
 
-- If a change makes this file inaccurate, incomplete, or missing a new recurring verification/runtime rule, update `CONTEXT.md` in the same change so future agents inherit the correct guidance.
+- If a change makes this file inaccurate, incomplete, or missing a new recurring verification/runtime rule, update `AGENTS.md` in the same change so future agents inherit the correct guidance.
 - `README.md` - product and deployment overview
 - `.github/workflows/aws-deploy.yml` - canonical CI build/test/deploy workflow
 - `.github/workflows/aws-infra.yml` - manual AWS infrastructure deployment workflow
