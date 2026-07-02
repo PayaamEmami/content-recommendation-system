@@ -1,3 +1,5 @@
+using Crs.Core.Entities;
+
 namespace Crs.Api.DTOs.Users.Responses;
 
 /// <summary>
@@ -29,5 +31,20 @@ public class UserResponse
     /// When the user last logged in.
     /// </summary>
     public DateTime? LastLoginAt { get; set; }
+
+    /// <summary>
+    /// Maps a <see cref="User"/> entity to a <see cref="UserResponse"/> DTO.
+    /// </summary>
+    public static UserResponse FromEntity(User user)
+    {
+        return new UserResponse
+        {
+            Id = user.Id,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            CreatedAt = user.CreatedAt,
+            LastLoginAt = user.LastLoginAt
+        };
+    }
 }
 

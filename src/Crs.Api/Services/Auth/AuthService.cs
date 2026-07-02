@@ -78,7 +78,7 @@ public class AuthService : IAuthService
             AccessToken = accessToken,
             RefreshToken = refreshToken,
             ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationMinutes),
-            User = MapToUserResponse(user)
+            User = UserResponse.FromEntity(user)
         };
     }
 
@@ -129,7 +129,7 @@ public class AuthService : IAuthService
             AccessToken = accessToken,
             RefreshToken = refreshToken,
             ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationMinutes),
-            User = MapToUserResponse(user)
+            User = UserResponse.FromEntity(user)
         };
     }
 
@@ -248,18 +248,6 @@ public class AuthService : IAuthService
         }, cancellationToken);
 
         return refreshToken;
-    }
-
-    private static UserResponse MapToUserResponse(User user)
-    {
-        return new UserResponse
-        {
-            Id = user.Id,
-            Email = user.Email,
-            DisplayName = user.DisplayName,
-            CreatedAt = user.CreatedAt,
-            LastLoginAt = user.LastLoginAt
-        };
     }
 
     private void RecordAuthFailure(string operation, string outcome, DateTime? startedAt = null)

@@ -1,9 +1,10 @@
 using Crs.Api.DTOs.Sources.Responses;
+using Crs.Core.Entities;
 
 namespace Crs.Api.DTOs.Users.Responses;
 
 /// <summary>
-/// Detailed response model for user information including topics.
+/// Detailed response model for user information including their sources.
 /// </summary>
 public class UserDetailResponse
 {
@@ -36,5 +37,22 @@ public class UserDetailResponse
     /// URL-based sources configured by the user.
     /// </summary>
     public List<SourceResponse> Sources { get; set; } = new();
+
+    /// <summary>
+    /// Maps a <see cref="User"/> entity (with its sources loaded) to a
+    /// <see cref="UserDetailResponse"/> DTO.
+    /// </summary>
+    public static UserDetailResponse FromEntity(User user)
+    {
+        return new UserDetailResponse
+        {
+            Id = user.Id,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            CreatedAt = user.CreatedAt,
+            LastLoginAt = user.LastLoginAt,
+            Sources = user.Sources.Select(SourceResponse.FromEntity).ToList()
+        };
+    }
 }
 

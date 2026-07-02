@@ -23,25 +23,25 @@ public class SourceService : ISourceService
     public async Task<SourceResponse?> GetSourceByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var source = await _sourceRepository.GetByIdAsync(id, cancellationToken);
-        return source == null ? null : MapToResponse(source);
+        return source == null ? null : SourceResponse.FromEntity(source);
     }
 
     public async Task<List<SourceResponse>> GetUserSourcesAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var sources = await _sourceRepository.GetByUserIdAsync(userId, cancellationToken);
-        return sources.Select(MapToResponse).ToList();
+        return sources.Select(SourceResponse.FromEntity).ToList();
     }
 
     public async Task<List<SourceResponse>> GetActiveUserSourcesAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var sources = await _sourceRepository.GetActiveByUserIdAsync(userId, cancellationToken);
-        return sources.Select(MapToResponse).ToList();
+        return sources.Select(SourceResponse.FromEntity).ToList();
     }
 
     public async Task<List<SourceResponse>> GetSourcesByCategoryAsync(ContentType category, CancellationToken cancellationToken = default)
     {
         var sources = await _sourceRepository.GetByCategoryAsync(category, cancellationToken);
-        return sources.Select(MapToResponse).ToList();
+        return sources.Select(SourceResponse.FromEntity).ToList();
     }
 
     public async Task<SourceResponse> CreateSourceAsync(Guid userId, CreateSourceRequest request, CancellationToken cancellationToken = default)
@@ -71,7 +71,7 @@ public class SourceService : ISourceService
         };
 
         var createdSource = await _sourceRepository.AddAsync(source, cancellationToken);
-        return MapToResponse(createdSource);
+        return SourceResponse.FromEntity(createdSource);
     }
 
     public async Task<SourceResponse> UpdateSourceAsync(Guid id, UpdateSourceRequest request, CancellationToken cancellationToken = default)
@@ -115,7 +115,7 @@ public class SourceService : ISourceService
         }
 
         await _sourceRepository.UpdateAsync(source, cancellationToken);
-        return MapToResponse(source);
+        return SourceResponse.FromEntity(source);
     }
 
     public async Task DeleteSourceAsync(Guid id, CancellationToken cancellationToken = default)
@@ -183,23 +183,6 @@ public class SourceService : ISourceService
         }
 
         return result;
-    }
-
-    private static SourceResponse MapToResponse(Source source)
-    {
-        return new SourceResponse
-        {
-            Id = source.Id,
-            UserId = source.UserId,
-            Name = source.Name,
-            Url = source.Url,
-            Description = source.Description,
-            Category = source.Category,
-            IsActive = source.IsActive,
-            CreatedAt = source.CreatedAt,
-            UpdatedAt = source.UpdatedAt,
-            ContentCount = source.Content?.Count ?? 0
-        };
     }
 }
 

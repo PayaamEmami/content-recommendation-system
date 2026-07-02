@@ -19,7 +19,7 @@ namespace Crs.Api.Controllers;
 [Route("api/v{version:apiVersion}/x")]
 [Authorize]
 [EnableRateLimiting("api")]
-public class XAccountsController : ControllerBase
+public class XAccountsController : ApiControllerBase
 {
     private readonly IXAccountService _xAccountService;
     private readonly ILogger<XAccountsController> _logger;
@@ -43,10 +43,9 @@ public class XAccountsController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectUrl([FromQuery] string? redirectUri, CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
         string? resolvedRedirectUri = null;
@@ -72,7 +71,7 @@ public class XAccountsController : ControllerBase
 
         try
         {
-            var url = await _xAccountService.CreateConnectUrlAsync(userId.Value, resolvedRedirectUri, cancellationToken);
+            var url = await _xAccountService.CreateConnectUrlAsync(userId, resolvedRedirectUri, cancellationToken);
             return Ok(new XConnectUrlResponse { AuthorizationUrl = url });
         }
         catch (InvalidOperationException ex)
@@ -89,10 +88,9 @@ public class XAccountsController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> HandleCallback([FromBody] XCallbackRequest request, CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
         if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.State))
@@ -102,17 +100,17 @@ public class XAccountsController : ControllerBase
 
         try
         {
-            await _xAccountService.HandleCallbackAsync(userId.Value, request.Code, request.State, cancellationToken);
+            await _xAccountService.HandleCallbackAsync(userId, request.Code, request.State, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "X callback failed for user {UserId}", userId.Value);
+            _logger.LogWarning(ex, "X callback failed for user {UserId}", userId);
             return BadRequest(ex.Message);
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "X callback upstream request failed for user {UserId}", userId.Value);
+            _logger.LogError(ex, "X callback upstream request failed for user {UserId}", userId);
 
             if (ex.StatusCode == HttpStatusCode.Forbidden)
             {
@@ -137,13 +135,12 @@ public class XAccountsController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Disconnect(CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        await _xAccountService.DisconnectAsync(userId.Value, cancellationToken);
+        await _xAccountService.DisconnectAsync(userId, cancellationToken);
         return NoContent();
     }
 
@@ -154,25 +151,24 @@ public class XAccountsController : ControllerBase
     [ProducesResponseType(typeof(List<XFollowedAccountResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetFollowedAccounts([FromQuery] bool refresh = false, CancellationToken cancellationToken = default)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
         List<Crs.Core.Entities.XFollowedAccount> followed;
         try
         {
             followed = refresh
-                ? await _xAccountService.RefreshFollowedAccountsAsync(userId.Value, cancellationToken)
-                : await _xAccountService.GetFollowedAccountsAsync(userId.Value, cancellationToken);
+                ? await _xAccountService.RefreshFollowedAccountsAsync(userId, cancellationToken)
+                : await _xAccountService.GetFollowedAccountsAsync(userId, cancellationToken);
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(ex.Message);
         }
 
-        var response = await BuildFollowedAccountsResponseAsync(userId.Value, followed, cancellationToken);
+        var response = await BuildFollowedAccountsResponseAsync(userId, followed, cancellationToken);
         return Ok(response);
     }
 
@@ -183,25 +179,24 @@ public class XAccountsController : ControllerBase
     [ProducesResponseType(typeof(List<XFollowedAccountResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateSelectedAccounts([FromBody] XSelectedAccountsRequest request, CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
         try
         {
-            await _xAccountService.UpdateSelectedAccountsAsync(userId.Value, request.FollowedAccountIds, cancellationToken);
+            await _xAccountService.UpdateSelectedAccountsAsync(userId, request.FollowedAccountIds, cancellationToken);
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(ex.Message);
         }
 
-        var followed = await _xAccountService.GetFollowedAccountsAsync(userId.Value, cancellationToken);
-        var response = await BuildFollowedAccountsResponseAsync(userId.Value, followed, cancellationToken);
+        var followed = await _xAccountService.GetFollowedAccountsAsync(userId, cancellationToken);
+        var response = await BuildFollowedAccountsResponseAsync(userId, followed, cancellationToken);
 
-        _logger.LogInformation("Updated X selected accounts for user {UserId}", userId.Value);
+        _logger.LogInformation("Updated X selected accounts for user {UserId}", userId);
         return Ok(response);
     }
 
@@ -213,15 +208,9 @@ public class XAccountsController : ControllerBase
         var selected = await _xAccountService.GetSelectedAccountsAsync(userId, cancellationToken);
         var selectedIds = selected.Select(s => s.XFollowedAccountId).ToHashSet();
 
-        return followed.Select(account => new XFollowedAccountResponse
-        {
-            Id = account.Id,
-            XUserId = account.XUserId,
-            Handle = account.Handle,
-            DisplayName = account.DisplayName,
-            ProfileImageUrl = account.ProfileImageUrl,
-            IsSelected = selectedIds.Contains(account.Id)
-        }).ToList();
+        return followed
+            .Select(account => XFollowedAccountResponse.FromEntity(account, selectedIds.Contains(account.Id)))
+            .ToList();
     }
 
     /// <summary>
@@ -231,37 +220,21 @@ public class XAccountsController : ControllerBase
     [ProducesResponseType(typeof(List<XPostResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPosts([FromQuery] int limit = 30, CancellationToken cancellationToken = default)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
         List<Crs.Core.Entities.XPost> posts;
         try
         {
-            posts = await _xAccountService.GetPostsAsync(userId.Value, limit, cancellationToken);
+            posts = await _xAccountService.GetPostsAsync(userId, limit, cancellationToken);
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(ex.Message);
         }
-        var response = posts.Select(post => new XPostResponse
-        {
-            Id = post.Id,
-            PostId = post.PostId,
-            Text = post.Text,
-            Url = post.Url,
-            PostCreatedAt = post.PostCreatedAt,
-            AuthorHandle = post.AuthorHandle,
-            AuthorName = post.AuthorName,
-            AuthorProfileImageUrl = post.AuthorProfileImageUrl,
-            MediaJson = post.MediaJson,
-            LikeCount = post.LikeCount,
-            ReplyCount = post.ReplyCount,
-            RepostCount = post.RepostCount,
-            QuoteCount = post.QuoteCount
-        }).ToList();
+        var response = posts.Select(XPostResponse.FromEntity).ToList();
 
         return Ok(response);
     }

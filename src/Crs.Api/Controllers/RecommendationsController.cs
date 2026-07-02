@@ -17,7 +17,7 @@ namespace Crs.Api.Controllers;
 [Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
 [EnableRateLimiting("api")]
-public class RecommendationsController : ControllerBase
+public class RecommendationsController : ApiControllerBase
 {
     private readonly IRecommendationService _recommendationService;
     private readonly ILogger<RecommendationsController> _logger;
@@ -41,14 +41,13 @@ public class RecommendationsController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetTodaysRecommendations(CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
         var recommendations = await _recommendationService.GetTodaysRecommendationsAsync(
-            userId.Value,
+            userId,
             cancellationToken);
 
         return Ok(recommendations);
@@ -71,16 +70,15 @@ public class RecommendationsController : ControllerBase
         [FromQuery] DateOnly? date = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
         var targetDate = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
 
         var recommendations = await _recommendationService.GetFeedRecommendationsAsync(
-            userId.Value,
+            userId,
             feedType,
             targetDate,
             cancellationToken);

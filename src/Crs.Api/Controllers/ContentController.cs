@@ -21,7 +21,7 @@ namespace Crs.Api.Controllers;
 [Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
 [EnableRateLimiting("api")]
-public class ContentController : ControllerBase
+public class ContentController : ApiControllerBase
 {
     private readonly IContentService _contentService;
     private readonly IVoteService _voteService;
@@ -188,13 +188,12 @@ public class ContentController : ControllerBase
         [FromBody] VoteRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        var vote = await _voteService.VoteOnContentAsync(userId.Value, id, request, cancellationToken);
+        var vote = await _voteService.VoteOnContentAsync(userId, id, request, cancellationToken);
         return Ok(vote);
     }
 
@@ -210,13 +209,12 @@ public class ContentController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RemoveVote(Guid id, CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        await _voteService.RemoveVoteAsync(userId.Value, id, cancellationToken);
+        await _voteService.RemoveVoteAsync(userId, id, cancellationToken);
         return NoContent();
     }
 
@@ -232,13 +230,12 @@ public class ContentController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetVoteOnContent(Guid id, CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        var vote = await _voteService.GetUserVoteOnContentAsync(userId.Value, id, cancellationToken);
+        var vote = await _voteService.GetUserVoteOnContentAsync(userId, id, cancellationToken);
 
         if (vote == null)
         {

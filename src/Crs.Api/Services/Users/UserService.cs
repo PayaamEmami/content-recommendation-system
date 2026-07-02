@@ -1,4 +1,3 @@
-using Crs.Api.DTOs.Sources.Responses;
 using Crs.Api.DTOs.Users.Requests;
 using Crs.Api.DTOs.Users.Responses;
 using Crs.Core.Interfaces;
@@ -32,27 +31,7 @@ public class UserService : IUserService
             return null;
         }
 
-        return new UserDetailResponse
-        {
-            Id = user.Id,
-            Email = user.Email,
-            DisplayName = user.DisplayName,
-            CreatedAt = user.CreatedAt,
-            LastLoginAt = user.LastLoginAt,
-            Sources = user.Sources.Select(s => new SourceResponse
-            {
-                Id = s.Id,
-                UserId = s.UserId,
-                Name = s.Name,
-                Url = s.Url,
-                Description = s.Description,
-                Category = s.Category,
-                IsActive = s.IsActive,
-                CreatedAt = s.CreatedAt,
-                UpdatedAt = s.UpdatedAt,
-                ContentCount = s.Content?.Count ?? 0
-            }).ToList()
-        };
+        return UserDetailResponse.FromEntity(user);
     }
 
     public async Task<UserResponse> UpdateUserAsync(
@@ -76,14 +55,7 @@ public class UserService : IUserService
 
         _logger.LogInformation("User {UserId} updated their profile", userId);
 
-        return new UserResponse
-        {
-            Id = user.Id,
-            Email = user.Email,
-            DisplayName = user.DisplayName,
-            CreatedAt = user.CreatedAt,
-            LastLoginAt = user.LastLoginAt
-        };
+        return UserResponse.FromEntity(user);
     }
 
 }

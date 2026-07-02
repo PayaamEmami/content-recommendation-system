@@ -1,3 +1,5 @@
+using Crs.Core.Entities;
+
 namespace Crs.Api.DTOs.X.Responses;
 
 /// <summary>
@@ -18,5 +20,28 @@ public class XPostResponse
     public int ReplyCount { get; set; }
     public int RepostCount { get; set; }
     public int QuoteCount { get; set; }
+
+    /// <summary>
+    /// Maps an <see cref="XPost"/> entity to a response DTO.
+    /// </summary>
+    public static XPostResponse FromEntity(XPost post)
+    {
+        return new XPostResponse
+        {
+            Id = post.Id,
+            PostId = post.PostId,
+            Text = post.Text,
+            Url = post.Url,
+            PostCreatedAt = post.PostCreatedAt,
+            AuthorHandle = post.AuthorHandle,
+            AuthorName = post.AuthorName,
+            AuthorProfileImageUrl = post.AuthorProfileImageUrl,
+            MediaJson = post.MediaJson,
+            LikeCount = post.LikeCount,
+            ReplyCount = post.ReplyCount,
+            RepostCount = post.RepostCount,
+            QuoteCount = post.QuoteCount
+        };
+    }
 }
 

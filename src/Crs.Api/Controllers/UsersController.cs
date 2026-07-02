@@ -18,7 +18,7 @@ namespace Crs.Api.Controllers;
 [Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
 [EnableRateLimiting("api")]
-public class UsersController : ControllerBase
+public class UsersController : ApiControllerBase
 {
     private readonly IUserService _userService;
     private readonly IVoteService _voteService;
@@ -45,13 +45,12 @@ public class UsersController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetCurrentUser(CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        var user = await _userService.GetUserByIdAsync(userId.Value, cancellationToken);
+        var user = await _userService.GetUserByIdAsync(userId, cancellationToken);
         if (user == null)
         {
             return NotFound();
@@ -96,13 +95,12 @@ public class UsersController : ControllerBase
         [FromBody] UpdateUserRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        var user = await _userService.UpdateUserAsync(userId.Value, request, cancellationToken);
+        var user = await _userService.UpdateUserAsync(userId, request, cancellationToken);
         return Ok(user);
     }
 
@@ -124,14 +122,13 @@ public class UsersController : ControllerBase
         [FromBody] UpdateUserRequest request,
         CancellationToken cancellationToken)
     {
-        var currentUserId = User.GetUserId();
-        if (currentUserId == null)
+        if (!TryGetUserId(out var currentUserId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
         // Only allow users to update their own profile (in a real system, admins could update any)
-        if (currentUserId.Value != id)
+        if (currentUserId != id)
         {
             return Forbid();
         }
@@ -150,13 +147,12 @@ public class UsersController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetCurrentUserVotes(CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        var votes = await _voteService.GetUserVotesAsync(userId.Value, cancellationToken);
+        var votes = await _voteService.GetUserVotesAsync(userId, cancellationToken);
         return Ok(votes);
     }
 
@@ -170,13 +166,12 @@ public class UsersController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetCurrentUserVoteHistory(CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        var history = await _voteService.GetUserVoteHistoryAsync(userId.Value, cancellationToken);
+        var history = await _voteService.GetUserVoteHistoryAsync(userId, cancellationToken);
         return Ok(history);
     }
 }
