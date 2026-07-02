@@ -1,8 +1,5 @@
-using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Crs.Core.Enums;
 
 namespace Crs.Web.Services;
@@ -13,16 +10,12 @@ namespace Crs.Web.Services;
 public class FeedService
 {
     private readonly HttpClient _httpClient;
+    private readonly AuthorizedApiClient _api;
     private readonly AuthService _authService;
     private readonly ILogger<FeedService> _logger;
     private readonly DevelopmentDataStore? _developmentData;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() }
-    };
+    private static readonly JsonSerializerOptions JsonOptions = CrsJsonOptions.Default;
 
     public FeedService(
         HttpClient httpClient,
@@ -31,44 +24,10 @@ public class FeedService
         DevelopmentDataStore? developmentData = null)
     {
         _httpClient = httpClient;
+        _api = new AuthorizedApiClient(httpClient, authService);
         _authService = authService;
         _logger = logger;
         _developmentData = developmentData;
-    }
-
-    private void SetAuthHeader()
-    {
-        if (!string.IsNullOrEmpty(_authService.CurrentState.AccessToken))
-        {
-            _httpClient.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", _authService.CurrentState.AccessToken);
-        }
-    }
-
-    private async Task<HttpResponseMessage?> SendAuthorizedAsync(Func<Task<HttpResponseMessage>> requestFactory)
-    {
-        if (!await _authService.EnsureAuthenticatedAsync())
-        {
-            return null;
-        }
-
-        SetAuthHeader();
-        var response = await requestFactory();
-
-        if (response.StatusCode == HttpStatusCode.Unauthorized)
-        {
-            var refreshed = await _authService.TryRefreshAsync();
-            if (!refreshed)
-            {
-                await _authService.LogoutAsync();
-                return response;
-            }
-
-            SetAuthHeader();
-            response = await requestFactory();
-        }
-
-        return response;
     }
 
     public async Task<List<ContentItem>> GetFeedAsync(ContentType? type = null)
@@ -80,7 +39,7 @@ public class FeedService
                 return _developmentData.GetFeed(type);
             }
 
-            var response = await SendAuthorizedAsync(() => _httpClient.GetAsync("/api/v1/recommendations"));
+            var response = await _api.SendAsync(() => _httpClient.GetAsync("/api/v1/recommendations"));
             if (response == null)
             {
                 _logger.LogWarning("User not authenticated, cannot fetch feed");
@@ -141,7 +100,7 @@ public class FeedService
                 return _developmentData.GetVotes();
             }
 
-            var response = await SendAuthorizedAsync(() => _httpClient.GetAsync("/api/v1/users/me/votes"));
+            var response = await _api.SendAsync(() => _httpClient.GetAsync("/api/v1/users/me/votes"));
             if (response == null)
             {
                 return new List<VoteItem>();
@@ -172,7 +131,7 @@ public class FeedService
                 return _developmentData.GetVoteHistory();
             }
 
-            var response = await SendAuthorizedAsync(() => _httpClient.GetAsync("/api/v1/users/me/vote-history"));
+            var response = await _api.SendAsync(() => _httpClient.GetAsync("/api/v1/users/me/vote-history"));
             if (response == null)
             {
                 return new List<VoteHistoryItem>();
@@ -217,7 +176,7 @@ public class FeedService
             }
 
             var request = new { voteType = voteType };
-            var response = await SendAuthorizedAsync(() =>
+            var response = await _api.SendAsync(() =>
                 _httpClient.PostAsJsonAsync($"/api/v1/content/{contentId}/vote", request, JsonOptions));
             if (response == null)
             {
@@ -250,7 +209,7 @@ public class FeedService
                 return _developmentData.RemoveVote(contentId);
             }
 
-            var response = await SendAuthorizedAsync(() =>
+            var response = await _api.SendAsync(() =>
                 _httpClient.DeleteAsync($"/api/v1/content/{contentId}/vote"));
             if (response == null)
             {
