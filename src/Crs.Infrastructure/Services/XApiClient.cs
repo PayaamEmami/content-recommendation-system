@@ -407,42 +407,15 @@ public class XApiClient : IXApiClient
         return false;
     }
 
-    private static string Truncate(string value, int maxLength)
-    {
-        if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
-        {
-            return value;
-        }
-
-        return $"{value[..maxLength]}...";
-    }
-
     private void RecordMetric(string operation, string outcome, TimeSpan duration)
     {
-        var context = new MetricContext(
-            Dimensions: new Dictionary<string, string>
-            {
-                ["Dependency"] = "X",
-                ["Operation"] = operation,
-                ["Outcome"] = outcome
-            });
-
-        _metrics.Increment("dependency.call.count", context: context);
-        _metrics.RecordDuration("dependency.call.duration", duration, context);
-        if (outcome == "failed")
-        {
-            _metrics.Increment("dependency.failure.count", context: context);
-        }
+        DependencyMetrics.RecordCall(_metrics, "X", operation, outcome, duration);
     }
 
     private string FormatResponseBody(string body)
     {
-        if (_observabilitySettings.EnableSensitiveBodyLogging || _environment.IsDevelopment())
-        {
-            return Truncate(body, 512);
-        }
-
-        return $"<suppressed length={body.Length}>";
+        var allowFullBody = _observabilitySettings.EnableSensitiveBodyLogging || _environment.IsDevelopment();
+        return ResponseBodyFormatter.Format(body, allowFullBody);
     }
 
     private class XTokenApiResponse

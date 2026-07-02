@@ -207,33 +207,12 @@ public class OpenAIClient : ILlmClient
 
     private void RecordMetric(string operation, string outcome, TimeSpan duration, int tokenCount = 0)
     {
-        var context = new MetricContext(
-            Dimensions: new Dictionary<string, string>
-            {
-                ["Dependency"] = "OpenAI",
-                ["Operation"] = operation,
-                ["Outcome"] = outcome
-            },
-            Properties: new Dictionary<string, object?>
-            {
-                ["TokenCount"] = tokenCount
-            });
-
-        _metrics.Increment("dependency.call.count", context: context);
-        _metrics.RecordDuration("dependency.call.duration", duration, context);
-        if (outcome == "failed")
-        {
-            _metrics.Increment("dependency.failure.count", context: context);
-        }
+        var properties = new Dictionary<string, object?> { ["TokenCount"] = tokenCount };
+        DependencyMetrics.RecordCall(_metrics, "OpenAI", operation, outcome, duration, properties);
     }
 
     private string FormatResponseBody(string responseContent)
     {
-        if (_environment.IsDevelopment())
-        {
-            return responseContent.Length <= 512 ? responseContent : $"{responseContent[..512]}...";
-        }
-
-        return $"<suppressed length={responseContent.Length}>";
+        return ResponseBodyFormatter.Format(responseContent, _environment.IsDevelopment());
     }
 }
