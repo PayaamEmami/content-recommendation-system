@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Crs.Core.Observability;
 using Crs.Llm.Configuration;
+using Crs.Llm.Models;
 
 namespace Crs.Llm.Services;
 

@@ -38,7 +38,7 @@ public class DiversityFilter : IRecommendationFilter
                     continue;
                 }
 
-                AddCandidate(candidate, sourceCounts, diversified);
+                diversified.Add(ApplyDiversityPenalty(candidate, sourceCounts));
             }
             else
             {
@@ -56,31 +56,42 @@ public class DiversityFilter : IRecommendationFilter
                 break;
             }
 
-            AddCandidate(candidate, sourceCounts, diversified);
+            diversified.Add(ApplyDiversityPenalty(candidate, sourceCounts));
         }
 
         return Task.FromResult(diversified);
     }
 
-    private static void AddCandidate(
+    /// <summary>
+    /// Returns a copy of the candidate with the source-diversity penalty applied to its final
+    /// score, and increments the per-source count. Producing a copy avoids mutating the shared
+    /// input <see cref="ScoredContent"/> instances during filtering.
+    /// </summary>
+    private static ScoredContent ApplyDiversityPenalty(
         ScoredContent candidate,
-        IDictionary<Guid, int> sourceCounts,
-        ICollection<ScoredContent> diversified)
+        IDictionary<Guid, int> sourceCounts)
     {
-        if (candidate.Content.SourceId.HasValue)
+        if (!candidate.Content.SourceId.HasValue)
         {
-            var sourceId = candidate.Content.SourceId.Value;
-            var currentCount = sourceCounts.TryGetValue(sourceId, out var existingCount)
-                ? existingCount
-                : 0;
-            var diversityPenalty = CalculateDiversityPenalty(currentCount);
-
-            candidate.Scores["diversity_penalty"] = diversityPenalty;
-            candidate.FinalScore -= diversityPenalty;
-            sourceCounts[sourceId] = currentCount + 1;
+            return candidate;
         }
 
-        diversified.Add(candidate);
+        var sourceId = candidate.Content.SourceId.Value;
+        var currentCount = sourceCounts.TryGetValue(sourceId, out var existingCount)
+            ? existingCount
+            : 0;
+        var diversityPenalty = CalculateDiversityPenalty(currentCount);
+        sourceCounts[sourceId] = currentCount + 1;
+
+        return new ScoredContent
+        {
+            Content = candidate.Content,
+            Scores = new Dictionary<string, double>(candidate.Scores)
+            {
+                ["diversity_penalty"] = diversityPenalty
+            },
+            FinalScore = candidate.FinalScore - diversityPenalty
+        };
     }
 
     private static double CalculateDiversityPenalty(int currentCount)

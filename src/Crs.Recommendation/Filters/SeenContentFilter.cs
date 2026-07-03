@@ -12,12 +12,9 @@ public class SeenContentFilter : IRecommendationFilter
         RecommendationContext context,
         CancellationToken cancellationToken = default)
     {
-        // Remove content that:
-        // 1. User has already voted on (seen)
-        // 2. Were recently recommended
+        // Remove content the user has already seen (voted on) or that was recently recommended.
         var filtered = candidates
-            .Where(sr => !context.SeenContentIds.Contains(sr.Content.Id))
-            .Where(sr => !context.RecentlyRecommendedIds.Contains(sr.Content.Id))
+            .Where(sr => !RecommendationExclusions.IsSeenOrRecentlyRecommended(context, sr.Content.Id))
             .ToList();
 
         return Task.FromResult(filtered);

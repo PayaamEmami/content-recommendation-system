@@ -16,12 +16,10 @@ namespace Crs.Recommendation.Engine;
 /// </summary>
 public class RecommendationEngine : IRecommendationEngine
 {
-    private const double VectorSimilarityWeight = 0.70;
-    private const double HeuristicWeight = 0.30;
-
     private readonly IVectorStore _vectorStore;
     private readonly IContentRepository _contentRepository;
     private readonly CompositeScorer _compositeScorer;
+    private readonly HybridScorer _hybridScorer = new();
     private readonly IEnumerable<IRecommendationFilter> _filters;
     private readonly ILogger<RecommendationEngine> _logger;
     private readonly IObservabilityMetrics _metrics;
@@ -163,11 +161,11 @@ public class RecommendationEngine : IRecommendationEngine
                 QueryVector = context.UserProfile!.UserEmbedding!,
                 TopK = GetVectorCandidateCount(context.Count),
                 ContentType = context.FeedType,
-                PublishedAfter = includeOlderContent ? null : context.Date.AddDays(-90).ToDateTime(TimeOnly.MinValue),
-                ExcludeContentIds = context.SeenContentIds
-                    .Union(allowRecentRecommendations ? Enumerable.Empty<Guid>() : context.RecentlyRecommendedIds)
-                    .Union(additionalExcludedIds ?? Enumerable.Empty<Guid>())
-                    .ToHashSet()
+                PublishedAfter = includeOlderContent ? null : context.Date.AddDays(-RecommendationConstants.RecencyWindowDays).ToDateTime(TimeOnly.MinValue),
+                ExcludeContentIds = RecommendationExclusions.BuildExcludedIds(
+                    context,
+                    allowRecentRecommendations,
+                    additionalExcludedIds)
             };
 
             var searchResults = await _vectorStore.SearchAsync(searchRequest, cancellationToken);
@@ -229,11 +227,11 @@ public class RecommendationEngine : IRecommendationEngine
         CancellationToken cancellationToken)
     {
         var candidates = await _contentRepository.GetByTypeAsync(context.FeedType, cancellationToken);
-        var cutoffDate = context.Date.AddDays(-90).ToDateTime(TimeOnly.MinValue);
-        var excludedIds = context.SeenContentIds
-            .Union(allowRecentRecommendations ? Enumerable.Empty<Guid>() : context.RecentlyRecommendedIds)
-            .Union(additionalExcludedIds ?? Enumerable.Empty<Guid>())
-            .ToHashSet();
+        var cutoffDate = context.Date.AddDays(-RecommendationConstants.RecencyWindowDays).ToDateTime(TimeOnly.MinValue);
+        var excludedIds = RecommendationExclusions.BuildExcludedIds(
+            context,
+            allowRecentRecommendations,
+            additionalExcludedIds);
 
         var filteredCandidates = candidates
             .Where(candidate => !excludedIds.Contains(candidate.Id))
@@ -383,7 +381,9 @@ public class RecommendationEngine : IRecommendationEngine
 
     private static int GetVectorCandidateCount(int requestedCount)
     {
-        return Math.Max(100, requestedCount * 25);
+        return Math.Max(
+            RecommendationConstants.MinVectorCandidates,
+            requestedCount * RecommendationConstants.VectorCandidateMultiplier);
     }
 
     private static List<ScoredContent> CreateNeutralCandidates(IEnumerable<Content> contentItems)
@@ -394,9 +394,9 @@ public class RecommendationEngine : IRecommendationEngine
                 Content = content,
                 Scores = new Dictionary<string, double>
                 {
-                    { "vector_similarity", 0.5 }
+                    { "vector_similarity", RecommendationConstants.NeutralScore }
                 },
-                FinalScore = 0.5
+                FinalScore = RecommendationConstants.NeutralScore
             })
             .ToList();
     }
@@ -415,31 +415,8 @@ public class RecommendationEngine : IRecommendationEngine
             context,
             cancellationToken);
 
-        // Merge heuristic scores with vector similarity scores
-        var heuristicScoreMap = heuristicScored.ToDictionary(sr => sr.Content.Id);
-
-        foreach (var candidate in candidates)
-        {
-            if (heuristicScoreMap.TryGetValue(candidate.Content.Id, out var heuristicScore))
-            {
-                // Merge all scores
-                foreach (var kvp in heuristicScore.Scores)
-                {
-                    candidate.Scores[kvp.Key] = kvp.Value;
-                }
-
-                // Keep semantic relevance primary while letting the heuristic blend
-                // strongly favor freshness through the recency scorer itself.
-                var vectorScore = candidate.Scores.TryGetValue("vector_similarity", out var vs) ? vs : 0.5;
-                var heuristicFinalScore = heuristicScore.FinalScore;
-
-                candidate.FinalScore =
-                    (vectorScore * VectorSimilarityWeight) +
-                    (heuristicFinalScore * HeuristicWeight);
-            }
-        }
-
-        return candidates;
+        // Blend heuristic scores with vector similarity using the hybrid weighting.
+        return _hybridScorer.Merge(candidates, heuristicScored);
     }
 
     private static MetricContext BuildMetricContext(
