@@ -76,63 +76,7 @@ public class OpenSearchVectorStore : IVectorStore
             var stopwatch = Stopwatch.StartNew();
             _logger.LogInformation("Initializing OpenSearch index: {IndexName}", _settings.IndexName);
 
-            var indexExists = await _client.Indices.ExistsAsync(_settings.IndexName, ct: cancellationToken);
-
-            if (!indexExists.Exists)
-            {
-                var createIndexResponse = await _client.Indices.CreateAsync(_settings.IndexName, c => c
-                    .Settings(s => s
-                        .Setting("index.knn", true)
-                        .NumberOfShards(1)
-                        .NumberOfReplicas(0)
-                    )
-                    .Map<ContentSearchDocument>(m => m
-                        .Properties(p => p
-                            .Keyword(k => k.Name(n => n.Id))
-                            .Text(t => t.Name(n => n.Title))
-                            .Text(t => t.Name(n => n.Description))
-                            .Keyword(k => k.Name(n => n.Url))
-                            .Keyword(k => k.Name(n => n.Type))
-                            .Keyword(k => k.Name(n => n.SourceId))
-                            .Date(d => d.Name(n => n.PublishedDate))
-                            .Date(d => d.Name(n => n.CreatedAt))
-                            .Date(d => d.Name(n => n.UpdatedAt))
-                            .KnnVector(knn => knn
-                                .Name(n => n.Embedding)
-                                .Dimension(_settings.EmbeddingDimensions)
-                                .Method(m => m
-                                    .Name("hnsw")
-                                    .SpaceType("cosinesimil")
-                                    .Engine("nmslib")
-                                    .Parameters(p => p
-                                        .Parameter("ef_construction", 512)
-                                        .Parameter("m", 16)
-                                    )
-                                )
-                            )
-                        )
-                    ),
-                    cancellationToken
-                );
-
-                if (!createIndexResponse.IsValid)
-                {
-                    if (createIndexResponse.ServerError?.Error?.Type == "content_already_exists_exception")
-                    {
-                        _logger.LogInformation("Index already exists: {IndexName}", _settings.IndexName);
-                        return;
-                    }
-
-                    _logger.LogError("Failed to create index: {Error}", createIndexResponse.DebugInformation);
-                    throw new Exception($"Failed to create OpenSearch index: {createIndexResponse.DebugInformation}");
-                }
-
-                _logger.LogInformation("Successfully created index: {IndexName}", _settings.IndexName);
-            }
-            else
-            {
-                _logger.LogInformation("Index already exists: {IndexName}", _settings.IndexName);
-            }
+            await OpenSearchIndexBootstrapper.EnsureIndexAsync(_client, _settings, _logger, cancellationToken);
 
             stopwatch.Stop();
             RecordMetric("initialize", "success", stopwatch.Elapsed);
@@ -499,21 +443,4 @@ public class OpenSearchVectorStore : IVectorStore
             Embedding = document.Embedding
         };
     }
-}
-
-/// <summary>
-/// Internal document type for OpenSearch indexing.
-/// </summary>
-internal class ContentSearchDocument
-{
-    public string Id { get; set; } = string.Empty;
-    public string Title { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public string Url { get; set; } = string.Empty;
-    public string Type { get; set; } = string.Empty;
-    public string SourceId { get; set; } = string.Empty;
-    public DateTime PublishedDate { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
-    public float[] Embedding { get; set; } = Array.Empty<float>();
 }
