@@ -11,18 +11,16 @@ namespace Crs.Tests.Unit.Api;
 public sealed class UserServiceTests
 {
     private static UserService CreateService(
-        out Mock<IUserRepository> userRepository,
-        out Mock<ISourceRepository> sourceRepository)
+        out Mock<IUserRepository> userRepository)
     {
         userRepository = new Mock<IUserRepository>(MockBehavior.Strict);
-        sourceRepository = new Mock<ISourceRepository>(MockBehavior.Strict);
-        return new UserService(userRepository.Object, sourceRepository.Object, NullLogger<UserService>.Instance);
+        return new UserService(userRepository.Object, NullLogger<UserService>.Instance);
     }
 
     [TestMethod]
     public async Task GetUserByIdAsync_WhenMissing_ReturnsNull()
     {
-        var service = CreateService(out var userRepository, out _);
+        var service = CreateService(out var userRepository);
         userRepository.Setup(repo => repo.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
 
@@ -34,7 +32,7 @@ public sealed class UserServiceTests
     [TestMethod]
     public async Task GetUserByIdAsync_WhenFound_MapsSources()
     {
-        var service = CreateService(out var userRepository, out _);
+        var service = CreateService(out var userRepository);
         var userId = Guid.NewGuid();
         var source = new Source
         {
@@ -64,7 +62,7 @@ public sealed class UserServiceTests
     [TestMethod]
     public async Task UpdateUserAsync_WhenMissing_Throws()
     {
-        var service = CreateService(out var userRepository, out _);
+        var service = CreateService(out var userRepository);
         userRepository.Setup(repo => repo.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
 
@@ -75,7 +73,7 @@ public sealed class UserServiceTests
     [TestMethod]
     public async Task UpdateUserAsync_WhenValid_UpdatesDisplayName()
     {
-        var service = CreateService(out var userRepository, out _);
+        var service = CreateService(out var userRepository);
         var userId = Guid.NewGuid();
         var user = new User { Id = userId, Email = "user@example.com", DisplayName = "Old" };
 

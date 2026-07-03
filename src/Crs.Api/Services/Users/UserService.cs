@@ -10,16 +10,13 @@ namespace Crs.Api.Services;
 public class UserService : IUserService
 {
     private readonly IUserRepository _userRepository;
-    private readonly ISourceRepository _sourceRepository;
     private readonly ILogger<UserService> _logger;
 
     public UserService(
         IUserRepository userRepository,
-        ISourceRepository sourceRepository,
         ILogger<UserService> logger)
     {
         _userRepository = userRepository;
-        _sourceRepository = sourceRepository;
         _logger = logger;
     }
 

@@ -60,12 +60,3 @@ public class ToolCall
     public string Name { get; set; } = string.Empty;
     public string Arguments { get; set; } = string.Empty;
 }
-
-/// <summary>
-/// Represents the result of executing a tool.
-/// </summary>
-public class ToolResult
-{
-    public string ToolCallId { get; set; } = string.Empty;
-    public string Result { get; set; } = string.Empty;
-}

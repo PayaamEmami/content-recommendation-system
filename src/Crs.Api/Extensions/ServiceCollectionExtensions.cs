@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Crs.Api.Configuration;
+using Crs.Api.Services;
 using Crs.Core.Observability;
 
 namespace Crs.Api.Extensions;
@@ -83,6 +84,24 @@ public static class ServiceCollectionExtensions
                 ClockSkew = TimeSpan.Zero // Remove default 5 minute tolerance
             };
         });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the API application services, mirroring <c>AddInfrastructure</c> and
+    /// <c>AddLlmServices</c> so <c>Program.cs</c> stays declarative.
+    /// </summary>
+    public static IServiceCollection AddApplicationServices(this IServiceCollection services)
+    {
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IUserService, UserService>();
+        services.AddScoped<ISourceService, SourceService>();
+        services.AddScoped<IContentService, ContentService>();
+        services.AddScoped<IVoteService, VoteService>();
+        services.AddScoped<IPreferenceService, PreferenceService>();
+        services.AddScoped<IRecommendationService, RecommendationService>();
+        services.AddScoped<IXAccountService, XAccountService>();
 
         return services;
     }

@@ -57,28 +57,6 @@ public class OpenAIClient : ILlmClient
         return await CallApiAsync(messages, tools, cancellationToken);
     }
 
-
-    public async Task<LlmResponse> ContinueConversationAsync(
-        List<object> conversationHistory,
-        List<ToolResult> toolResults,
-        CancellationToken cancellationToken = default)
-    {
-        var messages = new List<object>(conversationHistory);
-
-        // Add tool results to conversation
-        foreach (var toolResult in toolResults)
-        {
-            messages.Add(new
-            {
-                role = "tool",
-                tool_call_id = toolResult.ToolCallId,
-                content = toolResult.Result
-            });
-        }
-
-        return await CallApiAsync(messages, null, cancellationToken);
-    }
-
     private async Task<LlmResponse> CallApiAsync(
         List<object> messages,
         List<object>? tools,

@@ -79,14 +79,6 @@ public sealed class FakeLlmClient : ILlmClient
     {
         return Task.FromResult(new LlmResponse { Content = string.Empty, IsComplete = true });
     }
-
-    public Task<LlmResponse> ContinueConversationAsync(
-        List<object> conversationHistory,
-        List<ToolResult> toolResults,
-        CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(new LlmResponse { Content = string.Empty, IsComplete = true });
-    }
 }
 
 public sealed class FakeIngestionAgent : IIngestionAgent

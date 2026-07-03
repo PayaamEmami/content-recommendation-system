@@ -2,7 +2,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Crs.Llm.Configuration;
 using Crs.Llm.Services;
-using Crs.Llm.Tools;
 
 namespace Crs.Llm;
 
@@ -30,7 +29,6 @@ public static class DependencyInjection
             });
 
         // Register agent services
-        services.AddScoped<AgentTools>();
         services.AddScoped<IIngestionAgent, IngestionAgent>();
         services.AddScoped<ISourceIngestionService, SourceIngestionService>();
 

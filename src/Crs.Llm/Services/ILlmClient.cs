@@ -21,17 +21,5 @@ public interface ILlmClient
         string userMessage,
         List<object>? tools = null,
         CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Continues a conversation by sending tool results back to the LLM.
-    /// </summary>
-    /// <param name="conversationHistory">Previous messages in the conversation</param>
-    /// <param name="toolResults">Results from tool executions</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The LLM's response</returns>
-    Task<LlmResponse> ContinueConversationAsync(
-        List<object> conversationHistory,
-        List<ToolResult> toolResults,
-        CancellationToken cancellationToken = default);
 }
 
