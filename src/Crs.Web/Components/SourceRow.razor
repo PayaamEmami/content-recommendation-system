@@ -1,0 +1,119 @@
+@using Crs.Core.Enums
+
+<div class="source-row @(Source.IsActive ? "" : "inactive") @(IsEditing ? "editing" : "")">
+    @if (IsEditing)
+    {
+        <!-- Inline Edit Mode -->
+        <div class="source-edit-form">
+            @if (!string.IsNullOrEmpty(EditErrorMessage))
+            {
+                <AlertMessage Variant="AlertVariant.Error" Class="alert-message-compact">@EditErrorMessage</AlertMessage>
+            }
+            <EditForm Model="@EditModel" OnValidSubmit="OnSaveEdit">
+                <DataAnnotationsValidator />
+                <div class="edit-grid">
+                    <div class="form-group">
+                        <InputText @bind-Value="EditModel.Name" class="form-input" placeholder="Name" />
+                    </div>
+                    <div class="form-group">
+                        <UiSelect TValue="ContentType"
+                                  Value="@EditModel.Category"
+                                  ValueChanged="value => EditModel.Category = value"
+                                  Options="@CategoryOptions" />
+                    </div>
+                    <div class="form-group form-group-url">
+                        <InputText @bind-Value="EditModel.Url" class="form-input" placeholder="URL" />
+                    </div>
+                    <div class="form-group">
+                        <InputText @bind-Value="EditModel.Description" class="form-input"
+                            placeholder="Description (optional)" />
+                    </div>
+                </div>
+                <div class="edit-actions">
+                    <button type="submit" class="btn-sm btn-primary" disabled="@IsSaving">Save</button>
+                    <button type="button" class="btn-sm btn-secondary" @onclick="OnCancelEdit">Cancel</button>
+                </div>
+            </EditForm>
+        </div>
+    }
+    else
+    {
+        <!-- View Mode -->
+        <div class="source-icon">
+            <UiSvgIcon Kind="@CategoryToIcon(Source.Category)" />
+        </div>
+        <div class="source-info">
+            <div class="source-name-row">
+                <span class="source-name">@Source.Name</span>
+                @if (!Source.IsActive)
+                {
+                    <UiBadge Class="status-badge inactive">Paused</UiBadge>
+                }
+            </div>
+            <a href="@Source.Url" target="_blank" rel="noopener" class="source-url">@TruncateUrl(Source.Url)</a>
+            @if (!string.IsNullOrEmpty(Source.Description))
+            {
+                <span class="source-desc">@Source.Description</span>
+            }
+        </div>
+        <div class="source-meta">
+            @if (Source.ContentCount > 0)
+            {
+                <span class="meta-item" title="Content fetched">@Source.ContentCount items</span>
+            }
+            @if (Source.LastFetchedAt.HasValue)
+            {
+                <span class="meta-item" title="Last fetched">@DisplayFormatters.CompactRelativeDate(Source.LastFetchedAt.Value)</span>
+            }
+        </div>
+        <div class="source-actions">
+            <button type="button" class="action-btn" @onclick="() => OnStartEdit.InvokeAsync(Source)" title="Edit">
+                <UiSvgIcon Kind="SvgIconKind.Edit" />
+            </button>
+            <button type="button" class="action-btn" @onclick="() => OnToggle.InvokeAsync(Source.Id)"
+                title="@(Source.IsActive ? "Pause" : "Activate")">
+                @if (Source.IsActive)
+                {
+                    <UiSvgIcon Kind="SvgIconKind.Pause" />
+                }
+                else
+                {
+                    <UiSvgIcon Kind="SvgIconKind.Play" />
+                }
+            </button>
+            <button type="button" class="action-btn danger" @onclick="() => OnDelete.InvokeAsync(Source.Id)" title="Delete">
+                <UiSvgIcon Kind="SvgIconKind.Delete" />
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SourceItem Source { get; set; } = default!;
+    [Parameter] public bool IsEditing { get; set; }
+    [Parameter] public EditSourceModel EditModel { get; set; } = default!;
+    [Parameter] public string? EditErrorMessage { get; set; }
+    [Parameter] public bool IsSaving { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<UiSelectOption<ContentType>> CategoryOptions { get; set; } = default!;
+    [Parameter] public EventCallback<SourceItem> OnStartEdit { get; set; }
+    [Parameter] public EventCallback OnCancelEdit { get; set; }
+    [Parameter] public EventCallback OnSaveEdit { get; set; }
+    [Parameter] public EventCallback<Guid> OnToggle { get; set; }
+    [Parameter] public EventCallback<Guid> OnDelete { get; set; }
+
+    private static SvgIconKind CategoryToIcon(ContentType type) => type switch
+    {
+        ContentType.Paper => SvgIconKind.Paper,
+        ContentType.Video => SvgIconKind.Video,
+        ContentType.BlogPost => SvgIconKind.Blog,
+        _ => SvgIconKind.Attachment
+    };
+
+    private static string TruncateUrl(string url)
+    {
+        if (url.Length <= 50) return url;
+        var uri = new Uri(url);
+        var display = uri.Host + uri.AbsolutePath;
+        return display.Length > 50 ? display[..47] + "..." : display;
+    }
+}

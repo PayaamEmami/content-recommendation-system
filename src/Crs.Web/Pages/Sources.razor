@@ -26,138 +26,22 @@
 
     @if (_activeTab == "single")
     {
-      <div class="add-source-form">
-        @if (!string.IsNullOrEmpty(_errorMessage))
-        {
-          <AlertMessage Variant="AlertVariant.Error">@_errorMessage</AlertMessage>
-        }
-        @if (!string.IsNullOrEmpty(_successMessage))
-        {
-          <AlertMessage Variant="AlertVariant.Success">@_successMessage</AlertMessage>
-        }
-
-        <EditForm Model="@_newSource" OnValidSubmit="HandleAddSource">
-          <DataAnnotationsValidator />
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="name">Name</label>
-              <InputText id="name" @bind-Value="_newSource.Name" class="form-input" placeholder="e.g. ArXiv AI Papers" />
-              <ValidationMessage For="@(() => _newSource.Name)" />
-            </div>
-            <div class="form-group">
-              <label for="category">Category</label>
-              <UiSelect Id="category"
-                        TValue="ContentType"
-                        Value="@_newSource.Category"
-                        ValueChanged="value => _newSource.Category = value"
-                        Options="@ContentTypeOptions" />
-              <ValidationMessage For="@(() => _newSource.Category)" />
-            </div>
-            <div class="form-group form-group-wide">
-              <label for="url">URL</label>
-              <InputText id="url" @bind-Value="_newSource.Url" class="form-input"
-                placeholder="https://example.com/feed" />
-              <ValidationMessage For="@(() => _newSource.Url)" />
-            </div>
-            <div class="form-group form-group-wide">
-              <label for="description">Description <span class="optional">(optional)</span></label>
-              <InputText id="description" @bind-Value="_newSource.Description" class="form-input"
-                placeholder="Brief description" />
-            </div>
-          </div>
-          <button type="submit" class="btn-primary" disabled="@_isLoading">
-            @(_isLoading ? "Adding..." : "Add Source")
-          </button>
-        </EditForm>
-      </div>
+      <AddSourceForm Model="@_newSource"
+                     CategoryOptions="@ContentTypeOptions"
+                     IsLoading="@_isLoading"
+                     ErrorMessage="@_errorMessage"
+                     SuccessMessage="@_successMessage"
+                     OnSubmit="HandleAddSource" />
     }
     else if (_activeTab == "import")
     {
-      <div class="import-export-form">
-          <div class="import-section">
-            <label for="source-import-file" class="import-section-title">Upload JSON File</label>
-            <p class="bulk-hint">Choose a CRS export file or another JSON file with a <code>sources</code> array.</p>
-            <InputFile id="source-import-file" OnChange="HandleImportFileSelected" accept=".json,application/json" class="file-input" />
-            @if (!string.IsNullOrEmpty(_importFileName))
-            {
-              <div class="import-file-status">Loaded file: @_importFileName</div>
-            }
-          </div>
-
-          <div class="import-divider">or paste JSON</div>
-
-          <div class="import-section">
-            <div class="import-section-header">
-              <label for="source-import-json" class="import-section-title">Paste JSON</label>
-              <button type="button"
-                      class="format-toggle-btn @(_showJsonExample ? "expanded" : "")"
-                      @onclick="() => _showJsonExample = !_showJsonExample"
-                      aria-label="@(_showJsonExample ? "Hide JSON format example" : "Show JSON format example")"
-                      title="@(_showJsonExample ? "Hide format" : "Show format")">
-                <UiSvgIcon Kind="SvgIconKind.ChevronDown" Class="format-toggle-icon" />
-              </button>
-            </div>
-            <p class="bulk-hint">Paste a JSON object containing a <code>sources</code> array.</p>
-
-            @if (_showJsonExample)
-            {
-              <pre class="json-example">@ImportJsonExample</pre>
-            }
-          </div>
-
-          @if (!string.IsNullOrEmpty(_importError))
-          {
-            <AlertMessage Variant="AlertVariant.Error">@_importError</AlertMessage>
-          }
-          @if (!string.IsNullOrEmpty(_importSuccess))
-          {
-            <AlertMessage Variant="AlertVariant.Success">@_importSuccess</AlertMessage>
-          }
-
-          <textarea id="source-import-json" @bind="_importJson" class="form-input bulk-textarea" rows="8"
-            placeholder="@ImportJsonExample"></textarea>
-
-          <button @onclick="HandleImport" class="btn-primary" disabled="@_isImporting">
-            @(_isImporting ? "Importing..." : "Import")
-          </button>
-
-          @if (_importResult != null)
-          {
-            <div class="import-results">
-              <span class="result-success">
-                <UiSvgIcon Kind="SvgIconKind.Check" Class="import-result-icon" /> @_importResult.Imported imported
-              </span>
-              @if (_importResult.Failed > 0)
-              {
-                <span class="result-fail">
-                  <UiSvgIcon Kind="SvgIconKind.Cross" Class="import-result-icon" /> @_importResult.Failed failed
-                </span>
-              }
-            </div>
-          }
-        </div>
-      }
-      else
-      {
-        <div class="import-export-form">
-          <p class="bulk-hint">Download your current sources as a JSON file you can keep or import later.</p>
-
-          @if (!HasLoadedSources && !string.IsNullOrEmpty(_loadSourcesError))
-          {
-            <AlertMessage Variant="AlertVariant.Error">Can't export until your sources load successfully. @_loadSourcesError</AlertMessage>
-          }
-
-          @if (!string.IsNullOrEmpty(_exportSuccessMessage))
-          {
-            <AlertMessage Variant="AlertVariant.Success">@_exportSuccessMessage</AlertMessage>
-          }
-
-          <button type="button" @onclick="HandleExport" class="btn-primary" disabled="@(!CanExport)">
-            @(_isExporting ? "Exporting..." : "Export")
-          </button>
-        </div>
-      }
-    </div>
+      <SourceImportPanel OnImported="LoadSources" />
+    }
+    else
+    {
+      <SourceExportPanel Sources="@_sources" LoadError="@_loadSourcesError" />
+    }
+  </div>
 
   <div class="sources-container">
     @if (_isLoadingSources && _sources == null)
@@ -192,93 +76,17 @@
       <div class="sources-table">
         @foreach (var source in _sources!)
         {
-          <div class="source-row @(source.IsActive ? "" : "inactive") @(_editingSourceId == source.Id ? "editing" : "")">
-            @if (_editingSourceId == source.Id)
-            {
-              <!-- Inline Edit Mode -->
-              <div class="source-edit-form">
-                @if (!string.IsNullOrEmpty(_editErrorMessage))
-                {
-                  <AlertMessage Variant="AlertVariant.Error" Class="alert-message-compact">@_editErrorMessage</AlertMessage>
-                }
-                <EditForm Model="@_editModel" OnValidSubmit="HandleUpdateSource">
-                  <DataAnnotationsValidator />
-                  <div class="edit-grid">
-                    <div class="form-group">
-                      <InputText @bind-Value="_editModel.Name" class="form-input" placeholder="Name" />
-                    </div>
-                    <div class="form-group">
-                      <UiSelect TValue="ContentType"
-                                Value="@_editModel.Category"
-                                ValueChanged="value => _editModel.Category = value"
-                                Options="@ContentTypeOptions" />
-                    </div>
-                    <div class="form-group form-group-url">
-                      <InputText @bind-Value="_editModel.Url" class="form-input" placeholder="URL" />
-                    </div>
-                    <div class="form-group">
-                      <InputText @bind-Value="_editModel.Description" class="form-input"
-                        placeholder="Description (optional)" />
-                    </div>
-                  </div>
-                  <div class="edit-actions">
-                    <button type="submit" class="btn-sm btn-primary" disabled="@_isLoading">Save</button>
-                    <button type="button" class="btn-sm btn-secondary" @onclick="CancelEdit">Cancel</button>
-                  </div>
-                </EditForm>
-              </div>
-            }
-            else
-            {
-              <!-- View Mode -->
-              <div class="source-icon">
-                <UiSvgIcon Kind="@CategoryToIcon(source.Category)" />
-              </div>
-              <div class="source-info">
-                <div class="source-name-row">
-                  <span class="source-name">@source.Name</span>
-                  @if (!source.IsActive)
-                  {
-                    <UiBadge Class="status-badge inactive">Paused</UiBadge>
-                  }
-                </div>
-                <a href="@source.Url" target="_blank" rel="noopener" class="source-url">@TruncateUrl(source.Url)</a>
-                @if (!string.IsNullOrEmpty(source.Description))
-                {
-                  <span class="source-desc">@source.Description</span>
-                }
-              </div>
-              <div class="source-meta">
-                @if (source.ContentCount > 0)
-                {
-                  <span class="meta-item" title="Content fetched">@source.ContentCount items</span>
-                }
-                @if (source.LastFetchedAt.HasValue)
-                {
-                  <span class="meta-item" title="Last fetched">@FormatDate(source.LastFetchedAt.Value)</span>
-                }
-              </div>
-              <div class="source-actions">
-                <button type="button" class="action-btn" @onclick="() => StartEdit(source)" title="Edit">
-                  <UiSvgIcon Kind="SvgIconKind.Edit" />
-                </button>
-                <button type="button" class="action-btn" @onclick="() => ToggleSource(source.Id)"
-                  title="@(source.IsActive ? "Pause" : "Activate")">
-                  @if (source.IsActive)
-                  {
-                    <UiSvgIcon Kind="SvgIconKind.Pause" />
-                  }
-                  else
-                  {
-                    <UiSvgIcon Kind="SvgIconKind.Play" />
-                  }
-                </button>
-                <button type="button" class="action-btn danger" @onclick="() => DeleteSource(source.Id)" title="Delete">
-                  <UiSvgIcon Kind="SvgIconKind.Delete" />
-                </button>
-              </div>
-            }
-          </div>
+          <SourceRow Source="source"
+                     IsEditing="@(_editingSourceId == source.Id)"
+                     EditModel="@_editModel"
+                     EditErrorMessage="@_editErrorMessage"
+                     IsSaving="@_isLoading"
+                     CategoryOptions="@ContentTypeOptions"
+                     OnStartEdit="StartEdit"
+                     OnCancelEdit="CancelEdit"
+                     OnSaveEdit="HandleUpdateSource"
+                     OnToggle="ToggleSource"
+                     OnDelete="DeleteSource" />
         }
       </div>
     }
@@ -296,44 +104,15 @@
   private string? _errorMessage;
   private string? _successMessage;
   private string? _editErrorMessage;
-  private const string ImportJsonExample = """
-{
-  "sources": [
-    {
-      "name": "ArXiv AI",
-      "url": "https://arxiv.org/list/cs.AI/recent",
-      "category": "Paper"
-    },
-    {
-      "name": "3Blue1Brown",
-      "url": "https://youtube.com/c/3blue1brown",
-      "category": "Video"
-    }
-  ]
-}
-""";
   private bool _isLoading;
   private Guid? _editingSourceId;
   private string _activeTab = "single";
-  private bool _showJsonExample;
-  private const long MaxImportFileSizeBytes = 1024 * 1024;
-
-  // Import fields
-  private string _importJson = "";
-  private string? _importError;
-  private string? _importSuccess;
-  private string? _importFileName;
-  private bool _isImporting;
-  private ImportResultModel? _importResult;
-  private bool _isExporting;
-  private string? _exportSuccessMessage;
   private bool _isLoadingSources = true;
   private string? _loadSourcesError;
   private static readonly IReadOnlyList<UiSelectOption<ContentType>> ContentTypeOptions = Enum.GetValues<ContentType>()
-    .Select(type => new UiSelectOption<ContentType>(type, GetContentTypeDisplay(type)))
+    .Select(type => new UiSelectOption<ContentType>(type, DisplayFormatters.ContentTypeLabel(type)))
     .ToArray();
   private bool HasLoadedSources => _sources != null && _sources.Count > 0;
-  private bool CanExport => !_isExporting && HasLoadedSources;
 
   protected override async Task OnInitializedAsync()
   {
@@ -455,96 +234,6 @@
     await LoadSources();
   }
 
-  private async Task HandleImport()
-  {
-    _isImporting = true;
-    _importError = null;
-    _importSuccess = null;
-    _importResult = null;
-
-    try
-    {
-      var result = await SourceService.ImportSourcesAsync(_importJson);
-      _importResult = result;
-
-      if (result.Imported > 0)
-      {
-        _importSuccess = $"Imported {result.Imported} source(s)";
-        await LoadSources();
-        if (result.Failed == 0)
-        {
-          _importJson = "";
-          _importFileName = null;
-        }
-      }
-
-      if (result.Failed > 0)
-      {
-        _importError = $"{result.Failed} failed to import";
-      }
-    }
-    catch (Exception ex)
-    {
-      _importError = $"Import failed: {ex.Message}";
-    }
-    finally
-    {
-      _isImporting = false;
-    }
-  }
-
-  private async Task HandleImportFileSelected(InputFileChangeEventArgs e)
-  {
-    _importError = null;
-    _importSuccess = null;
-
-    var file = e.File;
-    if (file == null)
-    {
-      _importFileName = null;
-      return;
-    }
-
-    try
-    {
-      await using var stream = file.OpenReadStream(MaxImportFileSizeBytes);
-      using var reader = new System.IO.StreamReader(stream);
-      _importJson = await reader.ReadToEndAsync();
-      _importFileName = file.Name;
-    }
-    catch (IOException)
-    {
-      _importFileName = null;
-      _importError = $"File is too large. Please keep import files under {MaxImportFileSizeBytes / 1024 / 1024} MB.";
-    }
-    catch (Exception ex)
-    {
-      _importFileName = null;
-      _importError = $"Couldn't read file: {ex.Message}";
-    }
-  }
-
-  private async Task HandleExport()
-  {
-    if (!HasLoadedSources || _sources == null)
-    {
-      return;
-    }
-
-    _isExporting = true;
-    _exportSuccessMessage = null;
-
-    try
-    {
-      await SourceService.ExportSourcesAsync(_sources);
-      _exportSuccessMessage = $"Exported {_sources.Count} source(s)";
-    }
-    finally
-    {
-      _isExporting = false;
-    }
-  }
-
   private void HandleAuthStateChanged()
   {
     if (!AuthService.CurrentState.IsAuthenticated)
@@ -557,64 +246,8 @@
   private void SetTabImport() => _activeTab = "import";
   private void SetTabExport() => _activeTab = "export";
 
-  private static string GetContentTypeDisplay(ContentType type) => type switch
-  {
-    ContentType.Paper => "Papers",
-    ContentType.Video => "Videos",
-    ContentType.BlogPost => "Blogs",
-    _ => type.ToString()
-  };
-
-  private static SvgIconKind CategoryToIcon(ContentType type) => type switch
-  {
-    ContentType.Paper => SvgIconKind.Paper,
-    ContentType.Video => SvgIconKind.Video,
-    ContentType.BlogPost => SvgIconKind.Blog,
-    _ => SvgIconKind.Attachment
-  };
-
-  private static string TruncateUrl(string url)
-  {
-    if (url.Length <= 50) return url;
-    var uri = new Uri(url);
-    var display = uri.Host + uri.AbsolutePath;
-    return display.Length > 50 ? display[..47] + "..." : display;
-  }
-
-  private static string FormatDate(DateTime date)
-  {
-    var span = DateTime.UtcNow - date;
-    if (span.TotalHours < 1) return "just now";
-    if (span.TotalDays < 1) return $"{(int)span.TotalHours}h ago";
-    if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
-    return date.ToString("MMM d");
-  }
-
   public void Dispose()
   {
     AuthService.OnAuthStateChanged -= HandleAuthStateChanged;
-  }
-
-  private class AddSourceModel
-  {
-    [Required(ErrorMessage = "Name is required")]
-    public string Name { get; set; } = string.Empty;
-
-    [Required(ErrorMessage = "URL is required")]
-    [Url(ErrorMessage = "Enter a valid URL")]
-    public string Url { get; set; } = string.Empty;
-
-    [Required(ErrorMessage = "Category is required")]
-    public ContentType Category { get; set; }
-
-    public string? Description { get; set; }
-  }
-
-  private class EditSourceModel
-  {
-    [Required] public string Name { get; set; } = string.Empty;
-    [Required][Url] public string Url { get; set; } = string.Empty;
-    [Required] public ContentType Category { get; set; }
-    public string? Description { get; set; }
   }
 }

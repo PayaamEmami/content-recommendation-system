@@ -1,0 +1,30 @@
+.add-source-form .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+}
+
+.form-group-wide {
+    grid-column: 1 / -1;
+}
+
+.add-source-form .form-group {
+    margin-bottom: 0;
+}
+
+.add-source-form label {
+    font-size: 0.85rem;
+    margin-bottom: 0.375rem;
+}
+
+.add-source-form .optional {
+    color: var(--text-tertiary);
+    font-weight: 400;
+}
+
+@media (max-width: 768px) {
+    .add-source-form .form-grid {
+        grid-template-columns: 1fr;
+    }
+}
