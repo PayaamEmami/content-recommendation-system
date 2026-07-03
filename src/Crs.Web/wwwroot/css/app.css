@@ -334,26 +334,30 @@ button {
     white-space: nowrap;
 }
 
+/* Action-type buttons share one cohesive shape: an always-visible colored
+   border in the button's intent color over a transparent background, with a
+   matching translucent fill appearing on hover. */
 .btn-primary {
-    background-color: var(--surface-input);
+    background-color: transparent;
     color: var(--text-primary);
-    border-color: var(--border-subtle);
+    border-color: color-mix(in srgb, var(--accent-color) 60%, transparent);
 }
 
 .btn-primary:hover:not(:disabled) {
-    background-color: var(--surface-hover);
+    background-color: color-mix(in srgb, var(--accent-color) 10%, transparent);
     border-color: var(--accent-color);
     color: var(--text-primary);
 }
 
 .btn-secondary {
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
-    border-color: var(--border-color);
+    background-color: transparent;
+    color: var(--text-secondary);
+    border-color: var(--border-subtle);
 }
 
 .btn-secondary:hover:not(:disabled) {
     background-color: var(--surface-hover);
+    border-color: var(--text-secondary);
     color: var(--text-primary);
 }
 
@@ -370,13 +374,15 @@ button {
 }
 
 .btn-danger {
-    background-color: var(--error-color);
-    color: white;
+    background-color: transparent;
+    color: var(--error-color);
+    border-color: color-mix(in srgb, var(--error-color) 60%, transparent);
 }
 
 .btn-danger:hover:not(:disabled) {
-    background-color: color-mix(in srgb, var(--error-color) 86%, black);
-    color: white;
+    background-color: color-mix(in srgb, var(--error-color) 10%, transparent);
+    border-color: var(--error-color);
+    color: var(--error-text);
 }
 
 .btn-danger-text {
