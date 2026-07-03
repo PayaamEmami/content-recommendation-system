@@ -1,5 +1,3 @@
-using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -11,15 +9,12 @@ namespace Crs.Web.Services;
 public class XFeedService
 {
     private readonly HttpClient _httpClient;
+    private readonly AuthorizedApiClient _api;
     private readonly AuthService _authService;
     private readonly ILogger<XFeedService> _logger;
     private readonly DevelopmentDataStore? _developmentData;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
+    private static readonly JsonSerializerOptions JsonOptions = CrsJsonOptions.Default;
 
     public XFeedService(
         HttpClient httpClient,
@@ -28,44 +23,10 @@ public class XFeedService
         DevelopmentDataStore? developmentData = null)
     {
         _httpClient = httpClient;
+        _api = new AuthorizedApiClient(httpClient, authService);
         _authService = authService;
         _logger = logger;
         _developmentData = developmentData;
-    }
-
-    private void SetAuthHeader()
-    {
-        if (!string.IsNullOrEmpty(_authService.CurrentState.AccessToken))
-        {
-            _httpClient.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", _authService.CurrentState.AccessToken);
-        }
-    }
-
-    private async Task<HttpResponseMessage?> SendAuthorizedAsync(Func<Task<HttpResponseMessage>> requestFactory)
-    {
-        if (!await _authService.EnsureAuthenticatedAsync())
-        {
-            return null;
-        }
-
-        SetAuthHeader();
-        var response = await requestFactory();
-
-        if (response.StatusCode == HttpStatusCode.Unauthorized)
-        {
-            var refreshed = await _authService.TryRefreshAsync();
-            if (!refreshed)
-            {
-                await _authService.LogoutAsync();
-                return response;
-            }
-
-            SetAuthHeader();
-            response = await requestFactory();
-        }
-
-        return response;
     }
 
     public async Task<string?> GetConnectUrlAsync(string? redirectUri = null)
@@ -80,7 +41,7 @@ public class XFeedService
             var requestUri = string.IsNullOrWhiteSpace(redirectUri)
                 ? "/api/v1/x/connect-url"
                 : $"/api/v1/x/connect-url?redirectUri={Uri.EscapeDataString(redirectUri)}";
-            var response = await SendAuthorizedAsync(() => _httpClient.GetAsync(requestUri));
+            var response = await _api.SendAsync(() => _httpClient.GetAsync(requestUri));
             if (response == null)
             {
                 return null;
@@ -111,7 +72,7 @@ public class XFeedService
                 State = state
             };
 
-            var response = await SendAuthorizedAsync(() =>
+            var response = await _api.SendAsync(() =>
                 _httpClient.PostAsJsonAsync("/api/v1/x/callback", request, JsonOptions));
             if (response == null)
             {
@@ -182,7 +143,7 @@ public class XFeedService
                 return true;
             }
 
-            var response = await SendAuthorizedAsync(() =>
+            var response = await _api.SendAsync(() =>
                 _httpClient.DeleteAsync("/api/v1/x/connection"));
             return response?.IsSuccessStatusCode ?? false;
         }
@@ -202,7 +163,7 @@ public class XFeedService
                 return _developmentData.GetFollowedAccounts();
             }
 
-            var response = await SendAuthorizedAsync(() =>
+            var response = await _api.SendAsync(() =>
                 _httpClient.GetAsync($"/api/v1/x/followed-accounts?refresh={refresh.ToString().ToLowerInvariant()}"));
             if (response == null)
             {
@@ -251,7 +212,7 @@ public class XFeedService
                 FollowedAccountIds = followedAccountIds
             };
 
-            var response = await SendAuthorizedAsync(() =>
+            var response = await _api.SendAsync(() =>
                 _httpClient.PostAsJsonAsync("/api/v1/x/selected-accounts", request, JsonOptions));
             if (response == null)
             {
@@ -295,7 +256,7 @@ public class XFeedService
                 return _developmentData.GetPosts(limit);
             }
 
-            var response = await SendAuthorizedAsync(() =>
+            var response = await _api.SendAsync(() =>
                 _httpClient.GetAsync($"/api/v1/x/posts?limit={limit}"));
             if (response == null)
             {

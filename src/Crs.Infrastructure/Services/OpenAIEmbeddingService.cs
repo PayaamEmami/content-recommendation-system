@@ -196,32 +196,15 @@ public class OpenAIEmbeddingService : IEmbeddingService
 
     private void RecordMetric(string operation, string outcome, TimeSpan duration, int? count = null)
     {
-        var context = new MetricContext(
-            Dimensions: new Dictionary<string, string>
-            {
-                ["Dependency"] = "OpenAI",
-                ["Operation"] = operation,
-                ["Outcome"] = outcome
-            },
-            Properties: count.HasValue
-                ? new Dictionary<string, object?> { ["Count"] = count.Value }
-                : null);
-
-        _metrics.Increment("dependency.call.count", context: context);
-        _metrics.RecordDuration("dependency.call.duration", duration, context);
-        if (outcome == "failed")
-        {
-            _metrics.Increment("dependency.failure.count", context: context);
-        }
+        var properties = count.HasValue
+            ? new Dictionary<string, object?> { ["Count"] = count.Value }
+            : null;
+        DependencyMetrics.RecordCall(_metrics, "OpenAI", operation, outcome, duration, properties);
     }
 
     private string FormatResponseBody(string responseContent)
     {
-        if (_observabilitySettings.EnableSensitiveBodyLogging || _environment.IsDevelopment())
-        {
-            return responseContent.Length <= 512 ? responseContent : $"{responseContent[..512]}...";
-        }
-
-        return $"<suppressed length={responseContent.Length}>";
+        var allowFullBody = _observabilitySettings.EnableSensitiveBodyLogging || _environment.IsDevelopment();
+        return ResponseBodyFormatter.Format(responseContent, allowFullBody);
     }
 }

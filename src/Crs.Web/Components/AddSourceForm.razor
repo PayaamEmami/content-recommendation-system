@@ -1,0 +1,55 @@
+@using Crs.Core.Enums
+
+<div class="add-source-form">
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <AlertMessage Variant="AlertVariant.Error">@ErrorMessage</AlertMessage>
+    }
+    @if (!string.IsNullOrEmpty(SuccessMessage))
+    {
+        <AlertMessage Variant="AlertVariant.Success">@SuccessMessage</AlertMessage>
+    }
+
+    <EditForm Model="@Model" OnValidSubmit="OnSubmit">
+        <DataAnnotationsValidator />
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="name">Name</label>
+                <InputText id="name" @bind-Value="Model.Name" class="form-input" placeholder="e.g. ArXiv AI Papers" />
+                <ValidationMessage For="@(() => Model.Name)" />
+            </div>
+            <div class="form-group">
+                <label for="category">Category</label>
+                <UiSelect Id="category"
+                          TValue="ContentType"
+                          Value="@Model.Category"
+                          ValueChanged="value => Model.Category = value"
+                          Options="@CategoryOptions" />
+                <ValidationMessage For="@(() => Model.Category)" />
+            </div>
+            <div class="form-group form-group-wide">
+                <label for="url">URL</label>
+                <InputText id="url" @bind-Value="Model.Url" class="form-input"
+                    placeholder="https://example.com/feed" />
+                <ValidationMessage For="@(() => Model.Url)" />
+            </div>
+            <div class="form-group form-group-wide">
+                <label for="description">Description <span class="optional">(optional)</span></label>
+                <InputText id="description" @bind-Value="Model.Description" class="form-input"
+                    placeholder="Brief description" />
+            </div>
+        </div>
+        <button type="submit" class="btn-primary" disabled="@IsLoading">
+            @(IsLoading ? "Adding..." : "Add Source")
+        </button>
+    </EditForm>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public AddSourceModel Model { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<UiSelectOption<ContentType>> CategoryOptions { get; set; } = default!;
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+    [Parameter] public string? SuccessMessage { get; set; }
+    [Parameter] public EventCallback OnSubmit { get; set; }
+}

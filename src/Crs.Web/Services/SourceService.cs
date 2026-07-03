@@ -1,8 +1,5 @@
-using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Crs.Core.Enums;
 using Microsoft.JSInterop;
 
@@ -14,17 +11,13 @@ namespace Crs.Web.Services;
 public class SourceService
 {
     private readonly HttpClient _httpClient;
+    private readonly AuthorizedApiClient _api;
     private readonly AuthService _authService;
     private readonly ILogger<SourceService> _logger;
     private readonly IJSRuntime _jsRuntime;
     private readonly DevelopmentDataStore? _developmentData;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() }
-    };
+    private static readonly JsonSerializerOptions JsonOptions = CrsJsonOptions.Default;
 
     public SourceService(
         HttpClient httpClient,
@@ -34,6 +27,7 @@ public class SourceService
         DevelopmentDataStore? developmentData = null)
     {
         _httpClient = httpClient;
+        _api = new AuthorizedApiClient(httpClient, authService);
         _authService = authService;
         _logger = logger;
         _jsRuntime = jsRuntime;
@@ -46,41 +40,6 @@ public class SourceService
         ILogger<SourceService> logger)
         : this(httpClient, authService, logger, new NoOpJsRuntime())
     {
-    }
-
-    private void SetAuthHeader()
-    {
-        if (!string.IsNullOrEmpty(_authService.CurrentState.AccessToken))
-        {
-            _httpClient.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", _authService.CurrentState.AccessToken);
-        }
-    }
-
-    private async Task<HttpResponseMessage?> SendAuthorizedAsync(Func<Task<HttpResponseMessage>> requestFactory)
-    {
-        if (!await _authService.EnsureAuthenticatedAsync())
-        {
-            return null;
-        }
-
-        SetAuthHeader();
-        var response = await requestFactory();
-
-        if (response.StatusCode == HttpStatusCode.Unauthorized)
-        {
-            var refreshed = await _authService.TryRefreshAsync();
-            if (!refreshed)
-            {
-                await _authService.LogoutAsync();
-                return response;
-            }
-
-            SetAuthHeader();
-            response = await requestFactory();
-        }
-
-        return response;
     }
 
     public async Task<List<SourceItem>> GetUserSourcesAsync()
@@ -98,7 +57,7 @@ public class SourceService
                 return _developmentData.GetSources();
             }
 
-            var response = await SendAuthorizedAsync(() => _httpClient.GetAsync("/api/v1/sources"));
+            var response = await _api.SendAsync(() => _httpClient.GetAsync("/api/v1/sources"));
             if (response == null)
             {
                 _logger.LogWarning("User not authenticated, cannot fetch sources");
@@ -159,7 +118,7 @@ public class SourceService
                 Description = description
             };
 
-            var response = await SendAuthorizedAsync(() => _httpClient.PostAsJsonAsync("/api/v1/sources", request));
+            var response = await _api.SendAsync(() => _httpClient.PostAsJsonAsync("/api/v1/sources", request));
             if (response == null)
             {
                 _logger.LogWarning("User not authenticated, cannot add source");
@@ -191,7 +150,7 @@ public class SourceService
                 return _developmentData.DeleteSource(sourceId);
             }
 
-            var response = await SendAuthorizedAsync(() => _httpClient.DeleteAsync($"/api/v1/sources/{sourceId}"));
+            var response = await _api.SendAsync(() => _httpClient.DeleteAsync($"/api/v1/sources/{sourceId}"));
             if (response == null)
             {
                 _logger.LogWarning("User not authenticated, cannot delete source");
@@ -224,7 +183,7 @@ public class SourceService
             }
 
             // First, get the current source to determine its state
-            var getResponse = await SendAuthorizedAsync(() => _httpClient.GetAsync($"/api/v1/sources/{sourceId}"));
+            var getResponse = await _api.SendAsync(() => _httpClient.GetAsync($"/api/v1/sources/{sourceId}"));
             if (getResponse == null)
             {
                 _logger.LogWarning("User not authenticated, cannot toggle source");
@@ -253,7 +212,7 @@ public class SourceService
                 IsActive = !source.IsActive
             };
 
-            var updateResponse = await SendAuthorizedAsync(() =>
+            var updateResponse = await _api.SendAsync(() =>
                 _httpClient.PutAsJsonAsync($"/api/v1/sources/{sourceId}", updateRequest));
             if (updateResponse == null)
             {
@@ -286,7 +245,7 @@ public class SourceService
             }
 
             // First get the current source to preserve its IsActive state
-            var getResponse = await SendAuthorizedAsync(() => _httpClient.GetAsync($"/api/v1/sources/{sourceId}"));
+            var getResponse = await _api.SendAsync(() => _httpClient.GetAsync($"/api/v1/sources/{sourceId}"));
             if (getResponse == null)
             {
                 _logger.LogWarning("User not authenticated, cannot update source");
@@ -314,7 +273,7 @@ public class SourceService
                 IsActive = source.IsActive // Preserve existing active state
             };
 
-            var response = await SendAuthorizedAsync(() =>
+            var response = await _api.SendAsync(() =>
                 _httpClient.PutAsJsonAsync($"/api/v1/sources/{sourceId}", updateRequest));
             if (response == null)
             {
@@ -347,7 +306,7 @@ public class SourceService
             }
 
             var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            var response = await SendAuthorizedAsync(() => _httpClient.PostAsync("/api/v1/sources/bulk-import", content));
+            var response = await _api.SendAsync(() => _httpClient.PostAsync("/api/v1/sources/bulk-import", content));
             if (response == null)
             {
                 throw new InvalidOperationException("User not authenticated");
@@ -404,12 +363,7 @@ public class SourceService
                 .ToList()
         };
 
-        var json = JsonSerializer.Serialize(exportPayload, new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            Converters = { new JsonStringEnumConverter() }
-        });
+        var json = JsonSerializer.Serialize(exportPayload, CrsJsonOptions.Indented);
 
         var fileName = $"crs-sources-{DateTime.UtcNow:yyyy-MM-dd}.json";
         await _jsRuntime.InvokeVoidAsync("downloadFile", fileName, "application/json", json);

@@ -13,7 +13,7 @@ namespace Crs.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/v{version:apiVersion}/[controller]")]
-public class SourcesController : ControllerBase
+public class SourcesController : ApiControllerBase
 {
     private readonly ISourceService _sourceService;
     private readonly ILogger<SourcesController> _logger;
@@ -34,10 +34,9 @@ public class SourcesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSourceById(Guid id, CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (!userId.HasValue)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
         var source = await _sourceService.GetSourceByIdAsync(id, cancellationToken);
@@ -46,7 +45,7 @@ public class SourcesController : ControllerBase
             return NotFound(new { message = $"Source with ID {id} not found." });
         }
 
-        if (source.UserId != userId.Value)
+        if (source.UserId != userId)
         {
             return Forbid();
         }
@@ -62,16 +61,14 @@ public class SourcesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetUserSources(CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (!userId.HasValue)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            _logger.LogWarning("GetUserSources: User ID not found in claims");
-            return Unauthorized();
+            return unauthorized;
         }
 
-        _logger.LogInformation("GetUserSources: Fetching sources for user {UserId}", userId.Value);
-        var sources = await _sourceService.GetUserSourcesAsync(userId.Value, cancellationToken);
-        _logger.LogInformation("GetUserSources: Returning {Count} sources for user {UserId}", sources.Count, userId.Value);
+        _logger.LogInformation("GetUserSources: Fetching sources for user {UserId}", userId);
+        var sources = await _sourceService.GetUserSourcesAsync(userId, cancellationToken);
+        _logger.LogInformation("GetUserSources: Returning {Count} sources for user {UserId}", sources.Count, userId);
         return Ok(sources);
     }
 
@@ -83,13 +80,12 @@ public class SourcesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetActiveUserSources(CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (!userId.HasValue)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        var sources = await _sourceService.GetActiveUserSourcesAsync(userId.Value, cancellationToken);
+        var sources = await _sourceService.GetActiveUserSourcesAsync(userId, cancellationToken);
         return Ok(sources);
     }
 
@@ -115,13 +111,12 @@ public class SourcesController : ControllerBase
     {
         try
         {
-            var userId = User.GetUserId();
-            if (!userId.HasValue)
+            if (!TryGetUserId(out var userId, out var unauthorized))
             {
-                return Unauthorized();
+                return unauthorized;
             }
 
-            var source = await _sourceService.CreateSourceAsync(userId.Value, request, cancellationToken);
+            var source = await _sourceService.CreateSourceAsync(userId, request, cancellationToken);
             return CreatedAtAction(nameof(GetSourceById), new { id = source.Id }, source);
         }
         catch (InvalidOperationException ex)
@@ -171,16 +166,14 @@ public class SourcesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> BulkImportSources([FromBody] BulkImportSourcesRequest request, CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (!userId.HasValue)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            _logger.LogWarning("BulkImportSources: User ID not found in claims");
-            return Unauthorized();
+            return unauthorized;
         }
 
-        _logger.LogInformation("BulkImportSources: Starting bulk import of {Count} sources for user {UserId}", request.Sources.Count, userId.Value);
-        var result = await _sourceService.BulkImportSourcesAsync(userId.Value, request, cancellationToken);
-        _logger.LogInformation("BulkImportSources: Completed - {Imported} imported, {Failed} failed for user {UserId}", result.Imported, result.Failed, userId.Value);
+        _logger.LogInformation("BulkImportSources: Starting bulk import of {Count} sources for user {UserId}", request.Sources.Count, userId);
+        var result = await _sourceService.BulkImportSourcesAsync(userId, request, cancellationToken);
+        _logger.LogInformation("BulkImportSources: Completed - {Imported} imported, {Failed} failed for user {UserId}", result.Imported, result.Failed, userId);
         return Ok(result);
     }
 }

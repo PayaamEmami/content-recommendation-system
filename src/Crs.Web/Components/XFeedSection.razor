@@ -1,0 +1,259 @@
+@inject XFeedService XFeedService
+@inject NavigationManager Navigation
+
+<div class="feed-section">
+    <UiSectionHeader Title="Socials">
+        @if (_followedAccounts.Any())
+        {
+            <button class="x-feed-settings-btn" @onclick="ToggleXSettings" aria-label="X feed settings">
+                <UiSvgIcon Kind="SvgIconKind.Settings" Class="x-feed-settings-icon" />
+            </button>
+        }
+    </UiSectionHeader>
+    <div class="x-feed-container">
+        @if (!string.IsNullOrEmpty(_xError))
+        {
+            <AlertMessage Variant="AlertVariant.Error">@_xError</AlertMessage>
+        }
+
+        @if (_xLoading)
+        {
+            <LoadingSpinner Title="Loading X feed" Subtitle="Fetching the latest posts from the accounts you follow." />
+        }
+        else if (!_followedAccounts.Any())
+        {
+            <div class="x-connect-prompt">
+                <p>Connect your X account to see posts from people you follow in your feed.</p>
+                <button class="btn-primary" @onclick="ConnectXAsync" disabled="@_xConnecting">
+                    @(_xConnecting ? "Connecting..." : "Connect X")
+                </button>
+            </div>
+        }
+        else
+        {
+            @if (_showXSettings)
+            {
+                <div class="x-followed-section">
+                    <div class="x-followed-list">
+                        <div class="x-followed-header">
+                            <h3>Settings</h3>
+                            <div class="x-followed-controls">
+                                <button class="btn-tertiary" @onclick="ConnectXAsync" disabled="@_xConnecting">
+                                    Reconnect X
+                                </button>
+                                <button class="btn-tertiary" @onclick="RefreshXAsync" disabled="@_xLoading">
+                                    Refresh
+                                </button>
+                                <button class="btn-tertiary btn-danger-text" @onclick="DisconnectXAsync" disabled="@_xDisconnecting">
+                                    @(_xDisconnecting ? "Disconnecting..." : "Disconnect X")
+                                </button>
+                                @if (_xSavingSelections)
+                                {
+                                    <span class="x-followed-saving">Saving...</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="x-followed-grid">
+                            @foreach (var account in _followedAccounts)
+                            {
+                                <label class="x-followed-item">
+                                    <input type="checkbox"
+                                           checked="@_selectedAccountIds.Contains(account.Id)"
+                                           disabled="@_xSavingSelections"
+                                           @onchange="async (e) => await ToggleSelectedAsync(account.Id, e)" />
+                                    <img src="@account.ProfileImageUrl" alt="@account.Handle" />
+                                    <div>
+                                        <div class="x-followed-name">@TruncateName(account.DisplayName)</div>
+                                        <div class="x-followed-handle">@($"@{account.Handle}")</div>
+                                    </div>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (_posts.Any())
+            {
+                <div class="x-post-carousel">
+                    @foreach (var post in _posts)
+                    {
+                        <XPostCard Post="post" />
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="x-empty-state">No posts available yet. Try refreshing after the next ingest.</p>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private List<XFollowedAccountItem> _followedAccounts = new();
+    private HashSet<Guid> _selectedAccountIds = new();
+    private List<XPostItem> _posts = new();
+    private bool _xLoading = true;
+    private bool _xConnecting;
+    private bool _xSavingSelections;
+    private bool _xDisconnecting;
+    private bool _showXSettings;
+    private string? _xError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadXSection();
+    }
+
+    private async Task LoadXSection()
+    {
+        _xLoading = true;
+        _xError = null;
+
+        try
+        {
+            _followedAccounts = await XFeedService.GetFollowedAccountsAsync(false);
+            _selectedAccountIds = _followedAccounts
+                .Where(a => a.IsSelected)
+                .Select(a => a.Id)
+                .ToHashSet();
+            _posts = await XFeedService.GetPostsAsync(30);
+        }
+        catch (Exception ex)
+        {
+            _xError = $"Failed to load X feed: {ex.Message}";
+        }
+        finally
+        {
+            _xLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ConnectXAsync()
+    {
+        _xConnecting = true;
+        _xError = null;
+
+        var redirectUri = new Uri(new Uri(Navigation.BaseUri), "x/callback").ToString();
+        var url = await XFeedService.GetConnectUrlAsync(redirectUri);
+        if (string.IsNullOrEmpty(url))
+        {
+            _xError = "Unable to start X connection. Please try again.";
+            _xConnecting = false;
+            return;
+        }
+
+        Navigation.NavigateTo(url, forceLoad: true);
+    }
+
+    private async Task RefreshXAsync()
+    {
+        _xLoading = true;
+        _xError = null;
+
+        try
+        {
+            _followedAccounts = await XFeedService.GetFollowedAccountsAsync(true);
+            _selectedAccountIds = _followedAccounts
+                .Where(a => a.IsSelected)
+                .Select(a => a.Id)
+                .ToHashSet();
+            _posts = await XFeedService.GetPostsAsync(30);
+        }
+        catch (Exception ex)
+        {
+            _xError = $"Failed to refresh X data: {ex.Message}";
+        }
+        finally
+        {
+            _xLoading = false;
+        }
+    }
+
+    private async Task DisconnectXAsync()
+    {
+        _xDisconnecting = true;
+        _xError = null;
+
+        try
+        {
+            var success = await XFeedService.DisconnectAsync();
+            if (success)
+            {
+                _followedAccounts = new();
+                _selectedAccountIds = new();
+                _posts = new();
+                _showXSettings = false;
+            }
+            else
+            {
+                _xError = "Failed to disconnect X account. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _xError = $"Failed to disconnect: {ex.Message}";
+        }
+        finally
+        {
+            _xDisconnecting = false;
+        }
+    }
+
+    private void ToggleXSettings()
+    {
+        _showXSettings = !_showXSettings;
+    }
+
+    private static string TruncateName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return string.Empty;
+        }
+
+        return name.Length > 18 ? $"{name[..18]}..." : name;
+    }
+
+    private async Task SaveSelectionsAsync()
+    {
+        _xSavingSelections = true;
+        _xError = null;
+
+        try
+        {
+            var updated = await XFeedService.UpdateSelectedAccountsAsync(_selectedAccountIds.ToList());
+            _followedAccounts = updated;
+            _selectedAccountIds = _followedAccounts
+                .Where(a => a.IsSelected)
+                .Select(a => a.Id)
+                .ToHashSet();
+            _posts = await XFeedService.GetPostsAsync(30);
+        }
+        catch (Exception ex)
+        {
+            _xError = $"Failed to update selections: {ex.Message}";
+        }
+        finally
+        {
+            _xSavingSelections = false;
+        }
+    }
+
+    private async Task ToggleSelectedAsync(Guid id, ChangeEventArgs args)
+    {
+        var isChecked = args.Value is bool value && value;
+        if (isChecked)
+        {
+            _selectedAccountIds.Add(id);
+        }
+        else
+        {
+            _selectedAccountIds.Remove(id);
+        }
+
+        await SaveSelectionsAsync();
+    }
+}

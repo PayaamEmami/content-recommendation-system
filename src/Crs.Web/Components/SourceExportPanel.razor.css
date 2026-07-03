@@ -1,0 +1,5 @@
+.bulk-hint {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-3);
+}

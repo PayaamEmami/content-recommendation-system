@@ -1,0 +1,130 @@
+.import-results ::deep .import-result-icon {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.15em;
+    margin-right: var(--space-1);
+    color: inherit;
+}
+
+.import-export-form label {
+    font-size: 0.85rem;
+    margin-bottom: 0.375rem;
+}
+
+.bulk-hint {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-3);
+}
+
+.format-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-lg);
+    background: transparent;
+    color: var(--text-secondary);
+    transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.format-toggle-btn:hover,
+.format-toggle-btn.expanded {
+    color: var(--text-primary);
+    border-color: var(--border-subtle);
+    background-color: var(--surface-hover);
+}
+
+.format-toggle-btn ::deep .format-toggle-icon {
+    width: 1rem;
+    height: 1rem;
+    transition: transform var(--transition-fast);
+}
+
+.format-toggle-btn.expanded ::deep .format-toggle-icon {
+    transform: rotate(180deg);
+}
+
+.json-example {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    padding: var(--space-3) var(--space-4);
+    font-size: 0.8rem;
+    overflow-x: auto;
+    margin-bottom: var(--space-4);
+    color: var(--text-secondary);
+}
+
+.bulk-textarea {
+    font-family: monospace;
+    font-size: 0.85rem;
+    margin-bottom: var(--space-4);
+}
+
+.import-section {
+    margin-bottom: var(--space-4);
+}
+
+.import-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-bottom: 0.35rem;
+}
+
+.import-section-title {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.import-divider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin: var(--space-4) 0;
+    color: var(--text-tertiary);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.import-divider::before,
+.import-divider::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    background-color: var(--border-color);
+}
+
+.file-input {
+    display: block;
+    width: 100%;
+    margin-bottom: var(--space-2);
+}
+
+.import-file-status {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.import-results {
+    display: flex;
+    gap: var(--space-4);
+    margin-top: var(--space-3);
+    font-size: 0.9rem;
+}
+
+.result-success {
+    color: var(--success-color);
+}
+
+.result-fail {
+    color: var(--error-color);
+}

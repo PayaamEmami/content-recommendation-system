@@ -9,14 +9,6 @@ using Crs.Web.Services;
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 
-// Configure JSON serialization options
-var jsonOptions = new JsonSerializerOptions
-{
-    PropertyNameCaseInsensitive = true,
-    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-};
-jsonOptions.Converters.Add(new JsonStringEnumConverter());
-
 // Add Blazored LocalStorage for token persistence
 builder.Services.AddBlazoredLocalStorage(config =>
 {

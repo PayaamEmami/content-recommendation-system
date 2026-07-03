@@ -11,12 +11,12 @@ public class Source
     public Guid Id { get; set; }
 
     /// <summary>
-    /// The user who owns/configured this source.
+    /// Foreign key of the user who owns/configured this source.
     /// </summary>
     public Guid UserId { get; set; }
 
     /// <summary>
-    /// The user who owns this source.
+    /// Navigation property to the owning user.
     /// </summary>
     public User User { get; set; } = null!;
 

@@ -14,7 +14,7 @@ namespace Crs.Api.Controllers;
 [Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
 [EnableRateLimiting("api")]
-public class PreferencesController : ControllerBase
+public class PreferencesController : ApiControllerBase
 {
     private readonly IPreferenceService _preferenceService;
 
@@ -28,13 +28,12 @@ public class PreferencesController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetPreferences(CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        var preferences = await _preferenceService.GetManualFeedbackAsync(userId.Value, cancellationToken);
+        var preferences = await _preferenceService.GetManualFeedbackAsync(userId, cancellationToken);
         return Ok(preferences);
     }
 
@@ -44,13 +43,12 @@ public class PreferencesController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPreference(Guid id, CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        var preference = await _preferenceService.GetManualFeedbackByIdAsync(userId.Value, id, cancellationToken);
+        var preference = await _preferenceService.GetManualFeedbackByIdAsync(userId, id, cancellationToken);
         if (preference == null)
         {
             return NotFound();
@@ -65,13 +63,12 @@ public class PreferencesController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreatePreference([FromBody] CreateManualContentFeedbackRequest request, CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        var preference = await _preferenceService.CreateManualFeedbackAsync(userId.Value, request, cancellationToken);
+        var preference = await _preferenceService.CreateManualFeedbackAsync(userId, request, cancellationToken);
         return CreatedAtAction(nameof(GetPreference), new { id = preference.Id }, preference);
     }
 
@@ -82,13 +79,12 @@ public class PreferencesController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdatePreference(Guid id, [FromBody] UpdateManualContentFeedbackRequest request, CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        var preference = await _preferenceService.UpdateManualFeedbackAsync(userId.Value, id, request, cancellationToken);
+        var preference = await _preferenceService.UpdateManualFeedbackAsync(userId, id, request, cancellationToken);
         return Ok(preference);
     }
 
@@ -98,13 +94,12 @@ public class PreferencesController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeletePreference(Guid id, CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId == null)
+        if (!TryGetUserId(out var userId, out var unauthorized))
         {
-            return Unauthorized();
+            return unauthorized;
         }
 
-        await _preferenceService.DeleteManualFeedbackAsync(userId.Value, id, cancellationToken);
+        await _preferenceService.DeleteManualFeedbackAsync(userId, id, cancellationToken);
         return NoContent();
     }
 }

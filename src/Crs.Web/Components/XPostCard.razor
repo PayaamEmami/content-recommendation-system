@@ -1,0 +1,55 @@
+@using System.Text.Json
+
+<div class="x-post-card">
+    <div class="x-post-header">
+        <img src="@Post.AuthorProfileImageUrl" alt="@Post.AuthorHandle" />
+        <div>
+            <div class="x-post-author">@Post.AuthorName</div>
+            <div class="x-post-handle">@($"@{Post.AuthorHandle}")</div>
+        </div>
+    </div>
+    <div class="x-post-text">@Post.Text</div>
+    @if (!string.IsNullOrEmpty(MediaUrl))
+    {
+        <img class="x-post-media" src="@MediaUrl" alt="Post media" />
+    }
+    <div class="x-post-meta">
+        <span>@DisplayFormatters.RelativeDate(Post.PostCreatedAt)</span>
+        <span>Likes @Post.LikeCount</span>
+        <span>Replies @Post.ReplyCount</span>
+        <span>Reposts @Post.RepostCount</span>
+    </div>
+    <a class="x-post-link" href="@Post.Url" target="_blank" rel="noopener">View on X</a>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public XPostItem Post { get; set; } = default!;
+
+    private string? MediaUrl => GetPostMediaUrl(Post);
+
+    private static string? GetPostMediaUrl(XPostItem post)
+    {
+        if (string.IsNullOrEmpty(post.MediaJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            var media = JsonSerializer.Deserialize<List<XMediaInfo>>(post.MediaJson);
+            var first = media?.FirstOrDefault();
+            return first?.Url ?? first?.PreviewImageUrl;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private class XMediaInfo
+    {
+        public string Type { get; set; } = string.Empty;
+        public string? Url { get; set; }
+        public string? PreviewImageUrl { get; set; }
+    }
+}

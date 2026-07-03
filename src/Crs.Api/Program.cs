@@ -74,14 +74,7 @@ builder.Services.AddRecommendationEngine();
 builder.Services.AddLlmServices(builder.Configuration);
 
 // Add application services
-builder.Services.AddScoped<Crs.Api.Services.IAuthService, Crs.Api.Services.AuthService>();
-builder.Services.AddScoped<Crs.Api.Services.IUserService, Crs.Api.Services.UserService>();
-builder.Services.AddScoped<Crs.Api.Services.ISourceService, Crs.Api.Services.SourceService>();
-builder.Services.AddScoped<Crs.Api.Services.IContentService, Crs.Api.Services.ContentService>();
-builder.Services.AddScoped<Crs.Api.Services.IVoteService, Crs.Api.Services.VoteService>();
-builder.Services.AddScoped<Crs.Api.Services.IPreferenceService, Crs.Api.Services.PreferenceService>();
-builder.Services.AddScoped<Crs.Api.Services.IRecommendationService, Crs.Api.Services.RecommendationService>();
-builder.Services.AddScoped<Crs.Api.Services.IXAccountService, Crs.Api.Services.XAccountService>();
+builder.Services.AddApplicationServices();
 
 // Add health checks
 builder.Services.AddHealthChecks()

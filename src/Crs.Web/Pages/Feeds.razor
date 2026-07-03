@@ -4,7 +4,6 @@
 @inject AuthService AuthService
 @inject FeedService FeedService
 @inject SourceService SourceService
-@inject XFeedService XFeedService
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -61,17 +60,17 @@
                     @if (contentOfType.Any())
                     {
                         <div class="feed-section">
-                            <UiSectionHeader Title="@GetContentTypeDisplay(type)" />
+                            <UiSectionHeader Title="@DisplayFormatters.ContentTypeLabel(type)" />
                             <div class="content-table">
                                 @foreach (var content in contentOfType)
                                 {
                                     <ContentRow Title="@content.Title"
                                                 Url="@content.Url"
-                                                DateText="@FormatDate(content.PublishedAt)"
+                                                DateText="@DisplayFormatters.RelativeDate(content.PublishedAt)"
                                                 Description="@content.Description"
-                                                CurrentVote="@GetVoteState(content.Id)"
-                                                OnVote="voteType => HandleVote(content.Id, voteType)"
-                                                IsSyncing="@_syncingVoteContentIds.Contains(content.Id)" />
+                                                CurrentVote="@_voteSync.GetVoteState(content.Id)"
+                                                OnVote="voteType => _voteSync.HandleVote(content.Id, voteType)"
+                                                IsSyncing="@_voteSync.IsSyncing(content.Id)" />
                                 }
                             </div>
                         </div>
@@ -79,114 +78,7 @@
                 }
             }
 
-            <div class="feed-section">
-                <UiSectionHeader Title="Socials">
-                    @if (_followedAccounts.Any())
-                    {
-                        <button class="x-feed-settings-btn" @onclick="ToggleXSettings" aria-label="X feed settings">
-                            <UiSvgIcon Kind="SvgIconKind.Settings" Class="x-feed-settings-icon" />
-                        </button>
-                    }
-                </UiSectionHeader>
-                <div class="x-feed-container">
-                    @if (!string.IsNullOrEmpty(_xError))
-                    {
-                        <AlertMessage Variant="AlertVariant.Error">@_xError</AlertMessage>
-                    }
-
-                    @if (_xLoading)
-                    {
-                        <LoadingSpinner Title="Loading X feed" Subtitle="Fetching the latest posts from the accounts you follow." />
-                    }
-                    else if (!_followedAccounts.Any())
-                    {
-                        <div class="x-connect-prompt">
-                            <p>Connect your X account to see posts from people you follow in your feed.</p>
-                            <button class="btn-primary" @onclick="ConnectXAsync" disabled="@_xConnecting">
-                                @(_xConnecting ? "Connecting..." : "Connect X")
-                            </button>
-                        </div>
-                    }
-                    else
-                    {
-                        @if (_showXSettings)
-                        {
-                            <div class="x-followed-section">
-                                <div class="x-followed-list">
-                                    <div class="x-followed-header">
-                                        <h3>Settings</h3>
-                                        <div class="x-followed-controls">
-                                            <button class="btn-tertiary" @onclick="ConnectXAsync" disabled="@_xConnecting">
-                                                Reconnect X
-                                            </button>
-                                            <button class="btn-tertiary" @onclick="RefreshXAsync" disabled="@_xLoading">
-                                                Refresh
-                                            </button>
-                                            <button class="btn-tertiary btn-danger-text" @onclick="DisconnectXAsync" disabled="@_xDisconnecting">
-                                                @(_xDisconnecting ? "Disconnecting..." : "Disconnect X")
-                                            </button>
-                                            @if (_xSavingSelections)
-                                            {
-                                                <span class="x-followed-saving">Saving...</span>
-                                            }
-                                        </div>
-                                    </div>
-                                    <div class="x-followed-grid">
-                                        @foreach (var account in _followedAccounts)
-                                        {
-                                            <label class="x-followed-item">
-                                                <input type="checkbox"
-                                                       checked="@_selectedAccountIds.Contains(account.Id)"
-                                                       disabled="@_xSavingSelections"
-                                                       @onchange="async (e) => await ToggleSelectedAsync(account.Id, e)" />
-                                                <img src="@account.ProfileImageUrl" alt="@account.Handle" />
-                                                <div>
-                                                    <div class="x-followed-name">@TruncateName(account.DisplayName)</div>
-                                                    <div class="x-followed-handle">@($"@{account.Handle}")</div>
-                                                </div>
-                                            </label>
-                                        }
-                                    </div>
-                                </div>
-                            </div>
-                        }
-
-                        @if (_posts.Any())
-                        {
-                            <div class="x-post-carousel">
-                                @foreach (var post in _posts)
-                                {
-                                    <div class="x-post-card">
-                                        <div class="x-post-header">
-                                            <img src="@post.AuthorProfileImageUrl" alt="@post.AuthorHandle" />
-                                            <div>
-                                                <div class="x-post-author">@post.AuthorName</div>
-                                                <div class="x-post-handle">@($"@{post.AuthorHandle}")</div>
-                                            </div>
-                                        </div>
-                                        <div class="x-post-text">@post.Text</div>
-                                        @if (!string.IsNullOrEmpty(GetPostMediaUrl(post)))
-                                        {
-                                            <img class="x-post-media" src="@GetPostMediaUrl(post)" alt="Post media" />
-                                        }
-                                        <div class="x-post-meta">
-                                            <span>@FormatDate(post.PostCreatedAt)</span>
-                                            <span>Likes @post.LikeCount</span>
-                                            <span>Replies @post.ReplyCount</span>
-                                            <span>Reposts @post.RepostCount</span>
-                                        </div>
-                                        <a class="x-post-link" href="@post.Url" target="_blank" rel="noopener">View on X</a>
-                                    </div>
-                                }
-                            </div>
-                        }
-                        else
-                        {
-                            <p class="x-empty-state">No posts available yet. Try refreshing after the next ingest.</p>
-                        }
-                    }
-                </div>
-            </div>
+            <XFeedSection />
         </div>
     </div>
 </div>
@@ -196,22 +88,7 @@
     private List<SourceItem>? _sources;
     private string? _sourcesLoadError;
     private Dictionary<ContentType, List<ContentItem>> _contentByType = new();
-    private Dictionary<Guid, VoteType> _userVotes = new();
-    private readonly Dictionary<Guid, VoteType> _serverVotes = new();
-    private readonly HashSet<Guid> _syncingVoteContentIds = new();
-    private readonly Dictionary<Guid, VoteType?> _desiredVoteStates = new();
-    private readonly Dictionary<Guid, DateTime> _lastVoteActionAt = new();
-    private static readonly TimeSpan VoteActionDebounceWindow = TimeSpan.FromMilliseconds(400);
-    private List<XFollowedAccountItem> _followedAccounts = new();
-    private HashSet<Guid> _selectedAccountIds = new();
-    private List<XPostItem> _posts = new();
-    private bool _xLoading = true;
-    private bool _xConnecting;
-    private bool _xSavingSelections;
-    private bool _xDisconnecting;
-    private bool _showXSettings;
-    private string? _xError;
-    private string _xConnectButtonLabel = "Connect X";
+    private VoteSyncCoordinator _voteSync = default!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -221,182 +98,13 @@
             return;
         }
 
+        _voteSync = new VoteSyncCoordinator(
+            async (contentId, voteType) => (await FeedService.VoteAsync(contentId, voteType))?.VoteType,
+            contentId => FeedService.RemoveVoteAsync(contentId),
+            StateHasChanged);
+
         AuthService.OnAuthStateChanged += HandleAuthStateChanged;
-        await LoadXSection();
         await LoadFeed();
-    }
-
-    private async Task LoadXSection()
-    {
-        _xLoading = true;
-        _xError = null;
-
-        try
-        {
-            _followedAccounts = await XFeedService.GetFollowedAccountsAsync(false);
-            _selectedAccountIds = _followedAccounts
-                .Where(a => a.IsSelected)
-                .Select(a => a.Id)
-                .ToHashSet();
-            _xConnectButtonLabel = _followedAccounts.Any() ? "Reconnect X" : "Connect X";
-            _posts = await XFeedService.GetPostsAsync(30);
-        }
-        catch (Exception ex)
-        {
-            _xError = $"Failed to load X feed: {ex.Message}";
-        }
-        finally
-        {
-            _xLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task ConnectXAsync()
-    {
-        _xConnecting = true;
-        _xError = null;
-
-        var redirectUri = new Uri(new Uri(Navigation.BaseUri), "x/callback").ToString();
-        var url = await XFeedService.GetConnectUrlAsync(redirectUri);
-        if (string.IsNullOrEmpty(url))
-        {
-            _xError = "Unable to start X connection. Please try again.";
-            _xConnecting = false;
-            return;
-        }
-
-        Navigation.NavigateTo(url, forceLoad: true);
-    }
-
-    private async Task RefreshXAsync()
-    {
-        _xLoading = true;
-        _xError = null;
-
-        try
-        {
-            _followedAccounts = await XFeedService.GetFollowedAccountsAsync(true);
-            _selectedAccountIds = _followedAccounts
-                .Where(a => a.IsSelected)
-                .Select(a => a.Id)
-                .ToHashSet();
-            _xConnectButtonLabel = _followedAccounts.Any() ? "Reconnect X" : "Connect X";
-            _posts = await XFeedService.GetPostsAsync(30);
-        }
-        catch (Exception ex)
-        {
-            _xError = $"Failed to refresh X data: {ex.Message}";
-        }
-        finally
-        {
-            _xLoading = false;
-        }
-    }
-
-    private async Task DisconnectXAsync()
-    {
-        _xDisconnecting = true;
-        _xError = null;
-
-        try
-        {
-            var success = await XFeedService.DisconnectAsync();
-            if (success)
-            {
-                _followedAccounts = new();
-                _selectedAccountIds = new();
-                _posts = new();
-                _xConnectButtonLabel = "Connect X";
-                _showXSettings = false;
-            }
-            else
-            {
-                _xError = "Failed to disconnect X account. Please try again.";
-            }
-        }
-        catch (Exception ex)
-        {
-            _xError = $"Failed to disconnect: {ex.Message}";
-        }
-        finally
-        {
-            _xDisconnecting = false;
-        }
-    }
-
-    private void ToggleXSettings()
-    {
-        _showXSettings = !_showXSettings;
-    }
-
-    private static string TruncateName(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return string.Empty;
-        }
-
-        return name.Length > 18 ? $"{name[..18]}..." : name;
-    }
-
-    private async Task SaveSelectionsAsync()
-    {
-        _xSavingSelections = true;
-        _xError = null;
-
-        try
-        {
-            var updated = await XFeedService.UpdateSelectedAccountsAsync(_selectedAccountIds.ToList());
-            _followedAccounts = updated;
-            _selectedAccountIds = _followedAccounts
-                .Where(a => a.IsSelected)
-                .Select(a => a.Id)
-                .ToHashSet();
-            _posts = await XFeedService.GetPostsAsync(30);
-        }
-        catch (Exception ex)
-        {
-            _xError = $"Failed to update selections: {ex.Message}";
-        }
-        finally
-        {
-            _xSavingSelections = false;
-        }
-    }
-
-    private async Task ToggleSelectedAsync(Guid id, ChangeEventArgs args)
-    {
-        var isChecked = args.Value is bool value && value;
-        if (isChecked)
-        {
-            _selectedAccountIds.Add(id);
-        }
-        else
-        {
-            _selectedAccountIds.Remove(id);
-        }
-
-        await SaveSelectionsAsync();
-    }
-
-    private static string? GetPostMediaUrl(XPostItem post)
-    {
-        if (string.IsNullOrEmpty(post.MediaJson))
-        {
-            return null;
-        }
-
-        try
-        {
-            var media = System.Text.Json.JsonSerializer.Deserialize<List<XMediaInfo>>(post.MediaJson);
-            var first = media?.FirstOrDefault();
-            return first?.Url ?? first?.PreviewImageUrl;
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     private async Task LoadFeed()
@@ -438,128 +146,7 @@
         if (_content == null) return;
 
         var votes = await FeedService.GetUserVotesAsync();
-        _userVotes = votes.ToDictionary(v => v.ContentId, v => v.VoteType);
-        _serverVotes.Clear();
-        foreach (var vote in votes)
-        {
-            _serverVotes[vote.ContentId] = vote.VoteType;
-        }
-    }
-
-    private VoteType? GetVoteState(Guid contentId)
-    {
-        return _userVotes.TryGetValue(contentId, out var voteType) ? voteType : null;
-    }
-
-    private Task HandleVote(Guid contentId, VoteType voteType)
-    {
-        if (_lastVoteActionAt.TryGetValue(contentId, out var lastActionAt) &&
-            DateTime.UtcNow - lastActionAt < VoteActionDebounceWindow)
-        {
-            return Task.CompletedTask;
-        }
-
-        _lastVoteActionAt[contentId] = DateTime.UtcNow;
-
-        var currentVote = GetVoteState(contentId);
-        VoteType? nextVote = currentVote == voteType ? null : voteType;
-
-        if (nextVote is { } newVote)
-        {
-            _userVotes[contentId] = newVote;
-        }
-        else
-        {
-            _userVotes.Remove(contentId);
-        }
-
-        _desiredVoteStates[contentId] = nextVote;
-
-        if (!_syncingVoteContentIds.Contains(contentId))
-        {
-            _ = SyncVoteStateAsync(contentId);
-        }
-
-        StateHasChanged();
-        return Task.CompletedTask;
-    }
-
-    private async Task SyncVoteStateAsync(Guid contentId)
-    {
-        _syncingVoteContentIds.Add(contentId);
-
-        try
-        {
-            while (_desiredVoteStates.TryGetValue(contentId, out var desiredVoteState))
-            {
-                var previousServerVoteState = _serverVotes.TryGetValue(contentId, out var serverVote)
-                    ? serverVote
-                    : (VoteType?)null;
-
-                var succeeded = await PersistVoteStateAsync(contentId, desiredVoteState);
-                if (!succeeded)
-                {
-                    ApplyServerVoteState(contentId, previousServerVoteState);
-                    _desiredVoteStates[contentId] = previousServerVoteState;
-                    break;
-                }
-
-                if (desiredVoteState is { } persistedVote)
-                {
-                    _serverVotes[contentId] = persistedVote;
-                }
-                else
-                {
-                    _serverVotes.Remove(contentId);
-                }
-
-                if (_desiredVoteStates.TryGetValue(contentId, out var latestDesiredState) &&
-                    latestDesiredState == desiredVoteState)
-                {
-                    _desiredVoteStates.Remove(contentId);
-                }
-            }
-        }
-        finally
-        {
-            _syncingVoteContentIds.Remove(contentId);
-            StateHasChanged();
-        }
-    }
-
-    private async Task<bool> PersistVoteStateAsync(Guid contentId, VoteType? desiredVoteState)
-    {
-        if (desiredVoteState is null)
-        {
-            return await FeedService.RemoveVoteAsync(contentId);
-        }
-
-        var result = await FeedService.VoteAsync(contentId, desiredVoteState.Value);
-        if (result is null)
-        {
-            return false;
-        }
-
-        _serverVotes[contentId] = result.VoteType;
-        if (_desiredVoteStates.TryGetValue(contentId, out var latestDesiredState) && latestDesiredState == desiredVoteState)
-        {
-            _userVotes[contentId] = result.VoteType;
-        }
-
-        return true;
-    }
-
-    private void ApplyServerVoteState(Guid contentId, VoteType? voteState)
-    {
-        if (voteState is { } persistedVote)
-        {
-            _userVotes[contentId] = persistedVote;
-            _serverVotes[contentId] = persistedVote;
-            return;
-        }
-
-        _userVotes.Remove(contentId);
-        _serverVotes.Remove(contentId);
+        _voteSync.SetServerVotes(votes);
     }
 
     private void HandleAuthStateChanged()
@@ -568,38 +155,6 @@
         {
             Navigation.NavigateTo("/");
         }
-    }
-
-    private static string GetContentTypeDisplay(ContentType type)
-    {
-        return type switch
-        {
-            ContentType.Paper => "Papers",
-            ContentType.Video => "Videos",
-            ContentType.BlogPost => "Blogs",
-            _ => type.ToString()
-        };
-    }
-
-    private static string FormatDate(DateTime date)
-    {
-        var span = DateTime.UtcNow - date;
-
-        if (span.TotalDays < 1)
-            return $"{(int)span.TotalHours}h ago";
-        if (span.TotalDays < 7)
-            return $"{(int)span.TotalDays}d ago";
-        if (span.TotalDays < 30)
-            return $"{(int)(span.TotalDays / 7)}w ago";
-
-        return date.ToString("MMM d, yyyy");
-    }
-
-    private class XMediaInfo
-    {
-        public string Type { get; set; } = string.Empty;
-        public string? Url { get; set; }
-        public string? PreviewImageUrl { get; set; }
     }
 
     public void Dispose()

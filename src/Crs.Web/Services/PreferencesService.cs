@@ -1,8 +1,5 @@
-using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Crs.Core.Enums;
 
 namespace Crs.Web.Services;
@@ -10,16 +7,12 @@ namespace Crs.Web.Services;
 public class PreferencesService
 {
     private readonly HttpClient _httpClient;
+    private readonly AuthorizedApiClient _api;
     private readonly AuthService _authService;
     private readonly ILogger<PreferencesService> _logger;
     private readonly DevelopmentDataStore? _developmentData;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() }
-    };
+    private static readonly JsonSerializerOptions JsonOptions = CrsJsonOptions.Default;
 
     public PreferencesService(
         HttpClient httpClient,
@@ -28,44 +21,10 @@ public class PreferencesService
         DevelopmentDataStore? developmentData = null)
     {
         _httpClient = httpClient;
+        _api = new AuthorizedApiClient(httpClient, authService);
         _authService = authService;
         _logger = logger;
         _developmentData = developmentData;
-    }
-
-    private void SetAuthHeader()
-    {
-        if (!string.IsNullOrEmpty(_authService.CurrentState.AccessToken))
-        {
-            _httpClient.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", _authService.CurrentState.AccessToken);
-        }
-    }
-
-    private async Task<HttpResponseMessage?> SendAuthorizedAsync(Func<Task<HttpResponseMessage>> requestFactory)
-    {
-        if (!await _authService.EnsureAuthenticatedAsync())
-        {
-            return null;
-        }
-
-        SetAuthHeader();
-        var response = await requestFactory();
-
-        if (response.StatusCode == HttpStatusCode.Unauthorized)
-        {
-            var refreshed = await _authService.TryRefreshAsync();
-            if (!refreshed)
-            {
-                await _authService.LogoutAsync();
-                return response;
-            }
-
-            SetAuthHeader();
-            response = await requestFactory();
-        }
-
-        return response;
     }
 
     public async Task<List<PreferenceItem>> GetPreferencesAsync()
@@ -77,7 +36,7 @@ public class PreferencesService
                 return _developmentData.GetPreferences();
             }
 
-            var response = await SendAuthorizedAsync(() => _httpClient.GetAsync("/api/v1/preferences"));
+            var response = await _api.SendAsync(() => _httpClient.GetAsync("/api/v1/preferences"));
             if (response == null || !response.IsSuccessStatusCode)
             {
                 return new List<PreferenceItem>();
@@ -102,7 +61,7 @@ public class PreferencesService
                 return _developmentData.CreatePreference(request);
             }
 
-            var response = await SendAuthorizedAsync(() =>
+            var response = await _api.SendAsync(() =>
                 _httpClient.PostAsJsonAsync("/api/v1/preferences", request, JsonOptions));
             if (response == null || !response.IsSuccessStatusCode)
             {
@@ -127,7 +86,7 @@ public class PreferencesService
                 return _developmentData.UpdatePreference(id, request);
             }
 
-            var response = await SendAuthorizedAsync(() =>
+            var response = await _api.SendAsync(() =>
                 _httpClient.PutAsJsonAsync($"/api/v1/preferences/{id}", request, JsonOptions));
             if (response == null || !response.IsSuccessStatusCode)
             {
@@ -152,7 +111,7 @@ public class PreferencesService
                 return _developmentData.DeletePreference(id);
             }
 
-            var response = await SendAuthorizedAsync(() => _httpClient.DeleteAsync($"/api/v1/preferences/{id}"));
+            var response = await _api.SendAsync(() => _httpClient.DeleteAsync($"/api/v1/preferences/{id}"));
             return response != null && response.IsSuccessStatusCode;
         }
         catch (Exception ex)
