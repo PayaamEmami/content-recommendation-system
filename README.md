@@ -22,174 +22,82 @@ CRS provides:
 - **Vote on content** (upvote/downvote) to refine recommendations based on your preferences.
 - **Connect X accounts** to show a personalized X feed above recommendations (read-only, user selects followed accounts).
 
-## Technology Stack
+## Local Development Setup
 
-### Backend
+### Prerequisites
 
-- **.NET 10** with C#
-- **ASP.NET Core** for REST API
-- **Entity Framework Core** for data access
-- **Blazor WebAssembly** for interactive web UI
+- **.NET 10 SDK**
+- **Docker** and **Docker Compose** (for local PostgreSQL and OpenSearch)
+- **OpenAI API key** (embeddings and LLM ingestion)
+- **WSL2 on Windows** recommended for Docker-backed OpenSearch
 
-### Cloud & Infrastructure (AWS)
+### Clone The Repository
 
-- **Amazon S3 + CloudFront** - Static hosting for Blazor WebAssembly frontend
-- **Amazon ECS Express Mode** - Managed container hosting for API
-- **Amazon ECS Fargate + EventBridge** - Scheduled job execution
-- **AWS OpenSearch Serverless** - Vector database for semantic similarity search
-- **OpenAI API** - GPT-5-nano and text-embedding-3-small models
-- **Amazon RDS PostgreSQL** - Application data storage
-- **Amazon ECR** - Container image storage
-- **AWS Secrets Manager** - Secure secrets management
-- **Amazon CloudWatch** - Monitoring and logging
-
-### AI & Machine Learning
-
-- **Vector Embeddings** (text-embedding-3-small via OpenAI API)
-- **Semantic Search** via AWS OpenSearch Serverless
-- **LLM Agents** with function calling (GPT-5-nano via OpenAI API)
-- **Hybrid Recommendation Engine** (70% vector similarity, 30% heuristics with recency dominant inside heuristics)
-
-### DevOps & Deployment
-
-- **Docker** - Containerization
-- **GitHub Actions** - CI/CD pipelines
-- **AWS CLI** - Infrastructure deployment
-
-### Security & Authentication
-
-- **JWT Authentication** - JSON Web Tokens
-- **Password Hashing** - ASP.NET Core Identity
-- **Rate Limiting** - API throttling
-- **CORS** - Cross-origin configuration
-
-## High-Level Architecture
-
-At a high level, CRS is composed of:
-
-### 🎨 Blazor WebAssembly Frontend
-
-- Client-side interactive web UI hosted on S3 + CloudFront
-- Multiple feed types (Papers, Videos, Blogs)
-- User flows for browsing personalized feeds and managing sources
-- Responsive design with Dark/Light theme support
-- Offline-capable with local storage for auth persistence
-
-### 🔧 .NET Backend + REST API
-
-- Central application layer (business logic, validation, orchestration)
-- JWT-based authentication with refresh tokens
-- API versioning and rate limiting
-- REST endpoints for:
-  - User authentication and registration
-  - Source management (URL-based content sources)
-  - Content aggregation
-  - Content voting (upvote/downvote)
-  - Personalized recommendations
-
-### 📡 Data Ingestion Layer
-
-- Pulls content from user-configured sources:
-  - RSS/Atom feeds (blogs, papers, news)
-  - Video sources
-  - Newsletter integrations
-- Parses and normalizes content into Content entities
-- Associates content with their originating Source
-
-### 🤖 Recommendation Engine
-
-- **Hybrid recommendation system** combining:
-  - **Vector similarity search** using text embeddings (primary signal, 70% weight)
-    - Content embedded using OpenAI embeddings (text-embedding-3-small)
-    - Preferences represented as aggregated embeddings of upvoted content
-    - Semantic similarity matching via AWS OpenSearch Serverless vector database
-  - **Heuristic signals** (secondary signals, 30% weight)
-    - Recency (exponential decay favoring newer content)
-    - Source affinity from historical votes on that source
-    - Recency carries most of the heuristic influence
-- Filters for diversity, deduplication, and personalization
-
-### 🧠 LLM Orchestration Layer
-
-- **Ingestion Agent**: LLM-powered content extraction from any URL
-  - Automatically categorizes content (Papers, Videos, Blogs, etc.)
-  - Extracts metadata and handles duplicate detection
-  - Flexible, no custom parsers needed per source
-
-### ⏰ Background Jobs & Scheduling
-
-Jobs are implemented in `Crs.Jobs` and can run locally via script or through optional AWS job infrastructure:
-
-- **Source Ingestion Job**:
-
-  - Pulls new content from all active sources using LLM agent
-  - Generates embeddings for new content via OpenAI API
-  - Indexes content in AWS OpenSearch vector database
-  - Handles duplicate detection automatically
-
-- **Daily Feed Generation Job**:
-  - Builds personalized feeds for each content type (5 recommendations per category)
-  - Leverages vector similarity + heuristic signals
-  - Pre-generates recommendations for fast UI access
-  - Filters out already-seen and recently-recommended content
-
-AWS job infrastructure can be triggered manually via AWS CLI when configured.
-
-### ☁️ Infrastructure (AWS)
-
-- **Amazon S3 + CloudFront**: Static hosting for Blazor WebAssembly frontend (global CDN)
-- **Amazon ECS Express Mode**: Managed container hosting for the API (primary target runtime)
-- **Amazon ECS Fargate + EventBridge**: Scheduled job execution with cron triggers (cost-efficient)
-- **AWS OpenSearch Serverless**: Vector database for semantic similarity search
-- **OpenAI API**: Embedding generation with text-embedding-3-small and GPT-5-nano
-- **Amazon RDS PostgreSQL**: Application data storage
-- **Amazon ECR**: Docker image storage
-- **AWS Secrets Manager**: Secure secrets management
-- **Amazon CloudWatch**: Monitoring and logging
-
-### 🚀 Deployment & CI/CD
-
-- **AWS Hosting**:
-  - S3 + CloudFront (Web) - Global CDN distribution
-  - ECS Express Mode (API) - Managed container runtime
-  - ECS Fargate + EventBridge (Jobs) - Scheduled execution
-- **GitHub Actions**: Automated CI/CD pipeline
-  - Builds and tests on every push
-  - Pushes Docker images to Amazon ECR
-  - Deploys the API to ECS Express by image digest
-  - Deploys Web to S3 with CloudFront invalidation
-- **Infrastructure as Code**: AWS CLI scripts for reproducible deployments
-- **Database Migrations**: Automated via EF Core on startup
-
-## Solution / Project Layout
-
-The solution is organized as multiple projects following a modular, layered approach:
-
-```text
-content-recommendation-system/
-├─ src/
-│  ├─ Crs.Api/              # ASP.NET Core REST API (HTTP endpoints, controllers)
-│  ├─ Crs.Core/             # Domain models, entities, interfaces, enums
-│  ├─ Crs.Infrastructure/   # Data access (EF Core), OpenSearch, OpenAI
-│  ├─ Crs.Jobs/             # Background workers (source ingestion, feed generation)
-│  ├─ Crs.Recommendation/   # Recommendation engine (scoring, filtering, personalization)
-│  ├─ Crs.Llm/              # LLM-based ingestion agent with function calling
-│  └─ Crs.Web/              # Blazor WebAssembly frontend (UI, pages, components)
-│
-├─ tests/
-│  └─ Crs.Tests/            # Unit and integration tests
-│
-├─ infrastructure/          # AWS deployment infrastructure
-│  └─ aws/                  # AWS CLI deployment scripts
-│
-├─ .github/
-│  └─ workflows/            # GitHub Actions CI/CD pipelines
+```bash
+git clone https://github.com/your-org/content-recommendation-system.git
+cd content-recommendation-system
 ```
 
-## Architecture Principles
+### Start Local Services
 
-- **Clean Architecture**: Separation of concerns with clear dependencies
-- **Repository Pattern**: Abstraction over data access
-- **Dependency Injection**: Loose coupling and testability
-- **SOLID Principles**: Maintainable and extensible code
-- **Domain-Driven Design**: Rich domain models with behavior
+```bash
+docker compose up -d postgres opensearch
+```
+
+This starts PostgreSQL on port `5432` and OpenSearch on port `9200`. The API applies EF Core migrations on startup.
+
+### Configure The Environment
+
+Copy the local secrets template and add your values:
+
+```bash
+cp src/Crs.Api/appsettings.Development.local.json.example src/Crs.Api/appsettings.Development.local.json
+```
+
+Edit `src/Crs.Api/appsettings.Development.local.json` with a secure JWT secret (32+ characters). Set your OpenAI key via environment variable or `appsettings.json`:
+
+```bash
+export OpenAI__ApiKey=sk-your-openai-key
+```
+
+See `src/Crs.Api/appsettings.json`, `src/Crs.Jobs/appsettings.json.example`, and `infrastructure/aws/secrets.env.example` for the full configuration surface.
+
+### Install Dependencies
+
+```bash
+dotnet restore
+```
+
+### Start The App
+
+Run the API and web UI in separate terminals:
+
+```bash
+dotnet run --project src/Crs.Api
+dotnet run --project src/Crs.Web
+```
+
+Or start the full containerized stack:
+
+```bash
+docker compose up
+```
+
+### Verify It's Working
+
+- Open the web UI at `http://localhost:5250` (or `http://localhost:5001` with Docker Compose)
+- Check API health at `http://localhost:5235/health` (or `http://localhost:8080/health` with Docker Compose)
+- Use development login from the web UI when `DevelopmentLogin:Enabled` is true
+
+### Run Background Jobs
+
+```bash
+dotnet run --project src/Crs.Jobs -- ingestion
+dotnet run --project src/Crs.Jobs -- feed
+```
+
+On Windows, use `run-ingestion.cmd` and `run-feed.cmd` as shortcuts. See `src/Crs.Jobs/README.md` for reindexing and other job commands.
+
+## License
+
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
