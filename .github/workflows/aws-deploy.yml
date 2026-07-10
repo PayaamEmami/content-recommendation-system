@@ -212,10 +212,22 @@ jobs:
             --cache-control "max-age=31536000" \
             --content-type "application/wasm"
 
-          # HTML files should have shorter cache
+          # Non-fingerprinted framework boot scripts must not be cached long-term.
+          # They reference content-hashed assets that change every publish; stale copies
+          # cause SRI failures when CloudFront serves index.html for missing old assets.
+          for NON_FP_FILE in "_framework/blazor.webassembly.js" "_framework/dotnet.js"; do
+            if aws s3api head-object --bucket "$BUCKET_NAME" --key "$NON_FP_FILE" > /dev/null 2>&1; then
+              aws s3 cp "s3://$BUCKET_NAME/$NON_FP_FILE" "s3://$BUCKET_NAME/$NON_FP_FILE" \
+                --metadata-directive REPLACE \
+                --cache-control "no-cache" \
+                --content-type "application/javascript"
+            fi
+          done
+
+          # HTML should revalidate so clients pick up new boot script references quickly.
           aws s3 cp s3://$BUCKET_NAME/index.html s3://$BUCKET_NAME/index.html \
             --metadata-directive REPLACE \
-            --cache-control "max-age=300" \
+            --cache-control "no-cache" \
             --content-type "text/html"
 
       - name: Update ECS Express service
