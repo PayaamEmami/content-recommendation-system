@@ -243,6 +243,41 @@ function Invoke-JobProcess {
     }
 }
 
+function Import-LocalJobSecrets {
+    $secretsFile = Join-Path $repoRoot "infrastructure\aws\secrets.env"
+    if (-not (Test-Path -LiteralPath $secretsFile)) {
+        return
+    }
+
+    Write-StructuredLog -Level "Information" -EventName "job.secrets.loaded" -Message "Loading local job secrets from secrets.env" -Properties @{
+        secretsFile = $secretsFile
+    }
+
+    Get-Content -LiteralPath $secretsFile | ForEach-Object {
+        $line = $_.Trim()
+        if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith("#")) {
+            return
+        }
+
+        $separatorIndex = $line.IndexOf("=")
+        if ($separatorIndex -lt 1) {
+            return
+        }
+
+        $name = $line.Substring(0, $separatorIndex).Trim()
+        $value = $line.Substring($separatorIndex + 1).Trim()
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            return
+        }
+
+        if (-not [string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($name))) {
+            return
+        }
+
+        [Environment]::SetEnvironmentVariable($name, $value)
+    }
+}
+
 function Wait-ForDocker {
     Write-StructuredLog -Level "Information" -EventName "docker.check.started" -Message "Checking Docker Desktop"
     $dockerRunning = $false
@@ -324,6 +359,8 @@ function Wait-ForOpenSearch {
 $env:DOTNET_ENVIRONMENT = if ($env:DOTNET_ENVIRONMENT) { $env:DOTNET_ENVIRONMENT } else { "Production" }
 $env:Observability__Environment = if ($env:Observability__Environment) { $env:Observability__Environment } else { "dev" }
 $env:Observability__ExecutionEnvironment = $executionEnvironment
+
+Import-LocalJobSecrets
 $env:Observability__ServiceName = if ($env:Observability__ServiceName) { $env:Observability__ServiceName } else { $serviceName }
 $env:OTEL_EXPORTER_OTLP_ENDPOINT = if ($env:OTEL_EXPORTER_OTLP_ENDPOINT) { $env:OTEL_EXPORTER_OTLP_ENDPOINT } else { "http://127.0.0.1:4317" }
 $env:OTEL_EXPORTER_OTLP_PROTOCOL = if ($env:OTEL_EXPORTER_OTLP_PROTOCOL) { $env:OTEL_EXPORTER_OTLP_PROTOCOL } else { "grpc" }
@@ -341,8 +378,12 @@ Write-MetricEvent -Name "job.host.heartbeat" -Value 1 -Unit "Count" -Operation "
 }
 
 try {
-    Wait-ForDocker
-    Wait-ForOpenSearch
+    if ($JobName -ne "x-ingestion") {
+        Wait-ForDocker
+        Wait-ForOpenSearch
+    } else {
+        Write-StructuredLog -Level "Information" -EventName "job.prerequisites.skipped" -Message "Skipping Docker and OpenSearch prerequisites for x-ingestion"
+    }
 
     Write-StructuredLog -Level "Information" -EventName "job.process.started" -Message "Running Crs.Jobs" -Properties @{
         project = "src/Crs.Jobs"

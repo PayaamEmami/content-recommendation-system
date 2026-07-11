@@ -1,3 +1,5 @@
+using System.Reflection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -9,7 +11,18 @@ using Crs.Jobs.Jobs;
 using Crs.Llm;
 using Crs.Recommendation;
 
+var jobName = args.Length > 0 ? args[0] : null;
+var isXIngestionJob = string.Equals(jobName, "x-ingestion", StringComparison.OrdinalIgnoreCase);
+
 var builder = Host.CreateApplicationBuilder(args);
+
+if (string.Equals(
+        Environment.GetEnvironmentVariable("Observability__ExecutionEnvironment"),
+        "local",
+        StringComparison.OrdinalIgnoreCase))
+{
+    builder.Configuration.AddUserSecrets(Assembly.GetExecutingAssembly()!, optional: true);
+}
 builder.Logging.AddCrsLogging(builder.Environment);
 builder.Services.AddCrsObservability(builder.Configuration, builder.Environment, "crs-jobs");
 
@@ -28,9 +41,10 @@ builder.Services.AddScoped<LocalVectorIndexSyncJob>();
 var host = builder.Build();
 var runId = Guid.NewGuid().ToString("n");
 
-// Initialize vector store index on startup
-using (var scope = host.Services.CreateScope())
+// X ingestion only needs PostgreSQL and the X API.
+if (!isXIngestionJob)
 {
+  using var scope = host.Services.CreateScope();
   var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
   var metrics = scope.ServiceProvider.GetRequiredService<IObservabilityMetrics>();
   using var startupActivity = CrsTelemetry.ActivitySource.StartActivity("jobs.startup.initialize_vector_store");
@@ -84,9 +98,6 @@ using (var scope = host.Services.CreateScope())
   }
 }
 
-// Determine which job to run from command-line arguments
-var jobName = args.Length > 0 ? args[0] : null;
-
 if (string.IsNullOrWhiteSpace(jobName))
 {
   Console.WriteLine("Usage: Crs.Jobs <job-name>");
@@ -135,7 +146,8 @@ using (var scope = host.Services.CreateScope())
     // When using local OpenSearch, keep the index converged with the database before
     // running jobs that depend on semantic search quality.
     if (!string.Equals(jobName, "reindex", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(jobName, "sync-index", StringComparison.OrdinalIgnoreCase))
+        !string.Equals(jobName, "sync-index", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(jobName, "x-ingestion", StringComparison.OrdinalIgnoreCase))
     {
       var indexSyncJob = scope.ServiceProvider.GetRequiredService<LocalVectorIndexSyncJob>();
       await indexSyncJob.ExecuteAsync(CancellationToken.None);
