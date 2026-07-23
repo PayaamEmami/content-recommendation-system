@@ -1,14 +1,13 @@
-@page "/history"
 @using Crs.Core.Enums
-@inject AuthService AuthService
 @inject FeedService FeedService
-@inject NavigationManager Navigation
 
-<PageTitle>Voting History - CRS</PageTitle>
+@{
+    var visibleVoteHistory = GetVisibleVoteHistory();
+}
 
-<div class="page-container history-page settings-page">
-    <div class="page-header compact-page-header history-page-header">
-        <h1>Voting History</h1>
+<div class="voting-history-section">
+    <UiSectionHeader Class="preferences-section-header voting-history-section-header"
+                     Title="Voting history">
         <div class="history-filter-shell">
             <button class="history-filter-btn"
                     type="button"
@@ -33,50 +32,47 @@
                 </div>
             }
         </div>
+    </UiSectionHeader>
+
+    <div class="preferences-section-body">
+        @if (!string.IsNullOrWhiteSpace(_voteHistoryError))
+        {
+            <AlertMessage Variant="AlertVariant.Error">@_voteHistoryError</AlertMessage>
+        }
+
+        @if (_isVoteHistoryLoading)
+        {
+            <LoadingSpinner Title="Loading voting history" Subtitle="Pulling in the content you have voted on so you can review it here." />
+        }
+        else if (!visibleVoteHistory.Any())
+        {
+            <EmptyState Message="No voting history yet" />
+        }
+        else
+        {
+            <div class="content-table history-list themed-scrollbar">
+                @foreach (var content in visibleVoteHistory)
+                {
+                    <ContentRow Class="@(content.VoteType is null ? "history-row vote-cleared" : "history-row")"
+                                Title="@content.Title"
+                                Url="@content.Url"
+                                DateText="@FormatDate(content.ContentDate)"
+                                Description="@content.Description"
+                                CurrentVote="@content.VoteType"
+                                OnVote="voteType => HandleVoteHistoryVote(content.ContentId, voteType)"
+                                IsSyncing="@_syncingVoteHistoryContentIds.Contains(content.ContentId)">
+                        <MetaContent>
+                            <UiBadge Class="content-type-badge">@GetContentTypeDisplay(content.Type)</UiBadge>
+                            @if (content.VoteType is null)
+                            {
+                                <UiBadge Class="preferences-cleared-badge">Vote cleared</UiBadge>
+                            }
+                        </MetaContent>
+                    </ContentRow>
+                }
+            </div>
+        }
     </div>
-    <div class="settings-page-divider"></div>
-
-    @{
-        var visibleVoteHistory = GetVisibleVoteHistory();
-    }
-
-    @if (!string.IsNullOrWhiteSpace(_voteHistoryError))
-    {
-        <AlertMessage Variant="AlertVariant.Error">@_voteHistoryError</AlertMessage>
-    }
-
-    @if (_isVoteHistoryLoading)
-    {
-        <LoadingSpinner Title="Loading voting history" Subtitle="Pulling in the content you have voted on so you can review it here." />
-    }
-    else if (!visibleVoteHistory.Any())
-    {
-        <EmptyState Message="No voting history yet" />
-    }
-    else
-    {
-        <div class="content-table history-list themed-scrollbar">
-            @foreach (var content in visibleVoteHistory)
-            {
-                <ContentRow Class="@(content.VoteType is null ? "history-row vote-cleared" : "history-row")"
-                            Title="@content.Title"
-                            Url="@content.Url"
-                            DateText="@FormatDate(content.ContentDate)"
-                            Description="@content.Description"
-                            CurrentVote="@content.VoteType"
-                            OnVote="voteType => HandleVoteHistoryVote(content.ContentId, voteType)"
-                            IsSyncing="@_syncingVoteHistoryContentIds.Contains(content.ContentId)">
-                    <MetaContent>
-                        <UiBadge Class="content-type-badge">@GetContentTypeDisplay(content.Type)</UiBadge>
-                        @if (content.VoteType is null)
-                        {
-                            <UiBadge Class="preferences-cleared-badge">Vote cleared</UiBadge>
-                        }
-                    </MetaContent>
-                </ContentRow>
-            }
-        </div>
-    }
 </div>
 
 @code {
@@ -94,12 +90,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (!await AuthService.EnsureAuthenticatedAsync())
-        {
-            Navigation.NavigateTo("/");
-            return;
-        }
-
         await LoadVoteHistoryAsync();
     }
 

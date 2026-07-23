@@ -18,9 +18,8 @@
                 @if (_isUserMenuOpen)
                 {
                     <div class="user-menu-dropdown" role="menu">
-                        <a href="/sources" class="user-menu-item" @onclick="CloseUserMenu">Sources</a>
                         <a href="/preferences" class="user-menu-item" @onclick="CloseUserMenu">Preferences</a>
-                        <a href="/history" class="user-menu-item" @onclick="CloseUserMenu">History</a>
+                        <a href="/settings" class="user-menu-item" @onclick="CloseUserMenu">Settings</a>
                         <button class="user-menu-item" @onclick="HandleLogout">Logout</button>
                     </div>
                 }

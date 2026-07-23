@@ -1,17 +1,8 @@
-@page "/sources"
 @using Crs.Core.Enums
-@inject AuthService AuthService
 @inject SourceService SourceService
 @inject ToastService ToastService
-@inject NavigationManager Navigation
-@implements IDisposable
 
-<PageTitle>My Sources - CRS</PageTitle>
-
-<div class="page-container sources-page settings-page">
-  <UiPageHeader Title="Sources" Class="compact-page-header" />
-  <div class="settings-page-divider"></div>
-
+<div class="sources-section">
   <div class="add-source-panel">
     <div class="add-source-tabs ui-tabs">
       <button type="button" class="tab-btn @(_activeTab == "single" ? "active" : "")" @onclick="SetTabSingle">
@@ -115,15 +106,6 @@
 
   protected override async Task OnInitializedAsync()
   {
-    await AuthService.InitializeAsync();
-
-    if (!AuthService.CurrentState.IsAuthenticated)
-    {
-      Navigation.NavigateTo("/");
-      return;
-    }
-
-    AuthService.OnAuthStateChanged += HandleAuthStateChanged;
     await LoadSources();
   }
 
@@ -151,10 +133,10 @@
     _errorMessage = null;
 
     var success = await SourceService.AddSourceAsync(
-    _newSource.Name,
-    _newSource.Url,
-    _newSource.Category,
-    _newSource.Description
+      _newSource.Name,
+      _newSource.Url,
+      _newSource.Category,
+      _newSource.Description
     );
 
     if (success)
@@ -199,11 +181,11 @@
     _editErrorMessage = null;
 
     var success = await SourceService.UpdateSourceAsync(
-    _editingSourceId.Value,
-    _editModel.Name,
-    _editModel.Url,
-    _editModel.Category,
-    _editModel.Description
+      _editingSourceId.Value,
+      _editModel.Name,
+      _editModel.Url,
+      _editModel.Category,
+      _editModel.Description
     );
 
     if (success)
@@ -232,20 +214,7 @@
     await LoadSources();
   }
 
-  private void HandleAuthStateChanged()
-  {
-    if (!AuthService.CurrentState.IsAuthenticated)
-    {
-      Navigation.NavigateTo("/");
-    }
-  }
-
   private void SetTabSingle() => _activeTab = "single";
   private void SetTabImport() => _activeTab = "import";
   private void SetTabExport() => _activeTab = "export";
-
-  public void Dispose()
-  {
-    AuthService.OnAuthStateChanged -= HandleAuthStateChanged;
-  }
 }

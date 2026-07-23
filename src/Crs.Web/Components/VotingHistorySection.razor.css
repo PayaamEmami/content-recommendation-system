@@ -1,18 +1,14 @@
-.history-page {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-}
-
-.history-page-header {
+.voting-history-section-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-4);
+    padding: 0;
+    margin-bottom: var(--space-5);
 }
 
-.history-page-header h1 {
-    margin-bottom: 0;
+.preferences-section-body {
+    padding: 0;
 }
 
 .history-filter-shell {
@@ -102,7 +98,7 @@
 }
 
 @media (max-width: 640px) {
-    .history-page-header {
+    .voting-history-section-header {
         flex-direction: column;
         align-items: flex-start;
     }

@@ -11,22 +11,6 @@
     margin-bottom: var(--space-5);
 }
 
-.sources-page > .section-header {
-    border-top: 1px solid var(--border-color);
-    padding-top: var(--space-6);
-    margin-bottom: var(--space-5);
-}
-
-.link-btn {
-    background: none;
-    border: none;
-    color: var(--accent-color);
-    font-size: inherit;
-    cursor: pointer;
-    padding: 0;
-    text-decoration: underline;
-}
-
 .sources-container {
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);

@@ -1,0 +1,259 @@
+@using Crs.Core.Enums
+@inject PreferencesService PreferencesService
+@inject ToastService ToastService
+
+@if (!string.IsNullOrWhiteSpace(_errorMessage))
+{
+    <AlertMessage Variant="AlertVariant.Error">@_errorMessage</AlertMessage>
+}
+
+<div class="preferences-content-stack">
+    <div class="preferences-content-form-shell">
+        <div class="preferences-content-form-body">
+            <div class="add-source-form">
+                <EditForm Model="_formModel" OnValidSubmit="HandleSubmitAsync">
+                    <DataAnnotationsValidator />
+                    <div class="form-grid">
+                        <div class="form-group form-group-wide">
+                            <label for="content-title">Title</label>
+                            <InputText id="content-title" @bind-Value="_formModel.Title" class="form-input" placeholder="e.g. Distill article on transformers" />
+                            <ValidationMessage For="@(() => _formModel.Title)" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="content-type">Content Type</label>
+                            <UiSelect Id="content-type"
+                                      TValue="ContentType?"
+                                      Value="@_formModel.ContentType"
+                                      ValueChanged="value => _formModel.ContentType = value"
+                                      Options="@ContentTypeOptions"
+                                      Placeholder="Select..." />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="content-vote">Feedback</label>
+                            <UiSelect Id="content-vote"
+                                      TValue="VoteType"
+                                      Value="@_formModel.VoteType"
+                                      ValueChanged="value => _formModel.VoteType = value"
+                                      Options="@VoteTypeOptions" />
+                        </div>
+
+                        <div class="form-group form-group-wide">
+                            <label for="content-url">URL</label>
+                            <InputText id="content-url" @bind-Value="_formModel.Url" class="form-input" placeholder="https://example.com/article" />
+                            <ValidationMessage For="@(() => _formModel.Url)" />
+                        </div>
+
+                        <div class="form-group form-group-wide">
+                            <label for="content-description">Description</label>
+                            <InputTextArea id="content-description" @bind-Value="_formModel.Description" class="form-input preferences-textarea" placeholder="What about this content did you like or dislike?" />
+                            <ValidationMessage For="@(() => _formModel.Description)" />
+                        </div>
+                    </div>
+
+                    <div class="preferences-form-actions">
+                        <button type="submit" class="btn-primary" disabled="@_isSaving">
+                            @(_isSaving ? "Saving..." : _editingContentId.HasValue ? "Save Changes" : "Add Content")
+                        </button>
+                        @if (_editingContentId.HasValue)
+                        {
+                            <button type="button" class="btn-secondary" @onclick="ResetForm" disabled="@_isSaving">Cancel</button>
+                        }
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+
+    <div class="preferences-saved-panel">
+        @if (_isLoading)
+        {
+            <LoadingSpinner Title="Loading saved content" Subtitle="Gathering the examples you have already rated so you can review them here." />
+        }
+        else if (!_content.Any())
+        {
+            <EmptyState Message="No content yet" />
+        }
+        else
+        {
+            <div class="content-table preferences-saved-list themed-scrollbar">
+                @foreach (var content in _content.OrderByDescending(item => item.UpdatedAt))
+                {
+                    <ContentRow Class="preferences-saved-row"
+                                Title="@content.Title"
+                                Url="@content.Url"
+                                DateText="@FormatDate(content.UpdatedAt)"
+                                Description="@content.Description"
+                                CurrentVote="@content.VoteType"
+                                VoteControlsDisabled="true"
+                                HideVoteControlsFromAssistiveTech="true"
+                                VoteAriaLabel="Saved feedback"
+                                VoteScreenReaderText="@(content.VoteType == VoteType.Upvote ? "Saved as upvote feedback" : "Saved as downvote feedback")"
+                                ActionsClass="preferences-content-actions">
+                        <MetaContent>
+                            @if (content.ContentType.HasValue)
+                            {
+                                <UiBadge Class="content-type-badge">@GetContentTypeDisplay(content.ContentType.Value)</UiBadge>
+                            }
+                        </MetaContent>
+                        <ActionsContent>
+                            @if (!string.IsNullOrWhiteSpace(content.Url))
+                            {
+                                <a href="@content.Url" target="_blank" rel="noopener" class="content-open-btn" title="Open content">
+                                    <UiSvgIcon Kind="SvgIconKind.ExternalLink" />
+                                </a>
+                            }
+                            <button type="button"
+                                    class="action-btn"
+                                    @onclick="() => StartEdit(content)"
+                                    disabled="@_isSaving"
+                                    title="Edit">
+                                <UiSvgIcon Kind="SvgIconKind.Edit" />
+                            </button>
+                            <button type="button"
+                                    class="action-btn danger"
+                                    @onclick="() => DeleteContentAsync(content.Id)"
+                                    disabled="@_isSaving"
+                                    title="Delete">
+                                <UiSvgIcon Kind="SvgIconKind.Delete" />
+                            </button>
+                        </ActionsContent>
+                    </ContentRow>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private readonly List<PreferenceItem> _content = new();
+    private ContentFormModel _formModel = new();
+    private Guid? _editingContentId;
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private string? _errorMessage;
+    private static readonly IReadOnlyList<UiSelectOption<ContentType?>> ContentTypeOptions = Enum.GetValues<ContentType>()
+        .Select(type => new UiSelectOption<ContentType?>((ContentType?)type, GetContentTypeDisplay(type)))
+        .ToArray();
+    private static readonly IReadOnlyList<UiSelectOption<VoteType>> VoteTypeOptions = new[]
+    {
+        new UiSelectOption<VoteType>(VoteType.Upvote, "Upvote"),
+        new UiSelectOption<VoteType>(VoteType.Downvote, "Downvote")
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadContentAsync();
+    }
+
+    private async Task LoadContentAsync()
+    {
+        _isLoading = true;
+        _content.Clear();
+        _content.AddRange(await PreferencesService.GetPreferencesAsync());
+        _isLoading = false;
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        _isSaving = true;
+        _errorMessage = null;
+        var wasEditing = _editingContentId.HasValue;
+
+        var request = new PreferenceUpsertRequest
+        {
+            Title = _formModel.Title,
+            Description = _formModel.Description,
+            Url = _formModel.Url,
+            ContentType = _formModel.ContentType,
+            VoteType = _formModel.VoteType
+        };
+
+        PreferenceItem? savedContent = wasEditing
+            ? await PreferencesService.UpdatePreferenceAsync(_editingContentId!.Value, request)
+            : await PreferencesService.CreatePreferenceAsync(request);
+
+        if (savedContent == null)
+        {
+            _errorMessage = "We couldn't save that content. Please try again.";
+            _isSaving = false;
+            return;
+        }
+
+        await LoadContentAsync();
+        ResetForm();
+        ToastService.Show(wasEditing ? "Content updated." : "Content added.");
+        _isSaving = false;
+    }
+
+    private void StartEdit(PreferenceItem content)
+    {
+        _editingContentId = content.Id;
+        _errorMessage = null;
+        _formModel = new ContentFormModel
+        {
+            Title = content.Title,
+            Description = content.Description,
+            Url = content.Url,
+            ContentType = content.ContentType,
+            VoteType = content.VoteType
+        };
+    }
+
+    private async Task DeleteContentAsync(Guid contentId)
+    {
+        _errorMessage = null;
+
+        var deleted = await PreferencesService.DeletePreferenceAsync(contentId);
+        if (!deleted)
+        {
+            _errorMessage = "We couldn't delete that content. Please try again.";
+            return;
+        }
+
+        if (_editingContentId == contentId)
+        {
+            ResetForm();
+        }
+
+        await LoadContentAsync();
+        ToastService.Show("Content deleted.");
+    }
+
+    private void ResetForm()
+    {
+        _editingContentId = null;
+        _formModel = new ContentFormModel();
+    }
+
+    private static string GetContentTypeDisplay(ContentType type) => type switch
+    {
+        ContentType.BlogPost => "Blog Post",
+        _ => type.ToString()
+    };
+
+    private static string FormatDate(DateTime dateTime)
+    {
+        var local = dateTime.ToLocalTime();
+        return local.ToString("MMM d, yyyy");
+    }
+
+    private sealed class ContentFormModel
+    {
+        [Required(ErrorMessage = "Title is required")]
+        [StringLength(500, ErrorMessage = "Title cannot exceed 500 characters")]
+        public string Title { get; set; } = string.Empty;
+
+        [StringLength(5000, ErrorMessage = "Description cannot exceed 5000 characters")]
+        public string? Description { get; set; }
+
+        [Url(ErrorMessage = "Invalid URL format")]
+        [StringLength(2000, ErrorMessage = "URL cannot exceed 2000 characters")]
+        public string? Url { get; set; }
+
+        public ContentType? ContentType { get; set; }
+
+        public VoteType VoteType { get; set; } = VoteType.Upvote;
+    }
+}

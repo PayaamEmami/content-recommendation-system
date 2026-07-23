@@ -1,0 +1,69 @@
+.preferences-content-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.preferences-content-form-shell {
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-2xl);
+    padding: var(--space-5);
+}
+
+.preferences-content-form-body {
+    padding-top: 0;
+}
+
+.add-source-form .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+}
+
+.form-group-wide {
+    grid-column: 1 / -1;
+}
+
+.add-source-form .form-group {
+    margin-bottom: 0;
+}
+
+.add-source-form label {
+    font-size: 0.85rem;
+    margin-bottom: 0.375rem;
+}
+
+.preferences-textarea {
+    min-height: 140px;
+    resize: vertical;
+}
+
+.preferences-form-actions {
+    display: flex;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+}
+
+.preferences-saved-list {
+    max-height: 36rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+}
+
+.preferences-content-actions {
+    gap: var(--space-2);
+}
+
+.content-type-badge {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+@media (max-width: 768px) {
+    .add-source-form .form-grid {
+        grid-template-columns: 1fr;
+    }
+}

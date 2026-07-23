@@ -29,7 +29,7 @@
                 <EmptyState Title="Couldn't Load Your Sources"
                             Message="@_sourcesLoadError"
                             SecondaryMessage="Once your sources load successfully, we'll be able to show the right next step here.">
-                    <a href="/sources" class="btn-primary">Go To Sources</a>
+                    <a href="/preferences" class="btn-primary">Go To Preferences</a>
                 </EmptyState>
             }
             else if (!_sources.Any())
@@ -37,7 +37,7 @@
                 <EmptyState Title="No Sources Yet"
                             Message="Start by adding some learning sources like RSS feeds, YouTube channels, or blogs."
                             SecondaryMessage="Our system will automatically fetch content daily and show personalized recommendations here.">
-                    <a href="/sources" class="btn-primary">Add Your First Source</a>
+                    <a href="/preferences" class="btn-primary">Add Your First Source</a>
                 </EmptyState>
             }
             else
@@ -45,7 +45,7 @@
                 <EmptyState Title="Processing Your Sources"
                             Message="@($"You have {_sources.Count} source{(_sources.Count == 1 ? "" : "s")} configured. Our system is working on fetching and analyzing content.")"
                             SecondaryMessage="This process runs automatically every 24 hours. Check back soon for personalized recommendations!">
-                    <a href="/sources" class="btn-primary">Manage Sources</a>
+                    <a href="/preferences" class="btn-primary">Manage Sources</a>
                 </EmptyState>
             }
         }
