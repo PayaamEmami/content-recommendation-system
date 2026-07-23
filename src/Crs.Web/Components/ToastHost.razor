@@ -1,0 +1,37 @@
+@inject ToastService ToastService
+@implements IDisposable
+
+@if (ToastService.Toasts.Count > 0)
+{
+    <div class="toast-stack" aria-live="polite">
+        @foreach (var toast in ToastService.Toasts)
+        {
+            <div class="toast-pill @(toast.Leaving ? "toast-leaving" : null) toast-@toast.Variant.ToString().ToLowerInvariant()"
+                 role="status">
+                <UiSvgIcon Kind="@IconFor(toast.Variant)" Class="toast-icon" />
+                <span class="toast-message">@toast.Message</span>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        ToastService.OnChanged += HandleChanged;
+    }
+
+    private void HandleChanged() => InvokeAsync(StateHasChanged);
+
+    private static SvgIconKind IconFor(ToastVariant variant) => variant switch
+    {
+        ToastVariant.Error => SvgIconKind.Cross,
+        ToastVariant.Info => SvgIconKind.Info,
+        _ => SvgIconKind.Check
+    };
+
+    public void Dispose()
+    {
+        ToastService.OnChanged -= HandleChanged;
+    }
+}

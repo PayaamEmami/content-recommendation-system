@@ -1,4 +1,5 @@
 @inject SourceService SourceService
+@inject ToastService ToastService
 
 <div class="import-export-form">
     <div class="import-section">
@@ -35,10 +36,6 @@
     @if (!string.IsNullOrEmpty(_importError))
     {
         <AlertMessage Variant="AlertVariant.Error">@_importError</AlertMessage>
-    }
-    @if (!string.IsNullOrEmpty(_importSuccess))
-    {
-        <AlertMessage Variant="AlertVariant.Success">@_importSuccess</AlertMessage>
     }
 
     <textarea id="source-import-json" @bind="_importJson" class="form-input bulk-textarea" rows="8"
@@ -87,7 +84,6 @@
 
     private string _importJson = "";
     private string? _importError;
-    private string? _importSuccess;
     private string? _importFileName;
     private bool _isImporting;
     private bool _showJsonExample;
@@ -97,7 +93,6 @@
     {
         _isImporting = true;
         _importError = null;
-        _importSuccess = null;
         _importResult = null;
 
         try
@@ -107,7 +102,7 @@
 
             if (result.Imported > 0)
             {
-                _importSuccess = $"Imported {result.Imported} source(s)";
+                ToastService.Show($"Imported {result.Imported} source(s)");
                 await OnImported.InvokeAsync();
                 if (result.Failed == 0)
                 {
@@ -134,7 +129,6 @@
     private async Task HandleImportFileSelected(InputFileChangeEventArgs e)
     {
         _importError = null;
-        _importSuccess = null;
 
         var file = e.File;
         if (file == null)

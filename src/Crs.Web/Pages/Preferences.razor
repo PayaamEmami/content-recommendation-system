@@ -3,6 +3,7 @@
 @inject AuthService AuthService
 @inject PreferencesService PreferencesService
 @inject ThemeService ThemeService
+@inject ToastService ToastService
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -49,11 +50,6 @@
             @if (!string.IsNullOrWhiteSpace(_errorMessage))
             {
                 <AlertMessage Variant="AlertVariant.Error">@_errorMessage</AlertMessage>
-            }
-
-            @if (!string.IsNullOrWhiteSpace(_successMessage))
-            {
-                <AlertMessage Variant="AlertVariant.Success">@_successMessage</AlertMessage>
             }
 
             <div class="preferences-content-stack">
@@ -186,7 +182,6 @@
     private bool _isLoading = true;
     private bool _isSaving;
     private string? _errorMessage;
-    private string? _successMessage;
     private static readonly IReadOnlyList<UiSelectOption<ContentType?>> ContentTypeOptions = Enum.GetValues<ContentType>()
         .Select(type => new UiSelectOption<ContentType?>((ContentType?)type, GetContentTypeDisplay(type)))
         .ToArray();
@@ -225,7 +220,6 @@
     {
         _isSaving = true;
         _errorMessage = null;
-        _successMessage = null;
         var wasEditing = _editingContentId.HasValue;
 
         var request = new PreferenceUpsertRequest
@@ -250,7 +244,7 @@
 
         await LoadContentAsync();
         ResetForm();
-        _successMessage = wasEditing ? "Content updated." : "Content added.";
+        ToastService.Show(wasEditing ? "Content updated." : "Content added.");
         _isSaving = false;
     }
 
@@ -258,7 +252,6 @@
     {
         _editingContentId = content.Id;
         _errorMessage = null;
-        _successMessage = null;
         _formModel = new ContentFormModel
         {
             Title = content.Title,
@@ -272,7 +265,6 @@
     private async Task DeleteContentAsync(Guid contentId)
     {
         _errorMessage = null;
-        _successMessage = null;
 
         var deleted = await PreferencesService.DeletePreferenceAsync(contentId);
         if (!deleted)
@@ -287,7 +279,7 @@
         }
 
         await LoadContentAsync();
-        _successMessage = "Content deleted.";
+        ToastService.Show("Content deleted.");
     }
 
     private async Task SetThemeAsync(bool isDarkMode)

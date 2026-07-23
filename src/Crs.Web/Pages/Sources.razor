@@ -2,6 +2,7 @@
 @using Crs.Core.Enums
 @inject AuthService AuthService
 @inject SourceService SourceService
+@inject ToastService ToastService
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -30,7 +31,6 @@
                      CategoryOptions="@ContentTypeOptions"
                      IsLoading="@_isLoading"
                      ErrorMessage="@_errorMessage"
-                     SuccessMessage="@_successMessage"
                      OnSubmit="HandleAddSource" />
     }
     else if (_activeTab == "import")
@@ -102,7 +102,6 @@
   private AddSourceModel _newSource = new();
   private EditSourceModel _editModel = new();
   private string? _errorMessage;
-  private string? _successMessage;
   private string? _editErrorMessage;
   private bool _isLoading;
   private Guid? _editingSourceId;
@@ -150,7 +149,6 @@
   {
     _isLoading = true;
     _errorMessage = null;
-    _successMessage = null;
 
     var success = await SourceService.AddSourceAsync(
     _newSource.Name,
@@ -161,7 +159,7 @@
 
     if (success)
     {
-      _successMessage = "Source added!";
+      ToastService.Show("Source added!");
       _newSource = new AddSourceModel();
       await LoadSources();
     }

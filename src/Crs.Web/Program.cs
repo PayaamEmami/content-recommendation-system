@@ -25,6 +25,7 @@ builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseU
 // Register application services
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ThemeService>();
+builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<DevelopmentDataStore>();
 builder.Services.AddScoped<SourceService>();
 builder.Services.AddScoped<FeedService>();

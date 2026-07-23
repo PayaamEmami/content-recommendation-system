@@ -1,4 +1,5 @@
 @inject SourceService SourceService
+@inject ToastService ToastService
 
 <div class="import-export-form">
     <p class="bulk-hint">Download your current sources as a JSON file you can keep or import later.</p>
@@ -6,11 +7,6 @@
     @if (!HasLoadedSources && !string.IsNullOrEmpty(LoadError))
     {
         <AlertMessage Variant="AlertVariant.Error">Can't export until your sources load successfully. @LoadError</AlertMessage>
-    }
-
-    @if (!string.IsNullOrEmpty(_exportSuccessMessage))
-    {
-        <AlertMessage Variant="AlertVariant.Success">@_exportSuccessMessage</AlertMessage>
     }
 
     <button type="button" @onclick="HandleExport" class="btn-primary" disabled="@(!CanExport)">
@@ -23,7 +19,6 @@
     [Parameter] public string? LoadError { get; set; }
 
     private bool _isExporting;
-    private string? _exportSuccessMessage;
 
     private bool HasLoadedSources => Sources != null && Sources.Count > 0;
     private bool CanExport => !_isExporting && HasLoadedSources;
@@ -36,12 +31,11 @@
         }
 
         _isExporting = true;
-        _exportSuccessMessage = null;
 
         try
         {
             await SourceService.ExportSourcesAsync(Sources);
-            _exportSuccessMessage = $"Exported {Sources.Count} source(s)";
+            ToastService.Show($"Exported {Sources.Count} source(s)");
         }
         finally
         {
