@@ -26,4 +26,8 @@
 .sources-table {
     display: flex;
     flex-direction: column;
+    max-height: 36rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
 }
