@@ -20,6 +20,7 @@ secrets.json
 infrastructure/**/*.secrets.*
 infrastructure/**/*-secrets.*
 infrastructure/aws/secrets.env
+infrastructure/aws/.env
 
 # Build output folders
 publish/

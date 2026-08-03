@@ -13,26 +13,23 @@ Content Recommendation System is a personalized learning feed application that i
 | Frontend       | Blazor WebAssembly, .NET 10                                      |
 | Backend        | ASP.NET Core, C#                                                 |
 | Database       | PostgreSQL (EF Core)                                             |
-| Vector Search  | OpenSearch (local Docker or AWS OpenSearch Serverless)           |
-| AI             | OpenAI (gpt-5-nano, text-embedding-3-small)                      |
-| Jobs           | .NET Worker Service; ECS Fargate + EventBridge in production     |
-| Infrastructure | AWS (ECS Express, S3, CloudFront, RDS, ECR), Docker Compose      |
-| Auth           | JWT, ASP.NET Core Identity                                       |
-| CI/CD          | GitHub Actions, AWS CLI                                          |
+| Vector Search  | OpenSearch                                                           |
+| AI             | OpenAI                                                               |
+| Jobs           | .NET Worker Service; local Windows Task Scheduler                    |
+| Infrastructure | AWS Lightsail, S3, CloudFront, ECR, Docker Compose                   |
+| Auth           | JWT                                                                  |
+| CI/CD          | GitHub Actions                                                       |
 
 ## Infrastructure
 
-Production runs on AWS with a Blazor static frontend, containerized API, scheduled jobs, RDS, and optional OpenSearch Serverless:
+Production runs on AWS with a cheap always-on Lightsail API host and a static Blazor frontend:
 
 - **S3 + CloudFront** host the Blazor WebAssembly frontend
-- **ECS Express Mode** runs the API (primary deployed runtime)
-- **ECS Fargate + EventBridge** run scheduled ingestion and feed-generation jobs
-- **RDS PostgreSQL** stores application data
-- **OpenSearch Serverless** provides vector search when `OpenSearch:Mode` is not `Local`
-- **ECR** stores container images; **Secrets Manager** holds runtime secrets
-- **GitHub Actions** builds, tests, and deploys changes from `main`
+- **Lightsail** (`crs-lightsail` + `crs-lightsail-ip`) runs Postgres, OpenSearch (Local mode), the API, and Caddy HTTPS
+- **Local Windows Task Scheduler** runs ingestion/feed jobs via `run-job.ps1`, pointed at Lightsail Postgres + OpenSearch
+- **ECR** stores API container images pulled by Lightsail
 
-See [`infrastructure/aws/README.md`](infrastructure/aws/README.md) for provisioning, deployment, and rollback details.
+See [`infrastructure/aws/README.md`](infrastructure/aws/README.md) for deploy and day-to-day ops.
 
 ## Repository Structure
 
@@ -48,7 +45,7 @@ See [`infrastructure/aws/README.md`](infrastructure/aws/README.md) for provision
 ├── tests/
 │   └── Crs.Tests/            # Unit and integration tests
 ├── infrastructure/
-│   └── aws/                  # AWS deployment scripts and IAM policies
+│   └── aws/                  # Lightsail API runtime, ECR, S3/CloudFront deploy
 ├── docker-compose.yml        # Local Postgres, OpenSearch, and optional full stack
 ├── .github/workflows/        # CI and CD GitHub Actions pipelines
 ├── run-job.ps1               # Local job runner (ingestion, feed, reindex)
@@ -66,7 +63,7 @@ When deciding where a change belongs:
 - Persistence, external integrations, vector store: start in `src/Crs.Infrastructure`
 - Recommendation scoring and filters: start in `src/Crs.Recommendation`
 - LLM ingestion agents: start in `src/Crs.Llm`
-- AWS deployment and infrastructure: start in `infrastructure/aws`
+- Lightsail, ECR, web deploy, AWS scripts: start in `infrastructure/aws`
 
 ## Architecture
 
@@ -109,14 +106,14 @@ Jobs are implemented in `Crs.Jobs`:
 - **Feed Generation** — Pre-generate personalized feeds per user and content type
 - **X Ingestion** — Sync posts from connected X accounts
 
-AWS job infrastructure can be triggered via EventBridge when deployed. Locally, jobs run via `dotnet run` or `run-job.ps1`.
+AWS job schedules are optional/legacy. Locally, jobs run via `dotnet run` or `run-job.ps1` and should target the Lightsail Postgres + OpenSearch endpoints.
 
 ## Current Runtime Notes
 
-- **API**: primary deployed runtime is AWS ECS Express Mode.
+- **API**: primary deployed runtime is Lightsail Compose (`crs-lightsail`) behind Caddy HTTPS.
 - **Web**: deployed as Blazor WebAssembly to S3 + CloudFront.
-- **Jobs**: primary runtime today is local Windows Task Scheduler via `run-job.ps1`. Optional AWS job infrastructure exists, but it is not the main execution path right now.
-- **OpenSearch**: local Docker mode is the current default. AWS OpenSearch Serverless remains optional infrastructure.
+- **Jobs**: primary runtime is local Windows Task Scheduler via `run-job.ps1`, writing to Lightsail (not starting local OpenSearch when `OpenSearch__Endpoint` is remote).
+- **OpenSearch**: Local mode on the Lightsail box (and optionally local Docker for pure offline dev).
 - **Recommendation engine**: hybrid scoring with 70% vector similarity and 30% heuristics, with recency dominant inside the heuristic portion.
 
 ## Critical Config Conventions
@@ -138,7 +135,7 @@ SQL_CONNECTION_STRING
 
 - Mapping example: `appsettings.json` key `OpenSearch:Endpoint` becomes env var `OpenSearch__Endpoint`.
 - `OpenSearch:Mode` defaults to `Local`, so API and jobs expect the local Docker-backed OpenSearch path unless explicitly configured otherwise.
-- Never commit `infrastructure/aws/secrets.env`.
+- Never commit `infrastructure/aws/secrets.env` or `infrastructure/aws/.env`.
 
 ## Agent Verification Checklist
 
@@ -169,8 +166,7 @@ Notes:
 ## Production Notes
 
 - Production deployment is driven by `.github/workflows/aws-deploy.yml`
-- Manual infrastructure deployment lives in `.github/workflows/aws-infra.yml`
-- See the Infrastructure section above and [`infrastructure/aws/README.md`](infrastructure/aws/README.md) for deploy and rollback details
+- See the Infrastructure section above and [`infrastructure/aws/README.md`](infrastructure/aws/README.md) for deploy and day-to-day ops
 
 ## Maintenance
 

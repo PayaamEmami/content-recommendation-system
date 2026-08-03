@@ -319,27 +319,48 @@ function Wait-ForDocker {
 }
 
 function Wait-ForOpenSearch {
-    Write-StructuredLog -Level "Information" -EventName "opensearch.check.started" -Message "Checking OpenSearch container"
-    $containerStatus = docker ps --filter "name=crs-opensearch" --format "{{.Status}}" 2>&1
-    if (-not $containerStatus -or $containerStatus -notlike "Up*") {
-        Write-StructuredLog -Level "Warning" -EventName "opensearch.check.starting" -Message "OpenSearch container is not running. Starting it"
-        docker compose -f "$repoRoot\docker-compose.yml" up -d opensearch
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to start OpenSearch container."
-        }
-    } else {
-        Write-StructuredLog -Level "Information" -EventName "opensearch.check.ready" -Message "OpenSearch container is already running"
+    $configuredEndpoint = $env:OpenSearch__Endpoint
+    if ([string]::IsNullOrWhiteSpace($configuredEndpoint)) {
+        $configuredEndpoint = "http://localhost:9200"
     }
 
+    $endpoint = $configuredEndpoint.TrimEnd("/")
+    $isRemote = -not (
+        $endpoint -match '(?i)^https?://(localhost|127\.0\.0\.1)(:\d+)?/?$'
+    )
+
+    Write-StructuredLog -Level "Information" -EventName "opensearch.check.started" -Message "Checking OpenSearch" -Properties @{
+        endpoint = $endpoint
+        mode = $env:OpenSearch__Mode
+        remote = $isRemote
+    }
+
+    if (-not $isRemote) {
+        $containerStatus = docker ps --filter "name=crs-opensearch" --format "{{.Status}}" 2>&1
+        if (-not $containerStatus -or $containerStatus -notlike "Up*") {
+            Write-StructuredLog -Level "Warning" -EventName "opensearch.check.starting" -Message "OpenSearch container is not running. Starting it"
+            docker compose -f "$repoRoot\docker-compose.yml" up -d opensearch
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to start OpenSearch container."
+            }
+        } else {
+            Write-StructuredLog -Level "Information" -EventName "opensearch.check.ready" -Message "OpenSearch container is already running"
+        }
+    } else {
+        Write-StructuredLog -Level "Information" -EventName "opensearch.check.remote" -Message "Using remote OpenSearch endpoint; skipping local Docker OpenSearch"
+    }
+
+    $healthUri = "$endpoint/_cluster/health"
     $timeout = 120
     $elapsed = 0
     while ($elapsed -lt $timeout) {
         try {
-            $response = Invoke-RestMethod -Uri "http://localhost:9200/_cluster/health" -TimeoutSec 5 -ErrorAction SilentlyContinue
+            $response = Invoke-RestMethod -Uri $healthUri -TimeoutSec 5 -ErrorAction SilentlyContinue
             if ($response.status -eq "green" -or $response.status -eq "yellow") {
                 Write-StructuredLog -Level "Information" -EventName "opensearch.health.ready" -Message "OpenSearch is healthy" -Properties @{
                     clusterStatus = $response.status
                     waitSeconds = $elapsed
+                    endpoint = $endpoint
                 }
                 return
             }
@@ -350,10 +371,11 @@ function Wait-ForOpenSearch {
         Write-StructuredLog -Level "Information" -EventName "opensearch.health.waiting" -Message "Waiting for OpenSearch" -Properties @{
             waitSeconds = $elapsed
             timeoutSeconds = $timeout
+            endpoint = $endpoint
         }
     }
 
-    throw "OpenSearch did not become healthy within $timeout seconds."
+    throw "OpenSearch did not become healthy within $timeout seconds at $endpoint."
 }
 
 $env:DOTNET_ENVIRONMENT = if ($env:DOTNET_ENVIRONMENT) { $env:DOTNET_ENVIRONMENT } else { "Production" }
@@ -379,7 +401,23 @@ Write-MetricEvent -Name "job.host.heartbeat" -Value 1 -Unit "Count" -Operation "
 
 try {
     if ($JobName -ne "x-ingestion") {
-        Wait-ForDocker
+        $openSearchEndpoint = if ([string]::IsNullOrWhiteSpace($env:OpenSearch__Endpoint)) {
+            "http://localhost:9200"
+        } else {
+            $env:OpenSearch__Endpoint.TrimEnd("/")
+        }
+        $usesRemoteOpenSearch = -not (
+            $openSearchEndpoint -match '(?i)^https?://(localhost|127\.0\.0\.1)(:\d+)?/?$'
+        )
+
+        if (-not $usesRemoteOpenSearch) {
+            Wait-ForDocker
+        } else {
+            Write-StructuredLog -Level "Information" -EventName "docker.check.skipped" -Message "Skipping local Docker startup because OpenSearch endpoint is remote" -Properties @{
+                endpoint = $openSearchEndpoint
+            }
+        }
+
         Wait-ForOpenSearch
     } else {
         Write-StructuredLog -Level "Information" -EventName "job.prerequisites.skipped" -Message "Skipping Docker and OpenSearch prerequisites for x-ingestion"

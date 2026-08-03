@@ -5,8 +5,9 @@ set -e
 # Builds Blazor WebAssembly and deploys to S3
 
 REGION="${AWS_REGION:-us-west-2}"
-API_URL_SOURCE="${API_URL_SOURCE:-ecs-express}"
+API_URL_SOURCE="${API_URL_SOURCE:-lightsail}"
 API_BASE_URL_EXPLICIT="${API_BASE_URL_EXPLICIT:-}"
+STATIC_IP_NAME="${STATIC_IP_NAME:-crs-lightsail-ip}"
 RUM_APP_MONITOR_NAME="${RUM_APP_MONITOR_NAME:-crs-web}"
 RUM_REGION="${RUM_REGION:-$REGION}"
 RUM_SOURCE_MAPS_PREFIX="${RUM_SOURCE_MAPS_PREFIX:-rum-source-maps}"
@@ -22,6 +23,21 @@ NC='\033[0m'
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+resolve_python_bin() {
+    if command -v python3 >/dev/null 2>&1 && python3 -c 'import json' >/dev/null 2>&1; then
+        echo python3
+        return
+    fi
+    if command -v python >/dev/null 2>&1 && python -c 'import json' >/dev/null 2>&1; then
+        echo python
+        return
+    fi
+    log_error "python3 (or python) with the json module is required."
+    exit 1
+}
+
+PYTHON_BIN="$(resolve_python_bin)"
+
 normalize_api_base_url() {
     local value="$1"
 
@@ -32,28 +48,27 @@ normalize_api_base_url() {
     fi
 }
 
-resolve_ecs_express_api_base_url() {
-    local service_arn
-    service_arn=$(aws ecs list-services --cluster crs-cluster --query "serviceArns[?contains(@, '/crs-api')] | [0]" --output text --region "$REGION" 2>/dev/null || echo "")
-    if [ -z "$service_arn" ] || [ "$service_arn" = "None" ]; then
-        log_error "Could not find ECS Express service 'crs-api' in cluster crs-cluster."
+resolve_lightsail_api_base_url() {
+    local static_ip
+    static_ip=$(aws lightsail get-static-ip \
+        --region "$REGION" \
+        --static-ip-name "$STATIC_IP_NAME" \
+        --query 'staticIp.ipAddress' \
+        --output text 2>/dev/null || echo "")
+    if [ -z "$static_ip" ] || [ "$static_ip" = "None" ]; then
+        log_error "Could not resolve Lightsail static IP '${STATIC_IP_NAME}'."
         exit 1
     fi
 
-    local endpoint
-    endpoint=$(aws ecs describe-express-gateway-service --service-arn "$service_arn" --query 'service.activeConfigurations[0].ingressPaths[0].endpoint' --output text --region "$REGION")
-    if [ -z "$endpoint" ] || [ "$endpoint" = "None" ]; then
-        log_error "Could not resolve the ECS Express endpoint for service 'crs-api'."
-        exit 1
-    fi
-
-    normalize_api_base_url "$endpoint"
+    normalize_api_base_url "${static_ip}.sslip.io"
 }
 
 resolve_api_base_url() {
-    case "${API_URL_SOURCE,,}" in
-        ecs-express)
-            resolve_ecs_express_api_base_url
+    local api_url_source
+    api_url_source="$(printf '%s' "$API_URL_SOURCE" | tr '[:upper:]' '[:lower:]')"
+    case "$api_url_source" in
+        lightsail)
+            resolve_lightsail_api_base_url
             ;;
         explicit)
             if [ -z "$API_BASE_URL_EXPLICIT" ]; then
@@ -63,7 +78,7 @@ resolve_api_base_url() {
             normalize_api_base_url "$API_BASE_URL_EXPLICIT"
             ;;
         *)
-            log_error "Unsupported API_URL_SOURCE '$API_URL_SOURCE'. Use ecs-express or explicit."
+            log_error "Unsupported API_URL_SOURCE '$API_URL_SOURCE'. Use lightsail or explicit."
             exit 1
             ;;
     esac
@@ -107,7 +122,7 @@ update_web_observability_config() {
         return
     fi
 
-    python - "$file_path" "$api_url" "$rum_enabled" "$rum_app_monitor_id" "$rum_app_monitor_name" "$rum_region" "$rum_identity_pool_id" "$rum_guest_role_arn" "$rum_session_sample_rate" "$rum_enable_xray" "$rum_allow_cookies" <<'PY'
+    $PYTHON_BIN - "$file_path" "$api_url" "$rum_enabled" "$rum_app_monitor_id" "$rum_app_monitor_name" "$rum_region" "$rum_identity_pool_id" "$rum_guest_role_arn" "$rum_session_sample_rate" "$rum_enable_xray" "$rum_allow_cookies" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -165,7 +180,7 @@ if aws rum get-app-monitor --name "$RUM_APP_MONITOR_NAME" --region "$RUM_REGION"
     RUM_ENABLED="true"
     RUM_MONITOR_FILE=$(to_native_path /tmp/crs-rum-monitor.json)
     export RUM_MONITOR_FILE
-    RUM_APP_MONITOR_ID=$(python - <<'PY'
+    RUM_APP_MONITOR_ID=$($PYTHON_BIN - <<'PY'
 import json
 from pathlib import Path
 from os import environ
@@ -173,7 +188,7 @@ payload = json.loads(Path(environ['RUM_MONITOR_FILE']).read_text())
 print(payload.get('AppMonitor', {}).get('Id', ''))
 PY
 )
-    RUM_IDENTITY_POOL_ID=$(python - <<'PY'
+    RUM_IDENTITY_POOL_ID=$($PYTHON_BIN - <<'PY'
 import json
 from pathlib import Path
 from os import environ
@@ -181,7 +196,7 @@ payload = json.loads(Path(environ['RUM_MONITOR_FILE']).read_text())
 print(payload.get('AppMonitor', {}).get('AppMonitorConfiguration', {}).get('IdentityPoolId', ''))
 PY
 )
-    RUM_GUEST_ROLE_ARN=$(python - <<'PY'
+    RUM_GUEST_ROLE_ARN=$($PYTHON_BIN - <<'PY'
 import json
 from pathlib import Path
 from os import environ

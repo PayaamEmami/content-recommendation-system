@@ -1,0 +1,120 @@
+# CRS Lightsail always-on stack: Postgres + OpenSearch + API + Caddy.
+# Deployed from infrastructure/aws/ onto the crs-lightsail instance (/opt/crs).
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: crs-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crsadmin
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: crsdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - crs-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crsadmin -d crsdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: crs-opensearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    networks:
+      - crs-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'green\\|yellow'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  api:
+    image: ${CRS_API_IMAGE}
+    container_name: crs-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Database=crsdb;Username=crsadmin;Password=${DB_PASSWORD}
+      OpenAI__ApiKey: ${OpenAI__ApiKey}
+      Embedding__ModelName: text-embedding-3-small
+      Embedding__Dimensions: "1536"
+      OpenSearch__Mode: Local
+      OpenSearch__Endpoint: http://opensearch:9200
+      OpenSearch__IndexName: crs-content
+      OpenSearch__EmbeddingDimensions: "1536"
+      JwtSettings__SecretKey: ${JWT_SECRET}
+      JwtSettings__Issuer: Crs.Api
+      JwtSettings__Audience: Crs.Web
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN_CLOUDFRONT}
+      Cors__AllowedOrigins__1: ${CORS_ORIGIN_S3:-}
+      ReverseProxy__KnownNetworks__0: 172.16.0.0/12
+      ReverseProxy__KnownNetworks__1: 10.0.0.0/8
+      Registration__Enabled: "false"
+      Observability__ExecutionEnvironment: lightsail
+      Observability__ServiceNamespace: crs
+      X__ClientId: ${X__ClientId:-}
+      X__ClientSecret: ${X__ClientSecret:-}
+      X__RedirectUri: ${X__RedirectUri:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    networks:
+      - crs-network
+    # API is only reachable via Caddy on the Docker network.
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: crs-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CRS_API_HOSTNAME: ${CRS_API_HOSTNAME}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    networks:
+      - crs-network
+
+networks:
+  crs-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  opensearch_data:
+  caddy_data:
+  caddy_config:
