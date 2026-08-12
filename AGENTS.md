@@ -52,19 +52,6 @@ See [`infrastructure/aws/README.md`](infrastructure/aws/README.md) for deploy an
 └── run-*.cmd                 # Windows shortcuts for common jobs
 ```
 
-## Change Routing Guide
-
-When deciding where a change belongs:
-
-- UI, Blazor components, client services: start in `src/Crs.Web`
-- HTTP endpoints, auth, API services: start in `src/Crs.Api`
-- Background jobs and schedulers: start in `src/Crs.Jobs`
-- Domain models and interfaces: start in `src/Crs.Core`
-- Persistence, external integrations, vector store: start in `src/Crs.Infrastructure`
-- Recommendation scoring and filters: start in `src/Crs.Recommendation`
-- LLM ingestion agents: start in `src/Crs.Llm`
-- Lightsail, ECR, web deploy, AWS scripts: start in `infrastructure/aws`
-
 ## Architecture
 
 At a high level, CRS is composed of:
