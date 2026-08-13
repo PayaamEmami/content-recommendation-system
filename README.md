@@ -22,6 +22,55 @@ CRS provides:
 - **Vote on content** (upvote/downvote) to refine recommendations based on your preferences.
 - **Connect X accounts** to show a personalized X feed above recommendations (read-only, user selects followed accounts).
 
+## Architecture
+
+CRS splits interactive traffic from ranking work. The Blazor WebAssembly client talks to the ASP.NET Core API over JWT. The API reads and writes application data in PostgreSQL, including pre-generated feeds. `Crs.Jobs` runs on a schedule (locally via Windows Task Scheduler in production), ingests sources, indexes embeddings in OpenSearch, and writes ranked feeds back to PostgreSQL so feed pages stay a database read.
+
+```mermaid
+flowchart TB
+  browser[Browser]
+
+  subgraph frontend [Frontend]
+    web["Blazor WebAssembly<br/>S3 + CloudFront"]
+  end
+
+  subgraph lightsail [AWS Lightsail]
+    caddy[Caddy HTTPS]
+    api["Crs.Api"]
+    pg[(PostgreSQL)]
+    os[(OpenSearch)]
+  end
+
+  subgraph jobs [Crs.Jobs]
+    ingest[Source ingestion]
+    feed[Feed generation]
+    xjob[X ingestion]
+  end
+
+  subgraph external [External]
+    sources[RSS / HTML sources]
+    openai[OpenAI]
+    xapi[X API]
+  end
+
+  browser --> web
+  web -->|"REST + JWT"| caddy
+  caddy --> api
+  api --> pg
+
+  ingest --> sources
+  ingest --> openai
+  ingest --> pg
+  ingest --> os
+
+  feed --> openai
+  feed --> os
+  feed --> pg
+
+  xjob --> xapi
+  xjob --> pg
+```
+
 ## Local Development Setup
 
 ### Prerequisites
