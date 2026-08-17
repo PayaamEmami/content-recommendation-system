@@ -1,6 +1,7 @@
 @page "/"
 @inject NavigationManager Navigation
 @inject AuthService AuthService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Welcome - CRS</PageTitle>
 
@@ -23,25 +24,46 @@
         <AlertMessage Variant="AlertVariant.Error">@_errorMessage</AlertMessage>
       }
 
-      <EditForm Model="@_model" OnValidSubmit="HandleLogin" class="landing-login-form">
-        <DataAnnotationsValidator />
+      <div @ref="_formHost">
+        <EditForm Model="@_model" OnSubmit="HandleLogin" method="post" class="landing-login-form">
+          <DataAnnotationsValidator />
 
-        <div class="form-group">
-          <label for="home-email">Email</label>
-          <InputText id="home-email" @bind-Value="_model.Email" class="form-input" placeholder="you@example.com" />
-          <ValidationMessage For="@(() => _model.Email)" />
-        </div>
+          <div class="form-group">
+            <label for="home-email">Email</label>
+            <input id="home-email"
+                   class="form-input"
+                   type="email"
+                   name="email"
+                   autocomplete="username"
+                   autocapitalize="none"
+                   autocorrect="off"
+                   spellcheck="false"
+                   inputmode="email"
+                   placeholder="you@example.com"
+                   @oninput="OnEmailInput" />
+            <ValidationMessage For="@(() => _model.Email)" />
+          </div>
 
-        <div class="form-group">
-          <label for="home-password">Password</label>
-          <InputText id="home-password" type="password" @bind-Value="_model.Password" class="form-input" placeholder="••••••••" />
-          <ValidationMessage For="@(() => _model.Password)" />
-        </div>
+          <div class="form-group">
+            <label for="home-password">Password</label>
+            <input id="home-password"
+                   class="form-input"
+                   type="password"
+                   name="password"
+                   autocomplete="current-password"
+                   autocapitalize="none"
+                   autocorrect="off"
+                   spellcheck="false"
+                   placeholder="••••••••"
+                   @oninput="OnPasswordInput" />
+            <ValidationMessage For="@(() => _model.Password)" />
+          </div>
 
-        <button type="submit" class="btn-primary landing-submit" disabled="@_isLoading">
-          @(_isLoading ? "Working..." : "Sign in")
-        </button>
-      </EditForm>
+          <button type="submit" class="btn-primary landing-submit" disabled="@_isLoading">
+            @(_isLoading ? "Working..." : "Sign in")
+          </button>
+        </EditForm>
+      </div>
 
       @if (ShowDevelopmentLogin)
       {
@@ -58,6 +80,7 @@
   private LoginModel _model = new();
   private string? _errorMessage;
   private bool _isLoading;
+  private ElementReference _formHost;
   private bool ShowDevelopmentLogin => AuthService.IsDevelopmentLoginEnabled || IsLocalBrowser();
 
   protected override async Task OnInitializedAsync()
@@ -68,8 +91,43 @@
     }
   }
 
-  private async Task HandleLogin()
+  protected override async Task OnAfterRenderAsync(bool firstRender)
   {
+    if (!firstRender)
+    {
+      return;
+    }
+
+    try
+    {
+      await JSRuntime.InvokeVoidAsync("authForm.watchAutofill", _formHost);
+    }
+    catch (JSException)
+    {
+    }
+    catch (JSDisconnectedException)
+    {
+    }
+  }
+
+  private void OnEmailInput(ChangeEventArgs args)
+  {
+    _model.Email = args.Value?.ToString() ?? string.Empty;
+  }
+
+  private void OnPasswordInput(ChangeEventArgs args)
+  {
+    _model.Password = args.Value?.ToString() ?? string.Empty;
+  }
+
+  private async Task HandleLogin(EditContext editContext)
+  {
+    await SyncCredentialsFromDomAsync(editContext);
+    if (!editContext.Validate())
+    {
+      return;
+    }
+
     _isLoading = true;
     _errorMessage = null;
 
@@ -85,6 +143,37 @@
     }
 
     _isLoading = false;
+  }
+
+  private async Task SyncCredentialsFromDomAsync(EditContext editContext)
+  {
+    try
+    {
+      var fields = await JSRuntime.InvokeAsync<LoginDomFields>("authForm.readFields", _formHost);
+      var (email, password) = AutofillCredentials.PreferDom(
+          _model.Email,
+          _model.Password,
+          fields.Email,
+          fields.Password);
+
+      if (email != _model.Email)
+      {
+        _model.Email = email;
+        editContext.NotifyFieldChanged(editContext.Field(nameof(LoginModel.Email)));
+      }
+
+      if (password != _model.Password)
+      {
+        _model.Password = password;
+        editContext.NotifyFieldChanged(editContext.Field(nameof(LoginModel.Password)));
+      }
+    }
+    catch (JSException)
+    {
+    }
+    catch (JSDisconnectedException)
+    {
+    }
   }
 
   private async Task HandleDevelopmentLogin()
@@ -115,6 +204,12 @@
     return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
            uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
            uri.Host.Equals("[::1]", StringComparison.OrdinalIgnoreCase);
+  }
+
+  private sealed class LoginDomFields
+  {
+    public string Email { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
   }
 
   private class LoginModel
