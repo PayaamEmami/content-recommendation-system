@@ -27,13 +27,21 @@
     display: inline-flex;
     width: 2.5rem;
     height: 2.5rem;
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    padding: 0;
     align-items: center;
     justify-content: center;
+    appearance: none;
+    -webkit-appearance: none;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-xl);
     background-color: var(--surface-input);
     color: var(--text-secondary);
     cursor: pointer;
+    line-height: 0;
+    flex-shrink: 0;
+    overflow: hidden;
     transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
@@ -57,6 +65,8 @@
 .theme-option-btn ::deep .theme-option-icon {
     width: 1rem;
     height: 1rem;
+    flex-shrink: 0;
+    overflow: visible;
 }
 
 @media (max-width: 768px) {

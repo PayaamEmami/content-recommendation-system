@@ -517,6 +517,11 @@ button:disabled {
 
 .ui-svg {
     display: block;
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+    overflow: visible;
+    box-sizing: content-box;
 }
 
 .ui-badge,
