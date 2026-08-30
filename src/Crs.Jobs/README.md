@@ -21,7 +21,7 @@ Jobs runs as a scheduled container task that orchestrates periodic tasks for con
 
 ### Feed Generation Job
 
-- **Schedule:** Run on-demand via `run-feed.cmd`
+- **Schedule:** Run on-demand via `./scripts/run-job.sh` (feed step of the daily pipeline)
 - **Purpose:** Pre-generates personalized recommendation feeds for all users
 - **Steps:**
   1. For each user and content type (Papers, Videos, Blogs, etc.):
@@ -43,28 +43,35 @@ Jobs requires the same configuration as the API (database connection, OpenAI, Op
 
 See `appsettings.json.example` for required configuration values.
 
-## Local prerequisites (Windows)
+## Local prerequisites
 
-- **Docker Desktop + WSL2** running (for local OpenSearch).
-- **OpenSearch container** running (see `docker-compose.yml`):
-  - `docker compose up -d opensearch`
-- **Environment variables**:
+- **.NET 10 SDK**
+- **Docker Desktop** if OpenSearch is local (`OpenSearch__Endpoint` is localhost). Remote Lightsail OpenSearch skips this.
+- **Environment variables** from `infrastructure/aws/secrets.env`:
   - `OpenAI__ApiKey` (used for both embeddings + LLM)
-  - DB connection string reachable from your machine
-  - `OpenSearch__Mode=Local` and `OpenSearch__Endpoint=http://localhost:9200`
+  - `ConnectionStrings__DefaultConnection` reachable from your machine
+  - `OpenSearch__Mode=Local` and `OpenSearch__Endpoint` (Lightsail or `http://localhost:9200`)
 
 ## Running jobs locally
 
-From the repo root:
+From the repo root, use `scripts/run-job.sh` (loads `secrets.env`, waits for OpenSearch when needed). On Windows, use Git Bash or WSL:
 
 ```bash
-# Source ingestion
+# Daily pipeline: x-ingestion always runs; feed runs only if ingestion succeeded
+./scripts/run-job.sh
+
+# One job
+./scripts/run-job.sh ingestion
+./scripts/run-job.sh x-ingestion
+./scripts/run-job.sh feed
+./scripts/run-job.sh reindex
+```
+
+Or invoke the worker directly after exporting the same environment variables:
+
+```bash
 dotnet run --project src/Crs.Jobs -- ingestion
-
-# Feed generation
 dotnet run --project src/Crs.Jobs -- feed
-
-# X post ingestion
 dotnet run --project src/Crs.Jobs -- x-ingestion
 ```
 
@@ -73,7 +80,7 @@ dotnet run --project src/Crs.Jobs -- x-ingestion
 Rebuild vector embeddings and reindex all content:
 
 ```bash
-dotnet run --project src/Crs.Jobs -- reindex
+./scripts/run-job.sh reindex
 ```
 
 ## Deployment

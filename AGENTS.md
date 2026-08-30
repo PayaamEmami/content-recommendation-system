@@ -15,7 +15,7 @@ Content Recommendation System is a personalized learning feed application that i
 | Database       | PostgreSQL (EF Core)                                             |
 | Vector Search  | OpenSearch                                                           |
 | AI             | OpenAI                                                               |
-| Jobs           | .NET Worker Service; local Windows Task Scheduler                    |
+| Jobs           | .NET Worker Service; local `scripts/run-job.sh`                      |
 | Infrastructure | AWS Lightsail, S3, CloudFront, ECR, Docker Compose                   |
 | Auth           | JWT                                                                  |
 | CI/CD          | GitHub Actions                                                       |
@@ -26,7 +26,7 @@ Production runs on AWS with a cheap always-on Lightsail API host and a static Bl
 
 - **S3 + CloudFront** host the Blazor WebAssembly frontend
 - **Lightsail** (`crs-lightsail` + `crs-lightsail-ip`) runs Postgres, OpenSearch (Local mode), the API, and Caddy HTTPS
-- **Local Windows Task Scheduler** runs ingestion/feed jobs via `run-job.ps1`, pointed at Lightsail Postgres + OpenSearch
+- **Local jobs** (`scripts/run-job.sh`; Git Bash or WSL on Windows) write to Lightsail Postgres + OpenSearch
 - **ECR** stores API container images pulled by Lightsail
 
 See [`infrastructure/aws/README.md`](infrastructure/aws/README.md) for deploy and day-to-day ops.
@@ -48,8 +48,7 @@ See [`infrastructure/aws/README.md`](infrastructure/aws/README.md) for deploy an
 │   └── aws/                  # Lightsail API runtime, ECR, S3/CloudFront deploy
 ├── docker-compose.yml        # Local Postgres, OpenSearch, and optional full stack
 ├── .github/workflows/        # CI and CD GitHub Actions pipelines
-├── run-job.ps1               # Local job runner (ingestion, feed, reindex)
-└── run-*.cmd                 # Windows shortcuts for common jobs
+└── scripts/                  # Local job runner (`run-job.sh`)
 ```
 
 ## Architecture
@@ -93,13 +92,13 @@ Jobs are implemented in `Crs.Jobs`:
 - **Feed Generation** — Pre-generate personalized feeds per user and content type
 - **X Ingestion** — Sync posts from connected X accounts
 
-AWS job schedules are optional/legacy. Locally, jobs run via `dotnet run` or `run-job.ps1` and should target the Lightsail Postgres + OpenSearch endpoints.
+AWS job schedules are optional/legacy. Locally, jobs run via `scripts/run-job.sh` (or `dotnet run`) and should target the Lightsail Postgres + OpenSearch endpoints.
 
 ## Current Runtime Notes
 
 - **API**: primary deployed runtime is Lightsail Compose (`crs-lightsail`) behind Caddy HTTPS.
 - **Web**: deployed as Blazor WebAssembly to S3 + CloudFront.
-- **Jobs**: primary runtime is local Windows Task Scheduler via `run-job.ps1`, writing to Lightsail (not starting local OpenSearch when `OpenSearch__Endpoint` is remote).
+- **Jobs**: primary runtime is local `scripts/run-job.sh`, writing to Lightsail (not starting local OpenSearch when `OpenSearch__Endpoint` is remote).
 - **OpenSearch**: Local mode on the Lightsail box (and optionally local Docker for pure offline dev).
 - **Recommendation engine**: hybrid scoring with 70% vector similarity and 30% heuristics, with recency dominant inside the heuristic portion.
 

@@ -7,6 +7,7 @@ using Crs.Core.Interfaces;
 using Crs.Core.Models;
 using Crs.Core.Observability;
 using Crs.Jobs.Jobs;
+using Crs.Tests.Unit.Api;
 
 namespace Crs.Tests.Unit.Jobs;
 
@@ -80,6 +81,42 @@ public sealed class XIngestionJobTests
             It.IsAny<string>(),
             It.IsAny<DateTime?>(),
             It.IsAny<CancellationToken>()), Times.Never);
+        postRepository.Verify(repo => repo.UpsertRangeAsync(It.IsAny<List<XPost>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenRefreshFails_Throws()
+    {
+        var connectionRepository = new Mock<IXConnectionRepository>(MockBehavior.Strict);
+        var selectedRepository = new Mock<IXSelectedAccountRepository>(MockBehavior.Strict);
+        var postRepository = new Mock<IXPostRepository>(MockBehavior.Strict);
+        var xApiClient = new Mock<IXApiClient>(MockBehavior.Strict);
+        var dataProtectionProvider = DataProtectionProvider.Create("crs-tests");
+        var protector = dataProtectionProvider.CreateProtector("Crs.X.Tokens");
+        var connection = new XConnection
+        {
+            UserId = Guid.NewGuid(),
+            XUserId = "x-user",
+            AccessTokenEncrypted = protector.Protect("access"),
+            RefreshTokenEncrypted = protector.Protect("refresh"),
+            TokenExpiresAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+
+        connectionRepository.Setup(repo => repo.GetAllAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<XConnection> { connection });
+        xApiClient.Setup(client => client.RefreshTokenAsync("refresh", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Missing required parameter [client_id]."));
+
+        var provider = BuildProvider(
+            connectionRepository.Object,
+            selectedRepository.Object,
+            postRepository.Object,
+            xApiClient.Object,
+            dataProtectionProvider);
+
+        var job = new XIngestionJob(provider, NullLogger<XIngestionJob>.Instance, NullObservabilityMetrics.Instance);
+
+        await TestAssert.ThrowsAsync<InvalidOperationException>(() => job.ExecuteAsync(CancellationToken.None));
         postRepository.Verify(repo => repo.UpsertRangeAsync(It.IsAny<List<XPost>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

@@ -62,6 +62,7 @@ public class XIngestionJob
             return;
         }
 
+        var failedUsers = 0;
         foreach (var connection in connections)
         {
             if (cancellationToken.IsCancellationRequested)
@@ -141,12 +142,20 @@ public class XIngestionJob
             }
             catch (Exception ex)
             {
+                failedUsers++;
                 _logger.LogError(ex, "Failed to ingest X posts for user {UserId}", connection.UserId);
             }
         }
 
-        _logger.LogInformation("X ingestion job completed");
         stopwatch.Stop();
+        if (failedUsers > 0)
+        {
+            _metrics.Increment("job.failure.count", context: BuildContext("x-ingestion", "failed"));
+            _metrics.RecordDuration("job.duration", stopwatch.Elapsed, BuildContext("x-ingestion", "failed"));
+            throw new InvalidOperationException($"X ingestion failed for {failedUsers} user(s).");
+        }
+
+        _logger.LogInformation("X ingestion job completed");
         _metrics.Increment("job.success.count", context: BuildContext("x-ingestion", "success"));
         _metrics.RecordDuration("job.duration", stopwatch.Elapsed, BuildContext("x-ingestion", "success"));
     }

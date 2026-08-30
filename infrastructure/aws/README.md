@@ -9,7 +9,7 @@ Single place for CRS cloud ops: Lightsail API runtime, ECR image builds, and S3/
 | API + Postgres + OpenSearch + Caddy | Lightsail instance `crs-lightsail` + static IP `crs-lightsail-ip` |
 | API image | ECR `crs-api` |
 | Web (Blazor WASM) | S3 `crs-web-{account}` + CloudFront |
-| Jobs | Local Windows via `run-job.ps1` → Lightsail Postgres/OpenSearch |
+| Jobs | Local `scripts/run-job.sh` → Lightsail Postgres/OpenSearch |
 
 Region: **us-west-2**. All resources use the `crs-` prefix.
 
@@ -68,7 +68,11 @@ OpenSearch__Mode=Local
 OpenSearch__Endpoint=http://<crs-lightsail-ip>:9200
 ```
 
-`run-job.ps1` health-checks the remote OpenSearch URL and does **not** start local Docker OpenSearch when the endpoint is not localhost.
+`scripts/run-job.sh` health-checks the remote OpenSearch URL and does **not** start local Docker OpenSearch when the endpoint is not localhost:
+
+```bash
+./scripts/run-job.sh
+```
 
 When your public IP changes (CGNAT/mobile), reopen Lightsail ports **5432** and **9200** for that CIDR or jobs cannot connect.
 

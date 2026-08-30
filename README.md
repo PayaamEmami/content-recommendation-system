@@ -24,7 +24,7 @@ CRS provides:
 
 ## Architecture
 
-CRS splits interactive traffic from ranking work. The Blazor WebAssembly client talks to the ASP.NET Core API over JWT. The API reads and writes application data in PostgreSQL, including pre-generated feeds. `Crs.Jobs` runs on a schedule (locally via Windows Task Scheduler in production), ingests sources, indexes embeddings in OpenSearch, and writes ranked feeds back to PostgreSQL so feed pages stay a database read.
+CRS splits interactive traffic from ranking work. The Blazor WebAssembly client talks to the ASP.NET Core API over JWT. The API reads and writes application data in PostgreSQL, including pre-generated feeds. `Crs.Jobs` runs on a schedule (locally via `scripts/run-job.sh`), ingests sources, indexes embeddings in OpenSearch, and writes ranked feeds back to PostgreSQL so feed pages stay a database read.
 
 ```mermaid
 flowchart TB
@@ -141,11 +141,15 @@ docker compose up
 ### Run Background Jobs
 
 ```bash
-dotnet run --project src/Crs.Jobs -- ingestion
-dotnet run --project src/Crs.Jobs -- feed
+# Daily pipeline: x-ingestion, then ingestion, then feed if ingestion succeeded
+./scripts/run-job.sh
+
+# One job
+./scripts/run-job.sh x-ingestion
+./scripts/run-job.sh reindex
 ```
 
-On Windows, use `run-ingestion.cmd` and `run-feed.cmd` as shortcuts. See `src/Crs.Jobs/README.md` for reindexing and other job commands.
+On Windows, run from Git Bash or WSL.
 
 ## License
 
