@@ -23,9 +23,7 @@ window.downloadFile = (fileName, contentType, content) => {
     URL.revokeObjectURL(url);
 };
 
-window.userMenu = {
-    hasFocusWithin: (element) => !!element && element.contains(document.activeElement)
-};
+window.hasFocusWithin = (element) => !!element && element.contains(document.activeElement);
 
 window.theme = {
     apply: (isDarkMode) => {

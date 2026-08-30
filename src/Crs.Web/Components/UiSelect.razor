@@ -1,6 +1,7 @@
 @typeparam TValue
+@inject IJSRuntime JSRuntime
 
-<div class="@CssClass" @onfocusout="CloseOnFocusOutAsync">
+<div @ref="_root" class="@CssClass" @onfocusout="CloseOnFocusOutAsync" @onkeydown="HandleKeyDown">
     <button type="button"
             id="@Id"
             class="ui-select-trigger"
@@ -17,10 +18,13 @@
         <div class="ui-select-menu" role="listbox">
             @foreach (var option in Options)
             {
+                @* preventDefault keeps focus on the trigger so focusout does not unmount the menu before click. *@
                 <button type="button"
                         class="@GetOptionClass(option)"
                         role="option"
                         aria-selected="@IsSelected(option)"
+                        @key="option.Value"
+                        @onmousedown:preventDefault="true"
                         @onclick="() => SelectOption(option)">
                     @option.Label
                 </button>
@@ -31,6 +35,7 @@
 
 @code {
     private bool _isOpen;
+    private ElementReference _root;
 
     [Parameter] public IReadOnlyList<UiSelectOption<TValue>> Options { get; set; } = Array.Empty<UiSelectOption<TValue>>();
     [Parameter] public TValue Value { get; set; } = default!;
@@ -65,10 +70,28 @@
 
     private async Task CloseOnFocusOutAsync()
     {
-        // Let option click events run before closing the menu after focus moves away.
-        await Task.Delay(100);
-        _isOpen = false;
-        await InvokeAsync(StateHasChanged);
+        if (!_isOpen)
+        {
+            return;
+        }
+
+        // focusout bubbles from the trigger when focus moves to an option. Wait a
+        // tick, then close only if focus has actually left the control.
+        await Task.Yield();
+
+        var hasFocusWithin = await JSRuntime.InvokeAsync<bool>("hasFocusWithin", _root);
+        if (!hasFocusWithin)
+        {
+            _isOpen = false;
+        }
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+        {
+            _isOpen = false;
+        }
     }
 
     private bool IsSelected(UiSelectOption<TValue> option)

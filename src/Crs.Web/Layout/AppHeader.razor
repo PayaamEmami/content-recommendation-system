@@ -52,7 +52,7 @@
 
         await Task.Yield();
 
-        var hasFocusWithin = await JSRuntime.InvokeAsync<bool>("userMenu.hasFocusWithin", _userMenuRef);
+        var hasFocusWithin = await JSRuntime.InvokeAsync<bool>("hasFocusWithin", _userMenuRef);
         if (!hasFocusWithin)
         {
             _isUserMenuOpen = false;
