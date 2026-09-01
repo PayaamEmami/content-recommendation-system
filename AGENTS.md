@@ -28,6 +28,7 @@ Production runs on AWS with a cheap always-on Lightsail API host and a static Bl
 - **Lightsail** (`crs-lightsail` + `crs-lightsail-ip`) runs Postgres, OpenSearch (Local mode), the API, and Caddy HTTPS
 - **Local jobs** (`scripts/run-job.sh`; Git Bash or WSL on Windows) write to Lightsail Postgres + OpenSearch
 - **ECR** stores API container images pulled by Lightsail
+- **MCP** (`crs-mcp-server` Lambda Function URL in us-west-2) exposes CRS REST to the agentic assistant. Deploy with `mcp/deploy.sh`. The assistant authenticates with a `cak_…` key; the Lambda logs into Crs.Api as the configured user. Per-source ingest is available; the batch `scripts/run-job.sh` pipeline is not.
 
 See [`infrastructure/aws/README.md`](infrastructure/aws/README.md) for deploy and day-to-day ops.
 
@@ -47,6 +48,7 @@ See [`infrastructure/aws/README.md`](infrastructure/aws/README.md) for deploy an
 ├── infrastructure/
 │   └── aws/                  # Lightsail API runtime, ECR, S3/CloudFront deploy
 ├── docker-compose.yml        # Local Postgres, OpenSearch, and optional full stack
+├── mcp/                      # Streamable HTTP MCP server (Lambda Function URL)
 ├── .github/workflows/        # CI and CD GitHub Actions pipelines
 └── scripts/                  # Local job runner (`run-job.sh`)
 ```
@@ -101,6 +103,7 @@ AWS job schedules are optional/legacy. Locally, jobs run via `scripts/run-job.sh
 - **Jobs**: primary runtime is local `scripts/run-job.sh`, writing to Lightsail (not starting local OpenSearch when `OpenSearch__Endpoint` is remote).
 - **OpenSearch**: Local mode on the Lightsail box (and optionally local Docker for pure offline dev).
 - **Recommendation engine**: hybrid scoring with 70% vector similarity and 30% heuristics, with recency dominant inside the heuristic portion.
+- **MCP**: Lambda Function URL wrapping the public HTTPS API. Ingest-one-source is in-band; feed regeneration stays on `scripts/run-job.sh`.
 
 ## Critical Config Conventions
 
@@ -135,6 +138,13 @@ dotnet build --configuration Release --no-restore
 dotnet test --configuration Release --no-build --verbosity normal
 ```
 
+When MCP server files under `mcp/` changed, also run:
+
+```bash
+python -m pip install -r mcp/requirements-dev.txt
+python -m pytest mcp/tests
+```
+
 Use additional checks when the touched area makes it relevant:
 
 - **Blazor/web build or publish behavior changed**: `dotnet publish src/Crs.Web/Crs.Web.csproj -c Release -o publish/web`
@@ -143,7 +153,7 @@ Use additional checks when the touched area makes it relevant:
 
 Notes:
 
-- CI currently runs `dotnet restore`, `dotnet build`, and `dotnet test` via `.github/workflows/aws-deploy.yml`
+- CI currently runs `dotnet restore`, `dotnet build`, `dotnet test`, and `python -m pytest mcp/tests` via `.github/workflows/aws-deploy.yml`
 - `tests/Crs.Tests` starts a PostgreSQL Testcontainers container, so local tests require a working Docker daemon
 - GitHub Actions also performs AWS-authenticated steps after build/test. Do not claim full CI parity unless those steps were actually run
 - If you cannot run a needed check because of missing credentials, services, or environment, say so explicitly

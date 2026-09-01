@@ -10,6 +10,7 @@ Single place for CRS cloud ops: Lightsail API runtime, ECR image builds, and S3/
 | API image | ECR `crs-api` |
 | Web (Blazor WASM) | S3 `crs-web-{account}` + CloudFront |
 | Jobs | Local `scripts/run-job.sh` → Lightsail Postgres/OpenSearch |
+| MCP | Lambda `crs-mcp-server` Function URL (us-west-2) wrapping Crs.Api REST |
 
 Region: **us-west-2**. All resources use the `crs-` prefix.
 
@@ -75,6 +76,26 @@ OpenSearch__Endpoint=http://<crs-lightsail-ip>:9200
 ```
 
 When your public IP changes (CGNAT/mobile), reopen Lightsail ports **5432** and **9200** for that CIDR or jobs cannot connect.
+
+## MCP (assistant)
+
+The Streamable HTTP MCP server lives in `mcp/` and is deployed separately from Lightsail:
+
+```bash
+python mcp/create_api_key.py
+# then:
+MCP_API_KEY_SHA256=<hash> \
+CRS_API_BASE_URL=https://<crs-lightsail-ip>.sslip.io \
+CRS_EMAIL=... \
+CRS_PASSWORD=... \
+./mcp/deploy.sh
+```
+
+Paste the Function URL and raw `cak_…` key into the assistant at `/chat/automation` as a **second** MCP connection (do not replace the task-board MCP).
+
+`crs_ingest_source` runs the per-source API pipeline (extract, save, embed). The ranked daily feed is still produced by local `scripts/run-job.sh feed`; newly ingested items may not appear in today's feed until that job runs.
+
+Env vars on the Lambda: `MCP_API_KEY_SHA256`, `CRS_API_BASE_URL`, `CRS_EMAIL`, `CRS_PASSWORD`. Never commit those values.
 
 ## Scripts
 
