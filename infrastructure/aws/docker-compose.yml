@@ -1,5 +1,5 @@
 # CRS Lightsail always-on stack: Postgres (pgvector) + API + Caddy.
-# Deployed from infrastructure/aws/ onto the crs-lightsail instance (/opt/crs).
+# Deployed from infrastructure/aws/ onto crs-lightsail-small (/opt/crs).
 
 services:
   postgres:

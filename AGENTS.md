@@ -22,13 +22,13 @@ Content Recommendation System is a personalized learning feed application that i
 
 ## Infrastructure
 
-Production runs on AWS with a cheap always-on Lightsail API host and a static Blazor frontend:
+Production runs on AWS with a Lightsail API host and a static Blazor frontend:
 
 - **S3 + CloudFront** host the Blazor WebAssembly frontend
-- **Lightsail** (`crs-lightsail` + `crs-lightsail-ip`) runs Postgres with pgvector, the API, and Caddy HTTPS
+- **Lightsail** (`crs-lightsail-small` + static IP `crs-lightsail-ip`) runs Postgres with pgvector, the API, and Caddy HTTPS
 - **Local jobs** (`scripts/run-job.sh`; Git Bash or WSL on Windows) write to Lightsail Postgres
 - **ECR** stores API container images pulled by Lightsail
-- **MCP** (`crs-mcp-server` Lambda Function URL in us-west-2) exposes CRS REST to the agentic assistant. Deploy with `mcp/deploy.sh`. The assistant authenticates with a `cak_…` key; the Lambda logs into Crs.Api as the configured user. Per-source ingest is available; the batch `scripts/run-job.sh` pipeline is not.
+- **MCP** (`crs-mcp-server` Lambda Function URL in us-west-2) wraps Crs.Api REST. Deploy with `mcp/deploy.sh`. Callers authenticate with an API key; the Lambda logs into Crs.Api as the configured user. Per-source ingest is in-band; the batch `scripts/run-job.sh` pipeline is not.
 
 See [`infrastructure/aws/README.md`](infrastructure/aws/README.md) for deploy and day-to-day ops.
 
@@ -94,11 +94,11 @@ Jobs are implemented in `Crs.Jobs`:
 - **Feed Generation** — Pre-generate personalized feeds per user and content type
 - **X Ingestion** — Sync posts from connected X accounts
 
-AWS job schedules are optional/legacy. Locally, jobs run via `scripts/run-job.sh` (or `dotnet run`) and should target the Lightsail Postgres endpoint.
+Run them with `scripts/run-job.sh` (or `dotnet run`) against Lightsail Postgres.
 
 ## Current Runtime Notes
 
-- **API**: primary deployed runtime is Lightsail Compose (`crs-lightsail`) behind Caddy HTTPS.
+- **API**: primary deployed runtime is Lightsail Compose (`crs-lightsail-small`) behind Caddy HTTPS.
 - **Web**: deployed as Blazor WebAssembly to S3 + CloudFront.
 - **Jobs**: primary runtime is local `scripts/run-job.sh`, writing to Lightsail Postgres.
 - **Vector search**: pgvector on the Lightsail Postgres instance. Embeddings live in `ContentEmbeddings`.

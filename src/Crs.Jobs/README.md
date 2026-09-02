@@ -83,9 +83,8 @@ Rebuild vector embeddings and reindex all content:
 
 ## Deployment
 
-Jobs is deployed as a scheduled container task:
+Jobs run from a machine that can reach Lightsail Postgres:
 
-- **Local:** `dotnet run` or Docker container
-- **AWS:** ECS Fargate task triggered by EventBridge Scheduler
-
-The service is triggered on a schedule via AWS EventBridge.
+```bash
+./scripts/run-job.sh
+```

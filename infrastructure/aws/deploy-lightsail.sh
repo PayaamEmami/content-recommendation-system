@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Deploy/update the CRS Compose stack on crs-lightsail.
+# Deploy/update the CRS Compose stack on crs-lightsail-small.
+# SSH target is the static IP, not the instance name.
 # Usage: ./deploy-lightsail.sh
 set -euo pipefail
 
 REGION="${REGION:-us-west-2}"
-INSTANCE_NAME="${INSTANCE_NAME:-crs-lightsail}"
+INSTANCE_NAME="${INSTANCE_NAME:-crs-lightsail-small}"
 STATIC_IP_NAME="${STATIC_IP_NAME:-crs-lightsail-ip}"
 SSH_KEY_PATH="${SSH_KEY_PATH:-$HOME/.ssh/crs-lightsail-key.pem}"
 SSH_USER="${SSH_USER:-ubuntu}"

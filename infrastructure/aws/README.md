@@ -6,7 +6,7 @@ Single place for CRS cloud ops: Lightsail API runtime, ECR image builds, and S3/
 
 | Piece | Resource |
 |-------|----------|
-| API + Postgres (pgvector) + Caddy | Lightsail instance `crs-lightsail` + static IP `crs-lightsail-ip` |
+| API + Postgres (pgvector) + Caddy | Lightsail instance `crs-lightsail-small` + static IP `crs-lightsail-ip` |
 | API image | ECR `crs-api` |
 | Web (Blazor WASM) | S3 `crs-web-{account}` + CloudFront |
 | Jobs | Local `scripts/run-job.sh` → Lightsail Postgres |
@@ -73,24 +73,7 @@ ConnectionStrings__DefaultConnection=Host=<crs-lightsail-ip>;Database=crsdb;User
 
 When your public IP changes (CGNAT/mobile), reopen Lightsail port **5432** for that CIDR or jobs cannot connect.
 
-## pgvector cutover
-
-After deploying this stack (Postgres image `pgvector/pgvector:pg15`, no OpenSearch container):
-
-1. Deploy compose **without** `docker compose down -v`. The named volume `postgres_data` must be kept (Postgres 15 data dir is compatible with the pgvector pg15 image).
-2. Confirm API `/health` and that `ContentEmbeddings` exists (API `MigrateAsync` on startup).
-3. From the job host, backfill vectors then regenerate feeds:
-
-```bash
-./scripts/run-job.sh reindex
-./scripts/run-job.sh feed
-```
-
-`reindex` calls OpenAI for the current corpus.
-4. Close Lightsail TCP **9200**. Leave **5432** open for jobs.
-5. Stay on Lightsail `medium_3_0` until ingest + feed are proven. Do not downsize in the same change.
-
-## MCP (assistant)
+## MCP
 
 The Streamable HTTP MCP server lives in `mcp/` and is deployed separately from Lightsail:
 
@@ -104,9 +87,7 @@ CRS_PASSWORD=... \
 ./mcp/deploy.sh
 ```
 
-Paste the Function URL and raw `cak_…` key into the assistant at `/chat/automation` as a **second** MCP connection (do not replace the task-board MCP).
-
-`crs_ingest_source` runs the per-source API pipeline (extract, save, embed). The ranked daily feed is still produced by local `scripts/run-job.sh feed`; newly ingested items may not appear in today's feed until that job runs.
+`crs_ingest_source` runs the per-source API pipeline (extract, save, embed). Ranked daily feeds are still produced by `scripts/run-job.sh feed`.
 
 Env vars on the Lambda: `MCP_API_KEY_SHA256`, `CRS_API_BASE_URL`, `CRS_EMAIL`, `CRS_PASSWORD`. Never commit those values.
 
@@ -117,7 +98,7 @@ Env vars on the Lambda: `MCP_API_KEY_SHA256`, `CRS_API_BASE_URL`, `CRS_EMAIL`, `
 | `deploy-lightsail.sh` | Install Docker if needed; sync Compose/Caddy/`.env`; pull ECR; `compose up` |
 | `build-and-push.sh` | Build/push `crs-api` + `crs-jobs` to ECR; optional Lightsail refresh |
 | `deploy-web.sh` | Publish Blazor WASM to S3 + CloudFront invalidation |
-| `migrate-users.sh` | Optional one-shot Users-table restore (cutover utility) |
+| `migrate-users.sh` | Optional Users-table restore |
 | `docker-compose.yml` + `Caddyfile` | Runtime stack copied to `/opt/crs` on the instance |
 
 ## Firewall (Lightsail)
@@ -127,8 +108,6 @@ Env vars on the Lambda: `MCP_API_KEY_SHA256`, `CRS_API_BASE_URL`, `CRS_EMAIL`, `
 | 80, 443 | Public (Caddy / ACME) |
 | 22 | Prefer admin CIDR; may need broader access on CGNAT |
 | 5432 | Admin / jobs host CIDR only |
-
-`medium_3_0` (~$24/mo, 4 GB) is the current instance plan. Stay on it until pgvector ingest and feed generation are proven in production.
 
 ## Secrets
 
@@ -146,4 +125,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\install-windows.ps1 -Region us-we
 
 ## Naming
 
-`crs-lightsail`, `crs-lightsail-ip`, `crs-api` / `crs-jobs` ECR repos, `crs-web-{account}`, containers `crs-postgres`, `crs-api`, `crs-caddy`.
+`crs-lightsail-small`, `crs-lightsail-ip`, `crs-api` / `crs-jobs` ECR repos, `crs-web-{account}`, containers `crs-postgres`, `crs-api`, `crs-caddy`.
