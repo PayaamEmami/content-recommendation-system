@@ -16,7 +16,7 @@ The system uses a **hybrid recommendation approach** combining semantic similari
 User Embedding (from upvotes) -> Vector Search -> Heuristic Scoring -> Filtering -> Ranked Recommendations
                                       |
                                       v
-                            OpenSearch (Vector DB)
+                            Postgres (pgvector)
 ```
 
 **Primary Signal (70% weight)**: Vector similarity using embeddings
@@ -62,7 +62,7 @@ User Embedding (from upvotes) -> Vector Search -> Heuristic Scoring -> Filtering
 
 1. **Build User Profile**:
    - Aggregate embeddings of all upvoted content -> User embedding vector
-2. **Vector Search**: Query OpenSearch for semantically similar content
+2. **Vector Search**: Query Postgres/pgvector for semantically similar content
    - Uses user embedding as query vector
    - Applies filters: content type, recency (90 days), exclude seen/recommended
    - Returns top candidates with similarity scores
@@ -123,7 +123,7 @@ var allRecommendations = await feedGenerator.GenerateAllFeedsAsync(
 
 The recommendation engine integrates with:
 
-- **OpenSearch** (via `IVectorStore`) - Semantic similarity search
+- **PostgreSQL pgvector** (via `IVectorStore`) - Semantic similarity search
 - **OpenAI** (via `IEmbeddingService`) - Text embedding generation
 - **PostgreSQL** (via EF Core repositories) - Persistence
 
@@ -152,7 +152,7 @@ These can be adjusted in the respective scorer/filter implementations.
 
 The engine requires:
 
-- OpenSearch configured with vector index (via `IVectorStore`)
+- Postgres with pgvector (via `IVectorStore`)
 - OpenAI embeddings service (via `IEmbeddingService`)
 - Database with user votes and content
 

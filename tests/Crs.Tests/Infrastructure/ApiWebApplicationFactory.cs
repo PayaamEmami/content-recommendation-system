@@ -34,10 +34,6 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                 ["Embedding:ModelName"] = "test",
                 ["Embedding:Dimensions"] = "3",
                 ["Embedding:MaxBatchSize"] = "100",
-                ["OpenSearch:Endpoint"] = "http://localhost:9200",
-                ["OpenSearch:IndexName"] = "crs-content-test",
-                ["OpenSearch:EmbeddingDimensions"] = "3",
-                ["OpenSearch:Region"] = "us-west-2",
                 ["OpenAI:ApiKey"] = "test-key",
                 ["OpenAI:Model"] = "gpt-5-nano",
                 ["OpenAI:MaxTokens"] = "2048",
@@ -59,7 +55,7 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<DbContextOptions<CrsDbContext>>();
             services.RemoveAll<CrsDbContext>();
             services.AddDbContext<CrsDbContext>(options =>
-                options.UseNpgsql(PostgresTestContainerFixture.ConnectionString));
+                options.UseCrsNpgsql(PostgresTestContainerFixture.ConnectionString));
 
             services.RemoveAll<IEmbeddingService>();
             services.RemoveAll<IVectorStore>();

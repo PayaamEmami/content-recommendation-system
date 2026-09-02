@@ -13,7 +13,7 @@ Content Recommendation System is a personalized learning feed application that i
 | Frontend       | Blazor WebAssembly, .NET 10                                      |
 | Backend        | ASP.NET Core, C#                                                 |
 | Database       | PostgreSQL (EF Core)                                             |
-| Vector Search  | OpenSearch                                                           |
+| Vector Search  | PostgreSQL pgvector                                                  |
 | AI             | OpenAI                                                               |
 | Jobs           | .NET Worker Service; local `scripts/run-job.sh`                      |
 | Infrastructure | AWS Lightsail, S3, CloudFront, ECR, Docker Compose                   |
@@ -25,8 +25,8 @@ Content Recommendation System is a personalized learning feed application that i
 Production runs on AWS with a cheap always-on Lightsail API host and a static Blazor frontend:
 
 - **S3 + CloudFront** host the Blazor WebAssembly frontend
-- **Lightsail** (`crs-lightsail` + `crs-lightsail-ip`) runs Postgres, OpenSearch (Local mode), the API, and Caddy HTTPS
-- **Local jobs** (`scripts/run-job.sh`; Git Bash or WSL on Windows) write to Lightsail Postgres + OpenSearch
+- **Lightsail** (`crs-lightsail` + `crs-lightsail-ip`) runs Postgres with pgvector, the API, and Caddy HTTPS
+- **Local jobs** (`scripts/run-job.sh`; Git Bash or WSL on Windows) write to Lightsail Postgres
 - **ECR** stores API container images pulled by Lightsail
 - **MCP** (`crs-mcp-server` Lambda Function URL in us-west-2) exposes CRS REST to the agentic assistant. Deploy with `mcp/deploy.sh`. The assistant authenticates with a `cak_…` key; the Lambda logs into Crs.Api as the configured user. Per-source ingest is available; the batch `scripts/run-job.sh` pipeline is not.
 
@@ -47,7 +47,7 @@ See [`infrastructure/aws/README.md`](infrastructure/aws/README.md) for deploy an
 │   └── Crs.Tests/            # Unit and integration tests
 ├── infrastructure/
 │   └── aws/                  # Lightsail API runtime, ECR, S3/CloudFront deploy
-├── docker-compose.yml        # Local Postgres, OpenSearch, and optional full stack
+├── docker-compose.yml        # Local Postgres (pgvector) and optional full stack
 ├── mcp/                      # Streamable HTTP MCP server (Lambda Function URL)
 ├── .github/workflows/        # CI and CD GitHub Actions pipelines
 └── scripts/                  # Local job runner (`run-job.sh`)
@@ -76,13 +76,13 @@ At a high level, CRS is composed of:
 
 - Pulls content from user-configured sources (RSS/Atom, video, newsletters)
 - LLM agent extracts and categorizes content from URLs
-- Generates embeddings and indexes content in OpenSearch
+- Generates embeddings and stores them in Postgres (pgvector)
 
 ### Recommendation Engine
 
 Hybrid scoring combines:
 
-- **Vector similarity** (70% weight) using OpenAI embeddings and OpenSearch
+- **Vector similarity** (70% weight) using OpenAI embeddings and pgvector
 - **Heuristic signals** (30% weight) with recency dominant inside heuristics
 - Diversity, deduplication, and personalization filters
 
@@ -94,14 +94,14 @@ Jobs are implemented in `Crs.Jobs`:
 - **Feed Generation** — Pre-generate personalized feeds per user and content type
 - **X Ingestion** — Sync posts from connected X accounts
 
-AWS job schedules are optional/legacy. Locally, jobs run via `scripts/run-job.sh` (or `dotnet run`) and should target the Lightsail Postgres + OpenSearch endpoints.
+AWS job schedules are optional/legacy. Locally, jobs run via `scripts/run-job.sh` (or `dotnet run`) and should target the Lightsail Postgres endpoint.
 
 ## Current Runtime Notes
 
 - **API**: primary deployed runtime is Lightsail Compose (`crs-lightsail`) behind Caddy HTTPS.
 - **Web**: deployed as Blazor WebAssembly to S3 + CloudFront.
-- **Jobs**: primary runtime is local `scripts/run-job.sh`, writing to Lightsail (not starting local OpenSearch when `OpenSearch__Endpoint` is remote).
-- **OpenSearch**: Local mode on the Lightsail box (and optionally local Docker for pure offline dev).
+- **Jobs**: primary runtime is local `scripts/run-job.sh`, writing to Lightsail Postgres.
+- **Vector search**: pgvector on the Lightsail Postgres instance. Embeddings live in `ContentEmbeddings`.
 - **Recommendation engine**: hybrid scoring with 70% vector similarity and 30% heuristics, with recency dominant inside the heuristic portion.
 - **MCP**: Lambda Function URL wrapping the public HTTPS API. Ingest-one-source is in-band; feed regeneration stays on `scripts/run-job.sh`.
 
@@ -111,19 +111,15 @@ AWS job schedules are optional/legacy. Locally, jobs run via `scripts/run-job.sh
 
 ```text
 # Correct
-OpenSearch__Mode
-OpenSearch__Endpoint
 ConnectionStrings__DefaultConnection
 OpenAI__ApiKey
 ApiBaseUrl
 
 # Wrong
-AWS_OPENSEARCH_ENDPOINT
 SQL_CONNECTION_STRING
 ```
 
-- Mapping example: `appsettings.json` key `OpenSearch:Endpoint` becomes env var `OpenSearch__Endpoint`.
-- `OpenSearch:Mode` defaults to `Local`, so API and jobs expect the local Docker-backed OpenSearch path unless explicitly configured otherwise.
+- Mapping example: `appsettings.json` key `ConnectionStrings:DefaultConnection` becomes env var `ConnectionStrings__DefaultConnection`.
 - Never commit `infrastructure/aws/secrets.env` or `infrastructure/aws/.env`.
 
 ## Agent Verification Checklist

@@ -36,7 +36,6 @@ builder.Services.AddScoped<SourceIngestionJob>();
 builder.Services.AddScoped<FeedGenerationJob>();
 builder.Services.AddScoped<ReindexJob>();
 builder.Services.AddScoped<XIngestionJob>();
-builder.Services.AddScoped<LocalVectorIndexSyncJob>();
 
 var host = builder.Build();
 var runId = Guid.NewGuid().ToString("n");
@@ -105,7 +104,6 @@ if (string.IsNullOrWhiteSpace(jobName))
   Console.WriteLine("  ingestion     - Run source ingestion job");
   Console.WriteLine("  feed          - Run feed generation job");
   Console.WriteLine("  reindex       - Reindex all content in vector store");
-  Console.WriteLine("  sync-index    - Reconcile local vector index with database content");
   Console.WriteLine("  x-ingestion   - Run X post ingestion job");
   Environment.Exit(1);
 }
@@ -143,16 +141,6 @@ using (var scope = host.Services.CreateScope())
           ["JobRunId"] = runId
         }));
 
-    // When using local OpenSearch, keep the index converged with the database before
-    // running jobs that depend on semantic search quality.
-    if (!string.Equals(jobName, "reindex", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(jobName, "sync-index", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(jobName, "x-ingestion", StringComparison.OrdinalIgnoreCase))
-    {
-      var indexSyncJob = scope.ServiceProvider.GetRequiredService<LocalVectorIndexSyncJob>();
-      await indexSyncJob.ExecuteAsync(CancellationToken.None);
-    }
-
     switch (jobName.ToLowerInvariant())
     {
       case "ingestion":
@@ -173,12 +161,6 @@ using (var scope = host.Services.CreateScope())
         logger.LogInformation("Reindex job completed successfully");
         break;
 
-      case "sync-index":
-        var indexSyncJob = scope.ServiceProvider.GetRequiredService<LocalVectorIndexSyncJob>();
-        await indexSyncJob.ExecuteAsync(CancellationToken.None);
-        logger.LogInformation("Index sync job completed successfully");
-        break;
-
       case "x-ingestion":
         var xIngestionJob = scope.ServiceProvider.GetRequiredService<XIngestionJob>();
         await xIngestionJob.ExecuteAsync(CancellationToken.None);
@@ -188,7 +170,7 @@ using (var scope = host.Services.CreateScope())
       default:
         logger.LogError("Unknown job name: {JobName}", jobName);
         Console.WriteLine($"Error: Unknown job '{jobName}'");
-        Console.WriteLine("Available jobs: ingestion, feed, reindex, sync-index, x-ingestion");
+        Console.WriteLine("Available jobs: ingestion, feed, reindex, x-ingestion");
         Environment.Exit(1);
         break;
     }

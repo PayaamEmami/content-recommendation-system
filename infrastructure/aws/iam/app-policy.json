@@ -11,14 +11,6 @@
             "Resource": "arn:aws:secretsmanager:*:*:secret:crs-secrets/*"
         },
         {
-            "Sid": "OpenSearchServerlessAccess",
-            "Effect": "Allow",
-            "Action": [
-                "aoss:APIAccessAll"
-            ],
-            "Resource": "arn:aws:aoss:*:*:collection/*"
-        },
-        {
             "Sid": "CloudWatchLogsAccess",
             "Effect": "Allow",
             "Action": [

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Crs.Core.Entities;
+using Crs.Infrastructure.Data.Entities;
 
 namespace Crs.Infrastructure.Data;
 
@@ -31,12 +32,13 @@ public class CrsDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<XAuthState> XAuthStates { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
+    public DbSet<ContentEmbedding> ContentEmbeddings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // Apply all entity configurations from this assembly
+        modelBuilder.HasPostgresExtension("vector");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CrsDbContext).Assembly);
     }
 }

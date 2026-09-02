@@ -6,10 +6,10 @@ Single place for CRS cloud ops: Lightsail API runtime, ECR image builds, and S3/
 
 | Piece | Resource |
 |-------|----------|
-| API + Postgres + OpenSearch + Caddy | Lightsail instance `crs-lightsail` + static IP `crs-lightsail-ip` |
+| API + Postgres (pgvector) + Caddy | Lightsail instance `crs-lightsail` + static IP `crs-lightsail-ip` |
 | API image | ECR `crs-api` |
 | Web (Blazor WASM) | S3 `crs-web-{account}` + CloudFront |
-| Jobs | Local `scripts/run-job.sh` → Lightsail Postgres/OpenSearch |
+| Jobs | Local `scripts/run-job.sh` → Lightsail Postgres |
 | MCP | Lambda `crs-mcp-server` Function URL (us-west-2) wrapping Crs.Api REST |
 
 Region: **us-west-2**. All resources use the `crs-` prefix.
@@ -65,17 +65,30 @@ Copy `secrets.env.example` → `secrets.env` (gitignored) and point at Lightsail
 
 ```bash
 ConnectionStrings__DefaultConnection=Host=<crs-lightsail-ip>;Database=crsdb;Username=crsadmin;Password=...
-OpenSearch__Mode=Local
-OpenSearch__Endpoint=http://<crs-lightsail-ip>:9200
 ```
-
-`scripts/run-job.sh` health-checks the remote OpenSearch URL and does **not** start local Docker OpenSearch when the endpoint is not localhost:
 
 ```bash
 ./scripts/run-job.sh
 ```
 
-When your public IP changes (CGNAT/mobile), reopen Lightsail ports **5432** and **9200** for that CIDR or jobs cannot connect.
+When your public IP changes (CGNAT/mobile), reopen Lightsail port **5432** for that CIDR or jobs cannot connect.
+
+## pgvector cutover
+
+After deploying this stack (Postgres image `pgvector/pgvector:pg15`, no OpenSearch container):
+
+1. Deploy compose **without** `docker compose down -v`. The named volume `postgres_data` must be kept (Postgres 15 data dir is compatible with the pgvector pg15 image).
+2. Confirm API `/health` and that `ContentEmbeddings` exists (API `MigrateAsync` on startup).
+3. From the job host, backfill vectors then regenerate feeds:
+
+```bash
+./scripts/run-job.sh reindex
+./scripts/run-job.sh feed
+```
+
+`reindex` calls OpenAI for the current corpus.
+4. Close Lightsail TCP **9200**. Leave **5432** open for jobs.
+5. Stay on Lightsail `medium_3_0` until ingest + feed are proven. Do not downsize in the same change.
 
 ## MCP (assistant)
 
@@ -113,9 +126,9 @@ Env vars on the Lambda: `MCP_API_KEY_SHA256`, `CRS_API_BASE_URL`, `CRS_EMAIL`, `
 |------|--------|
 | 80, 443 | Public (Caddy / ACME) |
 | 22 | Prefer admin CIDR; may need broader access on CGNAT |
-| 5432, 9200 | Admin / jobs host CIDR only |
+| 5432 | Admin / jobs host CIDR only |
 
-`medium_3_0` (~$24/mo, 4 GB) is required for static IPv4. IPv6-only bundles cannot attach `crs-lightsail-ip`.
+`medium_3_0` (~$24/mo, 4 GB) is the current instance plan. Stay on it until pgvector ingest and feed generation are proven in production.
 
 ## Secrets
 
@@ -133,4 +146,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\install-windows.ps1 -Region us-we
 
 ## Naming
 
-`crs-lightsail`, `crs-lightsail-ip`, `crs-api` / `crs-jobs` ECR repos, `crs-web-{account}`, containers `crs-postgres`, `crs-opensearch`, `crs-api`, `crs-caddy`.
+`crs-lightsail`, `crs-lightsail-ip`, `crs-api` / `crs-jobs` ECR repos, `crs-web-{account}`, containers `crs-postgres`, `crs-api`, `crs-caddy`.

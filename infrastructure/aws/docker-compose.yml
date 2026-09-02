@@ -1,9 +1,9 @@
-# CRS Lightsail always-on stack: Postgres + OpenSearch + API + Caddy.
+# CRS Lightsail always-on stack: Postgres (pgvector) + API + Caddy.
 # Deployed from infrastructure/aws/ onto the crs-lightsail instance (/opt/crs).
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     container_name: crs-postgres
     restart: unless-stopped
     environment:
@@ -23,35 +23,6 @@ services:
       retries: 5
       start_period: 10s
 
-  opensearch:
-    image: opensearchproject/opensearch:2.11.0
-    container_name: crs-opensearch
-    restart: unless-stopped
-    environment:
-      - discovery.type=single-node
-      - plugins.security.disabled=true
-      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
-      - bootstrap.memory_lock=true
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
-    ports:
-      - "9200:9200"
-    volumes:
-      - opensearch_data:/usr/share/opensearch/data
-    networks:
-      - crs-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'green\\|yellow'"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 90s
-
   api:
     image: ${CRS_API_IMAGE}
     container_name: crs-api
@@ -63,10 +34,6 @@ services:
       OpenAI__ApiKey: ${OpenAI__ApiKey}
       Embedding__ModelName: text-embedding-3-small
       Embedding__Dimensions: "1536"
-      OpenSearch__Mode: Local
-      OpenSearch__Endpoint: http://opensearch:9200
-      OpenSearch__IndexName: crs-content
-      OpenSearch__EmbeddingDimensions: "1536"
       JwtSettings__SecretKey: ${JWT_SECRET}
       JwtSettings__Issuer: Crs.Api
       JwtSettings__Audience: Crs.Web
@@ -82,8 +49,6 @@ services:
       X__RedirectUri: ${X__RedirectUri:-}
     depends_on:
       postgres:
-        condition: service_healthy
-      opensearch:
         condition: service_healthy
     networks:
       - crs-network
@@ -115,6 +80,5 @@ networks:
 
 volumes:
   postgres_data:
-  opensearch_data:
   caddy_data:
   caddy_config:

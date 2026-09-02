@@ -16,7 +16,7 @@ Jobs runs as a scheduled container task that orchestrates periodic tasks for con
   1. Fetch active sources from database
   2. For each source, use LLM agent to extract content
   3. Generate embeddings for new content
-  4. Index content in OpenSearch vector store
+  4. Store embeddings in Postgres (pgvector)
   5. Save new content to database
 
 ### Feed Generation Job
@@ -33,28 +33,26 @@ Jobs runs as a scheduled container task that orchestrates periodic tasks for con
 ## Dependencies
 
 - **Crs.Core:** Domain models and interfaces
-- **Crs.Infrastructure:** Database access, OpenAI, OpenSearch
+- **Crs.Infrastructure:** Database access, OpenAI, pgvector
 - **Crs.Recommendation:** Hybrid recommendation engine
 - **Crs.Llm:** LLM-based content ingestion agent
 
 ## Configuration
 
-Jobs requires the same configuration as the API (database connection, OpenAI, OpenSearch) plus job scheduling settings (cron expressions).
+Jobs requires the same configuration as the API (database connection, OpenAI) plus job scheduling settings (cron expressions).
 
 See `appsettings.json.example` for required configuration values.
 
 ## Local prerequisites
 
 - **.NET 10 SDK**
-- **Docker Desktop** if OpenSearch is local (`OpenSearch__Endpoint` is localhost). Remote Lightsail OpenSearch skips this.
 - **Environment variables** from `infrastructure/aws/secrets.env`:
   - `OpenAI__ApiKey` (used for both embeddings + LLM)
-  - `ConnectionStrings__DefaultConnection` reachable from your machine
-  - `OpenSearch__Mode=Local` and `OpenSearch__Endpoint` (Lightsail or `http://localhost:9200`)
+  - `ConnectionStrings__DefaultConnection` reachable from your machine (Lightsail Postgres)
 
 ## Running jobs locally
 
-From the repo root, use `scripts/run-job.sh` (loads `secrets.env`, waits for OpenSearch when needed). On Windows, use Git Bash or WSL:
+From the repo root, use `scripts/run-job.sh` (loads `secrets.env`). On Windows, use Git Bash or WSL:
 
 ```bash
 # Daily pipeline: x-ingestion always runs; feed runs only if ingestion succeeded

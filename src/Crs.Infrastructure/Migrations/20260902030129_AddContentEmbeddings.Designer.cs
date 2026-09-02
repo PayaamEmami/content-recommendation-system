@@ -3,6 +3,7 @@ using System;
 using Crs.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -12,9 +13,11 @@ using Pgvector;
 namespace Crs.Infrastructure.Migrations
 {
     [DbContext(typeof(CrsDbContext))]
-    partial class CrsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260902030129_AddContentEmbeddings")]
+    partial class AddContentEmbeddings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

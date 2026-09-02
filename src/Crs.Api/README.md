@@ -79,12 +79,11 @@ dotnet run
 
 API starts at `https://localhost:7000`. OpenAPI spec available at `/openapi/v1.json`.
 
-### OpenSearch (Local)
+### Postgres (local)
 
-To run the API against local OpenSearch:
-- Ensure Docker Desktop + WSL2 is running.
-- Start the container: `docker compose up opensearch`
-- Set `OpenSearch:Mode` to `Local` and `OpenSearch:Endpoint` to `http://localhost:9200`
+To run the API against local Postgres with pgvector:
+- Start the container: `docker compose up -d postgres`
+- Use the `DefaultConnection` in `appsettings.json` (`Host=localhost;Database=crsdb;...`)
 
 ## API Endpoints
 

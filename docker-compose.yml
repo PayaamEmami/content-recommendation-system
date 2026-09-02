@@ -1,7 +1,7 @@
 services:
-  # PostgreSQL for local development
+  # PostgreSQL with pgvector for local development
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     container_name: crs-postgres
     environment:
       - POSTGRES_USER=crsadmin
@@ -20,28 +20,6 @@ services:
       retries: 5
       start_period: 10s
 
-  # OpenSearch for local vector search development
-  opensearch:
-    image: opensearchproject/opensearch:2.11.0
-    container_name: crs-opensearch
-    environment:
-      - discovery.type=single-node
-      - plugins.security.disabled=true
-      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
-    ports:
-      - "9200:9200"
-      - "9600:9600"
-    volumes:
-      - opensearch_data:/usr/share/opensearch/data
-    networks:
-      - crs-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'green\\|yellow'"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
   # CRS API
   api:
     build:
@@ -55,10 +33,6 @@ services:
       - OpenAI__ApiKey=${OpenAI__ApiKey}
       - Embedding__ModelName=text-embedding-3-small
       - Embedding__Dimensions=1536
-      - OpenSearch__Mode=Local
-      - OpenSearch__Endpoint=http://opensearch:9200
-      - OpenSearch__IndexName=crs-content
-      - OpenSearch__EmbeddingDimensions=1536
       - JwtSettings__SecretKey=${JWT_SECRET_KEY:-your-development-secret-key-change-in-production}
       - JwtSettings__Issuer=http://localhost:8080
       - JwtSettings__Audience=http://localhost:5001
@@ -67,8 +41,6 @@ services:
       - "8080:8080"
     depends_on:
       postgres:
-        condition: service_healthy
-      opensearch:
         condition: service_healthy
     networks:
       - crs-network
@@ -104,15 +76,10 @@ services:
       - OpenAI__ApiKey=${OpenAI__ApiKey}
       - Embedding__ModelName=text-embedding-3-small
       - Embedding__Dimensions=1536
-      - OpenSearch__Mode=Local
-      - OpenSearch__Endpoint=http://opensearch:9200
-      - OpenSearch__IndexName=crs-content
       - OpenAI__Model=gpt-5-nano
       - OpenAI__MaxTokens=4096
     depends_on:
       postgres:
-        condition: service_healthy
-      opensearch:
         condition: service_healthy
     networks:
       - crs-network
@@ -126,4 +93,3 @@ networks:
 
 volumes:
   postgres_data:
-  opensearch_data:

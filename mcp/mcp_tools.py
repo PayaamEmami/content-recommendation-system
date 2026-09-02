@@ -1,7 +1,7 @@
 """Tool definitions and handlers exposed by the CRS MCP server.
 
 Handlers go through Crs.Api over HTTP so validation, embeddings, and indexing
-stay in the API. This process never talks to Postgres or OpenSearch.
+stay in the API. This process never talks to Postgres directly.
 """
 
 from __future__ import annotations

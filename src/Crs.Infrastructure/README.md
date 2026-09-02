@@ -75,23 +75,19 @@ This registers:
 }
 ```
 
-### OpenSearch Configuration
+### Vector store (pgvector)
 ```json
 // appsettings.json
 {
-  "OpenSearch": {
-    "Mode": "Local",
-    "Endpoint": "http://localhost:9200",
-    "IndexName": "crs-content",
-    "EmbeddingDimensions": 1536,
-    "Region": "us-west-2"
+  "Embedding": {
+    "ModelName": "text-embedding-3-small",
+    "Dimensions": 1536,
+    "MaxBatchSize": 100
   }
 }
 ```
 
-**Mode options**:
-- `Local`: No auth (Docker OpenSearch).
-- `Aws`: Uses SigV4 with the configured `Region`.
+Embeddings are stored in Postgres table `ContentEmbeddings` (`vector(1536)`). The API applies the pgvector extension via EF migrations. Use the `pgvector/pgvector:pg15` image locally and on Lightsail.
 
 ### Migrations
 ```bash

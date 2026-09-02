@@ -6,12 +6,5 @@
     "ModelName": "text-embedding-3-small",
     "Dimensions": 1536,
     "MaxBatchSize": 100
-  },
-  "OpenSearch": {
-    "Mode": "Aws",
-    "Endpoint": "https://your-opensearch-endpoint.us-west-2.aoss.amazonaws.com",
-    "IndexName": "crs-content",
-    "EmbeddingDimensions": 1536
   }
 }
-

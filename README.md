@@ -24,7 +24,7 @@ CRS provides:
 
 ## Architecture
 
-CRS splits interactive traffic from ranking work. The Blazor WebAssembly client talks to the ASP.NET Core API over JWT. The API reads and writes application data in PostgreSQL, including pre-generated feeds. `Crs.Jobs` runs on a schedule (locally via `scripts/run-job.sh`), ingests sources, indexes embeddings in OpenSearch, and writes ranked feeds back to PostgreSQL so feed pages stay a database read.
+CRS splits interactive traffic from ranking work. The Blazor WebAssembly client talks to the ASP.NET Core API over JWT. The API reads and writes application data in PostgreSQL, including pre-generated feeds and content embeddings (pgvector). `Crs.Jobs` runs on a schedule (locally via `scripts/run-job.sh`), ingests sources, stores embeddings in Postgres, and writes ranked feeds back to PostgreSQL so feed pages stay a database read.
 
 ```mermaid
 flowchart TB
@@ -37,8 +37,7 @@ flowchart TB
   subgraph lightsail [AWS Lightsail]
     caddy[Caddy HTTPS]
     api["Crs.Api"]
-    pg[(PostgreSQL)]
-    os[(OpenSearch)]
+    pg[(PostgreSQL pgvector)]
   end
 
   subgraph jobs [Crs.Jobs]
@@ -61,10 +60,8 @@ flowchart TB
   ingest --> sources
   ingest --> openai
   ingest --> pg
-  ingest --> os
 
   feed --> openai
-  feed --> os
   feed --> pg
 
   xjob --> xapi
@@ -76,9 +73,8 @@ flowchart TB
 ### Prerequisites
 
 - **.NET 10 SDK**
-- **Docker** and **Docker Compose** (for local PostgreSQL and OpenSearch)
+- **Docker** and **Docker Compose** (for local PostgreSQL with pgvector)
 - **OpenAI API key** (embeddings and LLM ingestion)
-- **WSL2 on Windows** recommended for Docker-backed OpenSearch
 
 ### Clone The Repository
 
@@ -90,10 +86,10 @@ cd content-recommendation-system
 ### Start Local Services
 
 ```bash
-docker compose up -d postgres opensearch
+docker compose up -d postgres
 ```
 
-This starts PostgreSQL on port `5432` and OpenSearch on port `9200`. The API applies EF Core migrations on startup.
+This starts PostgreSQL with pgvector on port `5432`. The API applies EF Core migrations on startup.
 
 ### Configure The Environment
 

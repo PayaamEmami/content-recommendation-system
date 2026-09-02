@@ -63,9 +63,6 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 sudo mkdir -p /opt/crs
 sudo chown ubuntu:ubuntu /opt/crs
-# OpenSearch needs vm.max_map_count
-echo "vm.max_map_count=262144" | sudo tee /etc/sysctl.d/99-crs-opensearch.conf >/dev/null
-sudo sysctl --system >/dev/null || sudo sysctl -w vm.max_map_count=262144
 REMOTE
 
 log "Copying compose files"

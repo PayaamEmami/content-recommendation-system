@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Crs.Infrastructure.Configuration;
 using Crs.Core.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
@@ -12,7 +13,7 @@ internal static class ObservabilityHealthChecks
     public static IHealthChecksBuilder AddObservabilityChecks(this IHealthChecksBuilder builder)
     {
         return builder
-            .AddCheck<OpenSearchHealthCheck>("opensearch", tags: ["ready"])
+            .AddCheck<VectorStoreHealthCheck>("vector-store", tags: ["ready"])
             .AddCheck<OpenAiConfigurationHealthCheck>("openai-config", tags: ["ready"])
             .AddCheck<XConfigurationHealthCheck>("x-config", tags: ["ready"]);
     }
@@ -41,43 +42,32 @@ internal static class ObservabilityHealthChecks
     }
 }
 
-internal sealed class OpenSearchHealthCheck : IHealthCheck
+internal sealed class VectorStoreHealthCheck : IHealthCheck
 {
-    private readonly OpenSearchSettings _settings;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _scopeFactory;
 
-    public OpenSearchHealthCheck(IOptions<OpenSearchSettings> settings, IServiceProvider serviceProvider)
+    public VectorStoreHealthCheck(IServiceScopeFactory scopeFactory)
     {
-        _settings = settings.Value;
-        _serviceProvider = serviceProvider;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_settings.Endpoint))
-        {
-            return HealthCheckResult.Healthy("OpenSearch is disabled for this environment", new Dictionary<string, object>
-            {
-                ["mode"] = _settings.Mode.ToString(),
-                ["configured"] = false
-            });
-        }
-
         try
         {
-            var vectorStore = _serviceProvider.GetRequiredService<IVectorStore>();
+            using var scope = _scopeFactory.CreateScope();
+            var vectorStore = scope.ServiceProvider.GetRequiredService<IVectorStore>();
             var count = await vectorStore.GetDocumentCountAsync(cancellationToken);
-            return HealthCheckResult.Healthy("OpenSearch is reachable", new Dictionary<string, object>
+            return HealthCheckResult.Healthy("Vector store is reachable", new Dictionary<string, object>
             {
-                ["documentCount"] = count,
-                ["mode"] = _settings.Mode.ToString()
+                ["documentCount"] = count
             });
         }
         catch (Exception ex)
         {
-            return HealthCheckResult.Unhealthy("OpenSearch check failed", ex);
+            return HealthCheckResult.Unhealthy("Vector store check failed", ex);
         }
     }
 }

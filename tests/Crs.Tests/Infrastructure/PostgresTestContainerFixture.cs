@@ -17,7 +17,7 @@ public static class PostgresTestContainerFixture
             return;
         }
 
-        _container = new PostgreSqlBuilder("postgres:16-alpine")
+        _container = new PostgreSqlBuilder("pgvector/pgvector:pg16")
             .WithDatabase("crsdb_test")
             .WithUsername("crsadmin")
             .WithPassword("YourStrong@Passw0rd")

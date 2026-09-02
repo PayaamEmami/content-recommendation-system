@@ -27,8 +27,7 @@ Single jobs:
   ingestion     Pull content from configured sources
   x-ingestion   Sync posts from connected X accounts
   feed          Generate personalized recommendation feeds
-  reindex       Rebuild embeddings and reindex content
-  sync-index    Reconcile the local vector index with the database
+  reindex       Rebuild embeddings and store them in Postgres
 EOF
 }
 
@@ -60,7 +59,7 @@ while [[ $# -gt 0 ]]; do
       skip_ingestion=1
       shift
       ;;
-    ingestion|x-ingestion|feed|reindex|sync-index)
+    ingestion|x-ingestion|feed|reindex)
       if [[ -n "$job_name" ]]; then
         echo "Specify at most one job name. Use the default pipeline to run several." >&2
         usage >&2
@@ -115,114 +114,16 @@ load_secrets() {
   done < "$secrets_file"
 }
 
-is_windows() {
-  case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) return 0 ;;
-  esac
-  [[ -n "${WINDIR:-}" ]]
-}
-
-is_local_opensearch() {
-  local endpoint="${OpenSearch__Endpoint:-http://localhost:9200}"
-  endpoint="${endpoint%/}"
-  [[ "$endpoint" =~ ^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$ ]]
-}
-
-start_docker_desktop() {
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    open -a Docker
-    return 0
-  fi
-
-  if is_windows; then
-    local docker_desktop="/c/Program Files/Docker/Docker/Docker Desktop.exe"
-    if [[ -f "$docker_desktop" ]]; then
-      "$docker_desktop" &
-      return 0
-    fi
-  fi
-
-  echo "Docker is not running. Start Docker Desktop and retry." >&2
-  return 1
-}
-
-ensure_docker() {
-  if docker info >/dev/null 2>&1; then
-    echo "Docker is already running"
-    return 0
-  fi
-
-  echo "Docker is not running. Opening Docker Desktop..."
-  start_docker_desktop || return 1
-
-  local timeout=120 elapsed=0
-  while (( elapsed < timeout )); do
-    if docker info >/dev/null 2>&1; then
-      echo "Docker is ready"
-      return 0
-    fi
-    sleep 5
-    elapsed=$((elapsed + 5))
-    echo "Waiting for Docker (${elapsed}s/${timeout}s)"
-  done
-
-  echo "Docker did not become ready within ${timeout}s." >&2
-  return 1
-}
-
-wait_for_opensearch() {
-  local endpoint="${OpenSearch__Endpoint:-http://localhost:9200}"
-  endpoint="${endpoint%/}"
-  local health_uri="${endpoint}/_cluster/health"
-
-  echo "Checking OpenSearch at $endpoint"
-
-  if is_local_opensearch; then
-    local status
-    status="$(docker ps --filter "name=crs-opensearch" --format "{{.Status}}" 2>/dev/null || true)"
-    if [[ "$status" != Up* ]]; then
-      echo "Starting local OpenSearch container"
-      docker compose -f "$repo_root/docker-compose.yml" up -d opensearch
-    else
-      echo "OpenSearch container is already running"
-    fi
-  else
-    echo "Using remote OpenSearch; skipping local Docker OpenSearch"
-  fi
-
-  local timeout=120 elapsed=0
-  while (( elapsed < timeout )); do
-    if curl -fsS --max-time 5 "$health_uri" 2>/dev/null | grep -Eq '"status"[[:space:]]*:[[:space:]]*"(green|yellow)"'; then
-      echo "OpenSearch is healthy"
-      return 0
-    fi
-    sleep 5
-    elapsed=$((elapsed + 5))
-    echo "Waiting for OpenSearch (${elapsed}s/${timeout}s)"
-  done
-
-  echo "OpenSearch did not become healthy within ${timeout}s at $endpoint." >&2
-  return 1
-}
-
 prepare_job() {
   local name="$1"
 
   if [[ "$name" == "x-ingestion" ]]; then
-    echo "Skipping Docker and OpenSearch prerequisites for x-ingestion"
     if [[ -z "${X__ClientId:-}" ]]; then
       echo "X__ClientId is not set. Add it to infrastructure/aws/secrets.env (same OAuth 2.0 Client ID used by the API)." >&2
       return 2
     fi
-    return 0
   fi
-
-  if is_local_opensearch; then
-    ensure_docker || return 1
-  else
-    echo "Skipping local Docker startup because OpenSearch endpoint is remote"
-  fi
-  wait_for_opensearch
+  return 0
 }
 
 run_dotnet_job() {

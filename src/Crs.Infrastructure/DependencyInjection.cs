@@ -27,12 +27,9 @@ public static class DependencyInjection
   public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
   {
     // Register DbContext with PostgreSQL
-    services.AddDbContext<CrsDbContext>(options =>
-        options.UseNpgsql(
-            configuration.GetConnectionString("DefaultConnection"),
-            npgsqlOptions => npgsqlOptions.EnableRetryOnFailure()
-        )
-    );
+    var connectionString = configuration.GetConnectionString("DefaultConnection")
+        ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
+    services.AddDbContext<CrsDbContext>(options => options.UseCrsNpgsql(connectionString));
 
     // Register repositories
     services.AddScoped<IUserRepository, UserRepository>();
@@ -50,7 +47,6 @@ public static class DependencyInjection
 
     // Register configuration settings
     services.Configure<EmbeddingSettings>(configuration.GetSection(EmbeddingSettings.SectionName));
-    services.Configure<OpenSearchSettings>(configuration.GetSection(OpenSearchSettings.SectionName));
     services.Configure<XApiSettings>(configuration.GetSection(XApiSettings.SectionName));
 
     // Register embedding service (OpenAI)
@@ -58,8 +54,7 @@ public static class DependencyInjection
     services.AddSingleton<IEmbeddingService, OpenAIEmbeddingService>();
     services.AddHttpClient<IXApiClient, XApiClient>();
 
-    // Register vector store (OpenSearch)
-    services.AddSingleton<IVectorStore, OpenSearchVectorStore>();
+    services.AddScoped<IVectorStore, PostgresVectorStore>();
 
     // Register content fetcher service (handles HTML and RSS/XML feeds)
     services.AddHttpClient<IContentFetcherService, ContentFetcherService>();
