@@ -104,6 +104,7 @@ Run them with `scripts/run-job.sh` (or `dotnet run`) against Lightsail Postgres.
 - **Vector search**: pgvector on the Lightsail Postgres instance. Embeddings live in `ContentEmbeddings`.
 - **Recommendation engine**: hybrid scoring with 70% vector similarity and 30% heuristics, with recency dominant inside the heuristic portion.
 - **MCP**: Lambda Function URL wrapping the public HTTPS API. Ingest-one-source is in-band; feed regeneration stays on `scripts/run-job.sh`.
+- **Authz**: Source update/delete/category listing are scoped to the authenticated user. Shared content `PUT`/`DELETE` endpoints return 403 (content is URL-deduped across users).
 
 ## Critical Config Conventions
 

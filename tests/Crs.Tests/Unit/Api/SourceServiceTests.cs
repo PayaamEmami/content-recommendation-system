@@ -96,7 +96,25 @@ public sealed class SourceServiceTests
             .ReturnsAsync((Source?)null);
 
         await TestAssert.ThrowsAsync<KeyNotFoundException>(() =>
-            service.UpdateSourceAsync(Guid.NewGuid(), new UpdateSourceRequest(), CancellationToken.None));
+            service.UpdateSourceAsync(Guid.NewGuid(), Guid.NewGuid(), new UpdateSourceRequest(), CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task UpdateSourceAsync_WhenNotOwned_Throws()
+    {
+        var service = CreateService(out var sourceRepository, out _);
+        var source = new Source
+        {
+            Id = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            Url = "https://old.com"
+        };
+
+        sourceRepository.Setup(repo => repo.GetByIdAsync(source.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(source);
+
+        await TestAssert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.UpdateSourceAsync(Guid.NewGuid(), source.Id, new UpdateSourceRequest { Name = "New" }, CancellationToken.None));
     }
 
     [TestMethod]
@@ -116,7 +134,7 @@ public sealed class SourceServiceTests
             .ReturnsAsync(true);
 
         await TestAssert.ThrowsAsync<InvalidOperationException>(() =>
-            service.UpdateSourceAsync(source.Id, new UpdateSourceRequest { Url = "https://new.com" }, CancellationToken.None));
+            service.UpdateSourceAsync(source.UserId, source.Id, new UpdateSourceRequest { Url = "https://new.com" }, CancellationToken.None));
     }
 
     [TestMethod]
@@ -139,7 +157,7 @@ public sealed class SourceServiceTests
         sourceRepository.Setup(repo => repo.UpdateAsync(source, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var response = await service.UpdateSourceAsync(source.Id, new UpdateSourceRequest
+        var response = await service.UpdateSourceAsync(source.UserId, source.Id, new UpdateSourceRequest
         {
             Name = "New",
             Url = "https://new.com",
@@ -159,7 +177,7 @@ public sealed class SourceServiceTests
             .ReturnsAsync((Source?)null);
 
         await TestAssert.ThrowsAsync<KeyNotFoundException>(() =>
-            service.DeleteSourceAsync(Guid.NewGuid(), CancellationToken.None));
+            service.DeleteSourceAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None));
     }
 
     [TestMethod]
@@ -167,12 +185,13 @@ public sealed class SourceServiceTests
     {
         var service = CreateService(out var sourceRepository, out _);
         var sourceId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
         sourceRepository.Setup(repo => repo.GetByIdAsync(sourceId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Source { Id = sourceId });
+            .ReturnsAsync(new Source { Id = sourceId, UserId = userId });
         sourceRepository.Setup(repo => repo.DeleteAsync(sourceId, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        await service.DeleteSourceAsync(sourceId, CancellationToken.None);
+        await service.DeleteSourceAsync(userId, sourceId, CancellationToken.None);
 
         sourceRepository.Verify(repo => repo.DeleteAsync(sourceId, It.IsAny<CancellationToken>()), Times.Once);
     }

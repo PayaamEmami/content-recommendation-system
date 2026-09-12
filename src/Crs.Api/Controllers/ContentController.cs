@@ -144,15 +144,20 @@ public class ContentController : ApiControllerBase
     [HttpPut("{id}")]
     [ProducesResponseType(typeof(ContentResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> UpdateContent(
+    public Task<IActionResult> UpdateContent(
         Guid id,
         [FromBody] UpdateContentRequest request,
         CancellationToken cancellationToken)
     {
-        var content = await _contentService.UpdateContentAsync(id, request, cancellationToken);
-        return Ok(content);
+        _ = id;
+        _ = request;
+        _ = cancellationToken;
+        // Content items are shared across users (URL-deduped). Mutating them is not
+        // exposed to arbitrary authenticated callers.
+        return Task.FromResult<IActionResult>(Forbid());
     }
 
     /// <summary>
@@ -164,11 +169,15 @@ public class ContentController : ApiControllerBase
     [HttpDelete("{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteContent(Guid id, CancellationToken cancellationToken)
+    public Task<IActionResult> DeleteContent(Guid id, CancellationToken cancellationToken)
     {
-        await _contentService.DeleteContentAsync(id, cancellationToken);
-        return NoContent();
+        _ = id;
+        _ = cancellationToken;
+        // Content items are shared across users (URL-deduped). Deleting them is not
+        // exposed to arbitrary authenticated callers.
+        return Task.FromResult<IActionResult>(Forbid());
     }
 
     /// <summary>
