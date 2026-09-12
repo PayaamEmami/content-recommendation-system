@@ -98,13 +98,14 @@ Run them with `scripts/run-job.sh` (or `dotnet run`) against Lightsail Postgres.
 
 ## Current Runtime Notes
 
-- **API**: primary deployed runtime is Lightsail Compose (`crs-lightsail-small`) behind Caddy HTTPS.
+- **API**: primary deployed runtime is Lightsail Compose (`crs-lightsail-small`) behind Caddy HTTPS. GitHub Actions builds/pushes the API image to ECR and deploys the web app; **pulling a new API image onto Lightsail remains a manual** `infrastructure/aws/deploy-lightsail.sh` step. That script now fails if `/health` does not return 200.
 - **Web**: deployed as Blazor WebAssembly to S3 + CloudFront.
-- **Jobs**: primary runtime is local `scripts/run-job.sh`, writing to Lightsail Postgres.
+- **Jobs**: primary runtime is local `scripts/run-job.sh`, writing to Lightsail Postgres (host port `5432` must stay open for the operator CIDR).
 - **Vector search**: pgvector on the Lightsail Postgres instance. Embeddings live in `ContentEmbeddings`.
 - **Recommendation engine**: hybrid scoring with 70% vector similarity and 30% heuristics, with recency dominant inside the heuristic portion.
 - **MCP**: Lambda Function URL wrapping the public HTTPS API. Ingest-one-source is in-band; feed regeneration stays on `scripts/run-job.sh`.
 - **Authz**: Source update/delete/category listing are scoped to the authenticated user. Shared content `PUT`/`DELETE` endpoints return 403 (content is URL-deduped across users).
+- **Backups**: no automated Postgres snapshot/PITR is configured in-repo; treat DB backup as an operational gap.
 
 ## Critical Config Conventions
 
