@@ -38,10 +38,13 @@ public class SourceService : ISourceService
         return sources.Select(SourceResponse.FromEntity).ToList();
     }
 
-    public async Task<List<SourceResponse>> GetSourcesByCategoryAsync(ContentType category, CancellationToken cancellationToken = default)
+    public async Task<List<SourceResponse>> GetSourcesByCategoryAsync(Guid userId, ContentType category, CancellationToken cancellationToken = default)
     {
         var sources = await _sourceRepository.GetByCategoryAsync(category, cancellationToken);
-        return sources.Select(SourceResponse.FromEntity).ToList();
+        return sources
+            .Where(source => source.UserId == userId)
+            .Select(SourceResponse.FromEntity)
+            .ToList();
     }
 
     public async Task<SourceResponse> CreateSourceAsync(Guid userId, CreateSourceRequest request, CancellationToken cancellationToken = default)
@@ -74,10 +77,10 @@ public class SourceService : ISourceService
         return SourceResponse.FromEntity(createdSource);
     }
 
-    public async Task<SourceResponse> UpdateSourceAsync(Guid id, UpdateSourceRequest request, CancellationToken cancellationToken = default)
+    public async Task<SourceResponse> UpdateSourceAsync(Guid userId, Guid id, UpdateSourceRequest request, CancellationToken cancellationToken = default)
     {
         var source = await _sourceRepository.GetByIdAsync(id, cancellationToken);
-        if (source == null)
+        if (source == null || source.UserId != userId)
         {
             throw new KeyNotFoundException($"Source with ID {id} not found.");
         }
@@ -118,10 +121,10 @@ public class SourceService : ISourceService
         return SourceResponse.FromEntity(source);
     }
 
-    public async Task DeleteSourceAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeleteSourceAsync(Guid userId, Guid id, CancellationToken cancellationToken = default)
     {
         var source = await _sourceRepository.GetByIdAsync(id, cancellationToken);
-        if (source == null)
+        if (source == null || source.UserId != userId)
         {
             throw new KeyNotFoundException($"Source with ID {id} not found.");
         }

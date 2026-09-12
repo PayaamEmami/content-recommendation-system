@@ -90,13 +90,19 @@ public class SourcesController : ApiControllerBase
     }
 
     /// <summary>
-    /// Gets sources by category.
+    /// Gets sources by category for the current user.
     /// </summary>
     [HttpGet("category/{category}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSourcesByCategory(ContentType category, CancellationToken cancellationToken)
     {
-        var sources = await _sourceService.GetSourcesByCategoryAsync(category, cancellationToken);
+        if (!TryGetUserId(out var userId, out var unauthorized))
+        {
+            return unauthorized;
+        }
+
+        var sources = await _sourceService.GetSourcesByCategoryAsync(userId, category, cancellationToken);
         return Ok(sources);
     }
 
@@ -131,12 +137,18 @@ public class SourcesController : ApiControllerBase
     [HttpPut("{id}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateSource(Guid id, [FromBody] UpdateSourceRequest request, CancellationToken cancellationToken)
     {
         try
         {
-            var source = await _sourceService.UpdateSourceAsync(id, request, cancellationToken);
+            if (!TryGetUserId(out var userId, out var unauthorized))
+            {
+                return unauthorized;
+            }
+
+            var source = await _sourceService.UpdateSourceAsync(userId, id, request, cancellationToken);
             return Ok(source);
         }
         catch (InvalidOperationException ex)
@@ -150,10 +162,16 @@ public class SourcesController : ApiControllerBase
     /// </summary>
     [HttpDelete("{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteSource(Guid id, CancellationToken cancellationToken)
     {
-        await _sourceService.DeleteSourceAsync(id, cancellationToken);
+        if (!TryGetUserId(out var userId, out var unauthorized))
+        {
+            return unauthorized;
+        }
+
+        await _sourceService.DeleteSourceAsync(userId, id, cancellationToken);
         return NoContent();
     }
 

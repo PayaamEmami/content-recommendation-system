@@ -161,9 +161,11 @@ public sealed class SourcesControllerTests
     public async Task GetSourcesByCategory_ReturnsOk()
     {
         var controller = CreateController(out var sourceService);
+        var userId = Guid.NewGuid();
+        ControllerTestHelpers.SetUser(controller, userId);
         var sources = new List<SourceResponse> { new() { Id = Guid.NewGuid(), Name = "Cat", Url = "https://example.com" } };
 
-        sourceService.Setup(service => service.GetSourcesByCategoryAsync(ContentType.Paper, It.IsAny<CancellationToken>()))
+        sourceService.Setup(service => service.GetSourcesByCategoryAsync(userId, ContentType.Paper, It.IsAny<CancellationToken>()))
             .ReturnsAsync(sources);
 
         var result = await controller.GetSourcesByCategory(ContentType.Paper, CancellationToken.None);
@@ -223,9 +225,11 @@ public sealed class SourcesControllerTests
         // The controller no longer catches not-found; the global ExceptionHandlingMiddleware maps
         // KeyNotFoundException to a 404 ProblemDetails response.
         var controller = CreateController(out var sourceService);
+        var userId = Guid.NewGuid();
+        ControllerTestHelpers.SetUser(controller, userId);
         var id = Guid.NewGuid();
 
-        sourceService.Setup(service => service.UpdateSourceAsync(id, It.IsAny<UpdateSourceRequest>(), It.IsAny<CancellationToken>()))
+        sourceService.Setup(service => service.UpdateSourceAsync(userId, id, It.IsAny<UpdateSourceRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new KeyNotFoundException("missing"));
 
         await TestAssert.ThrowsAsync<KeyNotFoundException>(() =>
@@ -236,9 +240,11 @@ public sealed class SourcesControllerTests
     public async Task UpdateSource_WhenInvalid_ReturnsBadRequest()
     {
         var controller = CreateController(out var sourceService);
+        var userId = Guid.NewGuid();
+        ControllerTestHelpers.SetUser(controller, userId);
         var id = Guid.NewGuid();
 
-        sourceService.Setup(service => service.UpdateSourceAsync(id, It.IsAny<UpdateSourceRequest>(), It.IsAny<CancellationToken>()))
+        sourceService.Setup(service => service.UpdateSourceAsync(userId, id, It.IsAny<UpdateSourceRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("duplicate"));
 
         var result = await controller.UpdateSource(id, new UpdateSourceRequest(), CancellationToken.None);
@@ -250,10 +256,12 @@ public sealed class SourcesControllerTests
     public async Task UpdateSource_WhenSuccess_ReturnsOk()
     {
         var controller = CreateController(out var sourceService);
+        var userId = Guid.NewGuid();
+        ControllerTestHelpers.SetUser(controller, userId);
         var id = Guid.NewGuid();
         var response = new SourceResponse { Id = id, Name = "Updated", Url = "https://example.com" };
 
-        sourceService.Setup(service => service.UpdateSourceAsync(id, It.IsAny<UpdateSourceRequest>(), It.IsAny<CancellationToken>()))
+        sourceService.Setup(service => service.UpdateSourceAsync(userId, id, It.IsAny<UpdateSourceRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(response);
 
         var result = await controller.UpdateSource(id, new UpdateSourceRequest(), CancellationToken.None);
@@ -269,9 +277,11 @@ public sealed class SourcesControllerTests
         // The controller no longer catches not-found; the global ExceptionHandlingMiddleware maps
         // KeyNotFoundException to a 404 ProblemDetails response.
         var controller = CreateController(out var sourceService);
+        var userId = Guid.NewGuid();
+        ControllerTestHelpers.SetUser(controller, userId);
         var id = Guid.NewGuid();
 
-        sourceService.Setup(service => service.DeleteSourceAsync(id, It.IsAny<CancellationToken>()))
+        sourceService.Setup(service => service.DeleteSourceAsync(userId, id, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new KeyNotFoundException("missing"));
 
         await TestAssert.ThrowsAsync<KeyNotFoundException>(() =>
@@ -282,9 +292,11 @@ public sealed class SourcesControllerTests
     public async Task DeleteSource_WhenSuccess_ReturnsNoContent()
     {
         var controller = CreateController(out var sourceService);
+        var userId = Guid.NewGuid();
+        ControllerTestHelpers.SetUser(controller, userId);
         var id = Guid.NewGuid();
 
-        sourceService.Setup(service => service.DeleteSourceAsync(id, It.IsAny<CancellationToken>()))
+        sourceService.Setup(service => service.DeleteSourceAsync(userId, id, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var result = await controller.DeleteSource(id, CancellationToken.None);

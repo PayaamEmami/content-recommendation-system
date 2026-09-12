@@ -25,9 +25,9 @@ public interface ISourceService
     Task<List<SourceResponse>> GetActiveUserSourcesAsync(Guid userId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets sources by category.
+    /// Gets sources by category for a specific user.
     /// </summary>
-    Task<List<SourceResponse>> GetSourcesByCategoryAsync(ContentType category, CancellationToken cancellationToken = default);
+    Task<List<SourceResponse>> GetSourcesByCategoryAsync(Guid userId, ContentType category, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates a new source.
@@ -35,14 +35,14 @@ public interface ISourceService
     Task<SourceResponse> CreateSourceAsync(Guid userId, CreateSourceRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Updates an existing source.
+    /// Updates an existing source owned by the user.
     /// </summary>
-    Task<SourceResponse> UpdateSourceAsync(Guid id, UpdateSourceRequest request, CancellationToken cancellationToken = default);
+    Task<SourceResponse> UpdateSourceAsync(Guid userId, Guid id, UpdateSourceRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Deletes a source.
+    /// Deletes a source owned by the user.
     /// </summary>
-    Task DeleteSourceAsync(Guid id, CancellationToken cancellationToken = default);
+    Task DeleteSourceAsync(Guid userId, Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Bulk imports multiple sources.
