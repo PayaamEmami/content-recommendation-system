@@ -2,7 +2,9 @@ name: Build and Deploy to AWS
 
 concurrency:
   group: aws-deploy-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel redundant PR runs, but never cancel an in-flight main/deploy run mid
+  # S3 sync or CloudFront invalidation.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   push:

@@ -55,6 +55,13 @@ services:
     # API is only reachable via Caddy on the Docker network.
     expose:
       - "8080"
+    # Rely on the image HEALTHCHECK so dependents wait for /health readiness.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
   caddy:
     image: caddy:2-alpine
@@ -70,7 +77,8 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     networks:
       - crs-network
 
