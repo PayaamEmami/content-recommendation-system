@@ -81,9 +81,9 @@ CRS_API_IMAGE="$(grep '^CRS_API_IMAGE=' "$SCRIPT_DIR/.env" | cut -d= -f2-)"
 log "Logging remote host into ECR and pulling ${CRS_API_IMAGE}"
 ECR_PASSWORD="$(aws ecr get-login-password --region "$REGION")"
 "${SSH[@]}" "echo '${ECR_PASSWORD}' | sudo docker login --username AWS --password-stdin '${ECR_REGISTRY}'"
-"${SSH[@]}" "cd '${REMOTE_DIR}' && sudo docker compose pull api || true"
-# If image pull failed because local build is required, build is not supported here —
-# images must exist in ECR. Fall through to compose up which will error clearly.
+# Fail closed on pull errors. Swallowing failures previously allowed compose up to
+# restart a stale local image and still look successful when /health passed.
+"${SSH[@]}" "cd '${REMOTE_DIR}' && sudo docker compose pull api"
 
 log "Starting stack"
 "${SSH[@]}" "cd '${REMOTE_DIR}' && sudo docker compose up -d"
@@ -100,4 +100,4 @@ for _ in $(seq 1 60); do
 done
 
 log "Stack started but /health not ready yet (last HTTP ${code:-n/a}) — check: ssh -i ${SSH_KEY_PATH} ${SSH_USER}@${STATIC_IP} 'cd ${REMOTE_DIR} && sudo docker compose ps && sudo docker compose logs --tail=100'"
-exit 0
+exit 1
