@@ -100,4 +100,4 @@ for _ in $(seq 1 60); do
 done
 
 log "Stack started but /health not ready yet (last HTTP ${code:-n/a}) — check: ssh -i ${SSH_KEY_PATH} ${SSH_USER}@${STATIC_IP} 'cd ${REMOTE_DIR} && sudo docker compose ps && sudo docker compose logs --tail=100'"
-exit 0
+exit 1
