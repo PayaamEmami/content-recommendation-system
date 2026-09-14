@@ -18,7 +18,7 @@ STATIC_IP="$(aws lightsail get-static-ip --region "$REGION" --static-ip-name "$S
 [[ -n "$STATIC_IP" && "$STATIC_IP" != "None" ]] || { log "Could not resolve static IP"; exit 1; }
 
 if [[ ! -f "$SCRIPT_DIR/.env" ]]; then
-  log "Missing ${SCRIPT_DIR}/.env — copy lightsail.env.example and fill secrets first"
+  log "Missing ${SCRIPT_DIR}/.env — copy env.example and fill secrets first"
   exit 1
 fi
 

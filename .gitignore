@@ -19,8 +19,8 @@ secrets.json
 # Infrastructure secrets (never commit actual secrets!)
 infrastructure/**/*.secrets.*
 infrastructure/**/*-secrets.*
-infrastructure/aws/secrets.env
 infrastructure/aws/.env
+infrastructure/aws/secrets.env
 
 # Build output folders
 publish/

@@ -105,7 +105,7 @@ Edit `src/Crs.Api/appsettings.Development.local.json` with a secure JWT secret (
 export OpenAI__ApiKey=sk-your-openai-key
 ```
 
-See `src/Crs.Api/appsettings.json`, `src/Crs.Jobs/appsettings.json.example`, and `infrastructure/aws/secrets.env.example` for the full configuration surface.
+See `src/Crs.Api/appsettings.json`, `src/Crs.Jobs/appsettings.json.example`, and `infrastructure/aws/env.example` for the full configuration surface.
 
 ### Install Dependencies
 

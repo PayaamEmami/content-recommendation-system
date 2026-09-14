@@ -46,13 +46,13 @@ See `appsettings.json.example` for required configuration values.
 ## Local prerequisites
 
 - **.NET 10 SDK**
-- **Environment variables** from `infrastructure/aws/secrets.env`:
+- **Environment variables** from `infrastructure/aws/.env`:
   - `OpenAI__ApiKey` (used for both embeddings + LLM)
-  - `ConnectionStrings__DefaultConnection` reachable from your machine (Lightsail Postgres)
+  - `ConnectionStrings__DefaultConnection` (jobs rewrite this through an SSH tunnel by default)
 
 ## Running jobs locally
 
-From the repo root, use `scripts/run-job.sh` (loads `secrets.env`). On Windows, use Git Bash or WSL:
+From the repo root, use `scripts/run-job.sh` (loads `infrastructure/aws/.env`, opens an SSH tunnel to Lightsail Postgres). On Windows, use Git Bash or WSL:
 
 ```bash
 # Daily pipeline: x-ingestion always runs; feed runs only if ingestion succeeded
@@ -65,7 +65,7 @@ From the repo root, use `scripts/run-job.sh` (loads `secrets.env`). On Windows, 
 ./scripts/run-job.sh reindex
 ```
 
-Or invoke the worker directly after exporting the same environment variables:
+Prefer `scripts/run-job.sh` so the SSH tunnel is opened. Direct `dotnet run` does not create the tunnel; only use it if you already have `127.0.0.1:15432` (or public 5432 with `--no-tunnel`) reachable:
 
 ```bash
 dotnet run --project src/Crs.Jobs -- ingestion
@@ -83,7 +83,7 @@ Rebuild vector embeddings and reindex all content:
 
 ## Deployment
 
-Jobs run from a machine that can reach Lightsail Postgres:
+Jobs run from a machine that can SSH to Lightsail (the script tunnels Postgres):
 
 ```bash
 ./scripts/run-job.sh

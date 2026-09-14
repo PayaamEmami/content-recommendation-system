@@ -94,13 +94,13 @@ Jobs are implemented in `Crs.Jobs`:
 - **Feed Generation** — Pre-generate personalized feeds per user and content type
 - **X Ingestion** — Sync posts from connected X accounts
 
-Run them with `scripts/run-job.sh` (or `dotnet run`) against Lightsail Postgres.
+Run them with `scripts/run-job.sh` against Lightsail Postgres. Tunnel details live in [`infrastructure/aws/README.md`](infrastructure/aws/README.md).
 
 ## Current Runtime Notes
 
 - **API**: primary deployed runtime is Lightsail Compose (`crs-lightsail-small`) behind Caddy HTTPS. GitHub Actions builds/pushes the API image to ECR and deploys the web app; **pulling a new API image onto Lightsail remains a manual** `infrastructure/aws/deploy-lightsail.sh` step. That script now fails if `/health` does not return 200.
 - **Web**: deployed as Blazor WebAssembly to S3 + CloudFront.
-- **Jobs**: primary runtime is local `scripts/run-job.sh`, writing to Lightsail Postgres (host port `5432` must stay open for the operator CIDR).
+- **Jobs**: primary runtime is local `scripts/run-job.sh`, writing to Lightsail Postgres. The script tunnels over SSH; do not open Postgres to the internet.
 - **Vector search**: pgvector on the Lightsail Postgres instance. Embeddings live in `ContentEmbeddings`.
 - **Recommendation engine**: hybrid scoring with 70% vector similarity and 30% heuristics, with recency dominant inside the heuristic portion.
 - **MCP**: Lambda Function URL wrapping the public HTTPS API. Ingest-one-source is in-band; feed regeneration stays on `scripts/run-job.sh`.
@@ -122,7 +122,7 @@ SQL_CONNECTION_STRING
 ```
 
 - Mapping example: `appsettings.json` key `ConnectionStrings:DefaultConnection` becomes env var `ConnectionStrings__DefaultConnection`.
-- Never commit `infrastructure/aws/secrets.env` or `infrastructure/aws/.env`.
+- Never commit `infrastructure/aws/.env`.
 
 ## Agent Verification Checklist
 

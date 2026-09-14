@@ -9,7 +9,7 @@ Single place for CRS cloud ops: Lightsail API runtime, ECR image builds, and S3/
 | API + Postgres (pgvector) + Caddy | Lightsail instance `crs-lightsail-small` + static IP `crs-lightsail-ip` |
 | API image | ECR `crs-api` |
 | Web (Blazor WASM) | S3 `crs-web-{account}` + CloudFront |
-| Jobs | Local `scripts/run-job.sh` → Lightsail Postgres |
+| Jobs | Local `scripts/run-job.sh` → Lightsail Postgres via SSH tunnel |
 | MCP | Lambda `crs-mcp-server` Function URL (us-west-2) wrapping Crs.Api REST |
 
 Region: **us-west-2**. All resources use the `crs-` prefix.
@@ -29,8 +29,9 @@ The Lightsail instance, static IP, and key pair are already created. Recreate th
 
 ```bash
 cd infrastructure/aws
-cp lightsail.env.example .env
-# fill DB_PASSWORD, OpenAI__ApiKey, JWT_SECRET, CRS_API_IMAGE, CORS origins
+cp env.example .env
+# fill DB_PASSWORD, OpenAI__ApiKey, JWT_SECRET, CRS_API_IMAGE, CORS origins,
+# and ConnectionStrings__DefaultConnection (jobs use an SSH tunnel by default)
 
 ./build-and-push.sh --skip-lightsail   # if ECR has no image yet
 ./deploy-lightsail.sh
@@ -61,17 +62,19 @@ aws lightsail get-static-ip --static-ip-name crs-lightsail-ip --region us-west-2
 
 ### Local jobs
 
-Copy `secrets.env.example` → `secrets.env` (gitignored) and point at Lightsail:
+Use the same `infrastructure/aws/.env`. `scripts/run-job.sh` opens an SSH tunnel
+(`127.0.0.1:15432` → instance `5432`) so jobs do not need public Postgres.
 
-```bash
-ConnectionStrings__DefaultConnection=Host=<crs-lightsail-ip>;Database=crsdb;Username=crsadmin;Password=...
-```
+The connection-string `Host` should be the Lightsail public IP (not `postgres`);
+the script rewrites it to localhost while the tunnel is up. SSH uses
+`~/.ssh/crs-lightsail-key.pem` (same key as `deploy-lightsail.sh`).
 
 ```bash
 ./scripts/run-job.sh
 ```
 
-When your public IP changes (CGNAT/mobile), reopen Lightsail port **5432** for that CIDR or jobs cannot connect.
+`--no-tunnel` uses `ConnectionStrings__DefaultConnection` as-is (direct 5432).
+Keep Lightsail **5432** CIDR-restricted; jobs only need SSH (port 22).
 
 ## MCP
 
@@ -107,12 +110,11 @@ Env vars on the Lambda: `MCP_API_KEY_SHA256`, `CRS_API_BASE_URL`, `CRS_EMAIL`, `
 |------|--------|
 | 80, 443 | Public (Caddy / ACME) |
 | 22 | Prefer admin CIDR; may need broader access on CGNAT |
-| 5432 | Admin / jobs host CIDR only |
+| 5432 | Optional; admin CIDR for direct `psql`. Jobs use SSH, not this port. |
 
 ## Secrets
 
-- **Lightsail host compose:** `infrastructure/aws/.env` (from `lightsail.env.example`) — never commit
-- **Local jobs / shared bootstrap:** `infrastructure/aws/secrets.env` (from `secrets.env.example`) — never commit
+- **One file:** `infrastructure/aws/.env` (from `env.example`) — never commit. Deploy copies it to Lightsail for Compose; `scripts/run-job.sh` loads it locally.
 
 ## Observability (optional)
 
