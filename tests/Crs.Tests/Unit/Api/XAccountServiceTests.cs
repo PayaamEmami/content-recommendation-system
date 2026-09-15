@@ -215,11 +215,13 @@ public sealed class XAccountServiceTests
     public async Task UpdateSelectedAccountsAsync_ReturnsSelection()
     {
         var service = CreateService(new XApiSettings { ClientId = "client", RedirectUri = "https://app.example.com/callback" },
-            out _, out _, out var selectedAccountRepository, out _, out _);
+            out _, out var followedAccountRepository, out var selectedAccountRepository, out _, out _);
 
         var userId = Guid.NewGuid();
         var accountId = Guid.NewGuid();
 
+        followedAccountRepository.Setup(repo => repo.GetByUserIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<XFollowedAccount> { new() { Id = accountId, UserId = userId } });
         selectedAccountRepository.Setup(repo => repo.ReplaceForUserAsync(userId, It.IsAny<List<XSelectedAccount>>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         selectedAccountRepository.Setup(repo => repo.GetByUserIdAsync(userId, It.IsAny<CancellationToken>()))
@@ -229,6 +231,20 @@ public sealed class XAccountServiceTests
 
         Assert.HasCount(1, result);
         Assert.AreEqual(accountId, result[0].XFollowedAccountId);
+    }
+
+    [TestMethod]
+    public async Task UpdateSelectedAccountsAsync_WhenAccountNotOwned_Throws()
+    {
+        var service = CreateService(new XApiSettings { ClientId = "client", RedirectUri = "https://app.example.com/callback" },
+            out _, out var followedAccountRepository, out _, out _, out _);
+
+        var userId = Guid.NewGuid();
+        followedAccountRepository.Setup(repo => repo.GetByUserIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<XFollowedAccount>());
+
+        await TestAssert.ThrowsAsync<InvalidOperationException>(() =>
+            service.UpdateSelectedAccountsAsync(userId, new List<Guid> { Guid.NewGuid() }, CancellationToken.None));
     }
 
     [TestMethod]

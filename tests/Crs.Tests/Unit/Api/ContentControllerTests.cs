@@ -147,4 +147,44 @@ public sealed class ContentControllerTests
         Assert.IsNotNull(okResult);
         Assert.AreSame(response, okResult.Value);
     }
+
+    [TestMethod]
+    public async Task CreateContent_ReturnsForbid()
+    {
+        var controller = CreateController(out _, out _);
+
+        var result = await controller.CreateContent(
+            new Crs.Api.DTOs.Content.Requests.CreateContentRequest
+            {
+                Title = "Injected",
+                Url = "https://example.com/injected",
+                ContentType = ContentType.BlogPost
+            },
+            CancellationToken.None);
+
+        Assert.IsInstanceOfType<ForbidResult>(result);
+    }
+
+    [TestMethod]
+    public async Task UpdateContent_ReturnsForbid()
+    {
+        var controller = CreateController(out _, out _);
+
+        var result = await controller.UpdateContent(
+            Guid.NewGuid(),
+            new Crs.Api.DTOs.Content.Requests.UpdateContentRequest(),
+            CancellationToken.None);
+
+        Assert.IsInstanceOfType<ForbidResult>(result);
+    }
+
+    [TestMethod]
+    public async Task DeleteContent_ReturnsForbid()
+    {
+        var controller = CreateController(out _, out _);
+
+        var result = await controller.DeleteContent(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsInstanceOfType<ForbidResult>(result);
+    }
 }

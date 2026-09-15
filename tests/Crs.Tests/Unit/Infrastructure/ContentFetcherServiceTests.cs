@@ -555,4 +555,20 @@ public class ContentFetcherServiceTests
         Assert.DoesNotContain("Copyright", result.Content!);
         Assert.DoesNotContain("<!--", result.Content!);
     }
+
+    [TestMethod]
+    public async Task FetchContentAsync_BlocksPrivateIpWithoutSendingRequest()
+    {
+        var result = await _service.FetchContentAsync("http://169.254.169.254/latest/meta-data/");
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual(400, result.StatusCode);
+        _mockHttpMessageHandler
+            .Protected()
+            .Verify(
+                "SendAsync",
+                Times.Never(),
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>());
+    }
 }

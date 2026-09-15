@@ -34,9 +34,42 @@ public class ContentFetcherService : IContentFetcherService
     {
         try
         {
+            if (!UrlSafety.IsSafePublicHttpUrl(url, out var rejectionReason))
+            {
+                _logger.LogWarning("Blocked unsafe fetch URL {Url}: {Reason}", url, rejectionReason);
+                return new ContentFetchResult
+                {
+                    Success = false,
+                    StatusCode = 400,
+                    ErrorMessage = rejectionReason ?? "URL is not allowed"
+                };
+            }
+
             _logger.LogInformation("Fetching content from URL: {Url}", url);
 
-            var response = await _httpClient.GetAsync(url, cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using var response = await _httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+
+            // Re-check the final URI after redirects so a public host cannot bounce
+            // into link-local / private ranges (classic SSRF bypass).
+            if (response.RequestMessage?.RequestUri is { } finalUri &&
+                !UrlSafety.IsSafePublicHttpUrl(finalUri.AbsoluteUri, out var redirectReason))
+            {
+                _logger.LogWarning(
+                    "Blocked unsafe redirect target {Url} from {OriginalUrl}: {Reason}",
+                    finalUri,
+                    url,
+                    redirectReason);
+                return new ContentFetchResult
+                {
+                    Success = false,
+                    StatusCode = 400,
+                    ErrorMessage = redirectReason ?? "Redirect target is not allowed"
+                };
+            }
 
             if (!response.IsSuccessStatusCode)
             {

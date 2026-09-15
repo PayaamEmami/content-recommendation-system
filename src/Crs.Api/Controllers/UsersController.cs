@@ -68,9 +68,21 @@ public class UsersController : ApiControllerBase
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(UserDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetUserById(Guid id, CancellationToken cancellationToken)
     {
+        if (!TryGetUserId(out var currentUserId, out var unauthorized))
+        {
+            return unauthorized;
+        }
+
+        // Profiles include email and configured sources; only the owner may read them.
+        if (currentUserId != id)
+        {
+            return Forbid();
+        }
+
         var user = await _userService.GetUserByIdAsync(id, cancellationToken);
         if (user == null)
         {
