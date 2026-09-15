@@ -172,7 +172,19 @@ public class XAccountService : IXAccountService
 
     public async Task<List<XSelectedAccount>> UpdateSelectedAccountsAsync(Guid userId, List<Guid> followedAccountIds, CancellationToken cancellationToken = default)
     {
-        var selected = followedAccountIds.Select(id => new XSelectedAccount
+        var distinctIds = followedAccountIds.Distinct().ToList();
+        if (distinctIds.Count > 0)
+        {
+            var ownedFollowed = await _followedAccountRepository.GetByUserIdAsync(userId, cancellationToken);
+            var ownedIds = ownedFollowed.Select(account => account.Id).ToHashSet();
+            if (distinctIds.Any(id => !ownedIds.Contains(id)))
+            {
+                throw new InvalidOperationException(
+                    "One or more followed accounts do not belong to the current user");
+            }
+        }
+
+        var selected = distinctIds.Select(id => new XSelectedAccount
         {
             XFollowedAccountId = id,
             SelectedAt = DateTime.UtcNow

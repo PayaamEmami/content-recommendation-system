@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Crs.Core.Entities;
 using Crs.Core.Interfaces;
@@ -25,17 +26,43 @@ public class RefreshTokenRepository : IRefreshTokenRepository
 
     public async Task<RefreshToken?> GetAndRemoveAsync(string token, CancellationToken cancellationToken = default)
     {
-        var entity = await _context.RefreshTokens
-            .FirstOrDefaultAsync(x => x.Token == token, cancellationToken);
-
-        if (entity == null)
+        // Rotate under Serializable so two concurrent refreshes cannot both mint
+        // new tokens from the same refresh token (multi-tab / multi-instance race).
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            return null;
-        }
+            await using var transaction = await _context.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
 
-        _context.RefreshTokens.Remove(entity);
-        await _context.SaveChangesAsync(cancellationToken);
-        return entity;
+            try
+            {
+                var entity = await _context.RefreshTokens
+                    .FirstOrDefaultAsync(x => x.Token == token, cancellationToken);
+
+                if (entity == null)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return null;
+                }
+
+                _context.RefreshTokens.Remove(entity);
+                await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return entity;
+            }
+            catch (DbUpdateException)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return null;
+            }
+            catch (InvalidOperationException)
+            {
+                // Serialization conflict from a concurrent consumer of the same token.
+                await transaction.RollbackAsync(cancellationToken);
+                return null;
+            }
+        });
     }
 
     public async Task RemoveExpiredAsync(CancellationToken cancellationToken = default)
