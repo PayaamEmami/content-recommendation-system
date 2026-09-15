@@ -104,7 +104,7 @@ Run them with `scripts/run-job.sh` against Lightsail Postgres. Tunnel details li
 - **Vector search**: pgvector on the Lightsail Postgres instance. Embeddings live in `ContentEmbeddings`.
 - **Recommendation engine**: hybrid scoring with 70% vector similarity and 30% heuristics, with recency dominant inside the heuristic portion.
 - **MCP**: Lambda Function URL wrapping the public HTTPS API. Ingest-one-source is in-band; feed regeneration stays on `scripts/run-job.sh`.
-- **Authz**: Source update/delete/category listing are scoped to the authenticated user. Shared content `PUT`/`DELETE` endpoints return 403 (content is URL-deduped across users).
+- **Authz**: Source update/delete/category listing are scoped to the authenticated user. Shared content `POST`/`PUT`/`DELETE` endpoints return 403 (content is URL-deduped across users; writes go through owned-source ingestion). `GET /users/{id}` is self-only (profiles include email and sources). X selected-account updates must reference the caller's own followed accounts. Ingestion URL fetches reject non-public targets (SSRF guard).
 - **Backups**: no automated Postgres snapshot/PITR is configured in-repo; treat DB backup as an operational gap.
 
 ## Critical Config Conventions

@@ -66,10 +66,33 @@ public sealed class UsersControllerTests
     }
 
     [TestMethod]
+    public async Task GetUserById_WhenDifferentUser_ReturnsForbid()
+    {
+        var controller = CreateController(out _, out _);
+        ControllerTestHelpers.SetUser(controller, Guid.NewGuid());
+
+        var result = await controller.GetUserById(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsInstanceOfType<ForbidResult>(result);
+    }
+
+    [TestMethod]
+    public async Task GetUserById_WhenMissingUser_ReturnsUnauthorized()
+    {
+        var controller = CreateController(out _, out _);
+        ControllerTestHelpers.SetUser(controller, null);
+
+        var result = await controller.GetUserById(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsInstanceOfType<UnauthorizedResult>(result);
+    }
+
+    [TestMethod]
     public async Task GetUserById_WhenNotFound_ReturnsNotFound()
     {
         var controller = CreateController(out var userService, out _);
         var userId = Guid.NewGuid();
+        ControllerTestHelpers.SetUser(controller, userId);
 
         userService.Setup(service => service.GetUserByIdAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((UserDetailResponse?)null);
@@ -80,10 +103,11 @@ public sealed class UsersControllerTests
     }
 
     [TestMethod]
-    public async Task GetUserById_WhenFound_ReturnsOk()
+    public async Task GetUserById_WhenSameUser_ReturnsOk()
     {
         var controller = CreateController(out var userService, out _);
         var userId = Guid.NewGuid();
+        ControllerTestHelpers.SetUser(controller, userId);
         var response = new UserDetailResponse { Id = userId, Email = "user@example.com" };
 
         userService.Setup(service => service.GetUserByIdAsync(userId, It.IsAny<CancellationToken>()))

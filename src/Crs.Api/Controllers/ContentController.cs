@@ -125,13 +125,18 @@ public class ContentController : ApiControllerBase
     [HttpPost]
     [ProducesResponseType(typeof(ContentResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> CreateContent(
+    public Task<IActionResult> CreateContent(
         [FromBody] CreateContentRequest request,
         CancellationToken cancellationToken)
     {
-        var content = await _contentService.CreateContentAsync(request, cancellationToken);
-        return CreatedAtAction(nameof(GetContentById), new { id = content.Id }, content);
+        _ = request;
+        _ = cancellationToken;
+        // Content items are shared across users (URL-deduped). Creating them from the
+        // public API would let any authenticated caller pollute the global corpus and
+        // attach arbitrary SourceIds. Ingestion goes through owned sources / jobs.
+        return Task.FromResult<IActionResult>(Forbid());
     }
 
     /// <summary>
