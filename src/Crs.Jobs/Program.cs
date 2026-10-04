@@ -16,10 +16,14 @@ var isXIngestionJob = string.Equals(jobName, "x-ingestion", StringComparison.Ord
 
 var builder = Host.CreateApplicationBuilder(args);
 
+// CreateApplicationBuilder already loads user secrets in Development, before
+// environment variables. Re-adding them here would override run-job.sh's
+// SSH-tunnel connection string. Load secrets only when the host did not.
 if (string.Equals(
         Environment.GetEnvironmentVariable("Observability__ExecutionEnvironment"),
         "local",
-        StringComparison.OrdinalIgnoreCase))
+        StringComparison.OrdinalIgnoreCase)
+    && !builder.Environment.IsDevelopment())
 {
     builder.Configuration.AddUserSecrets(Assembly.GetExecutingAssembly()!, optional: true);
 }
