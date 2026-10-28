@@ -106,6 +106,7 @@ Run them with `scripts/run-job.sh` against Lightsail Postgres. Tunnel details li
 - **MCP**: Lambda Function URL wrapping the public HTTPS API. Ingest-one-source is in-band; feed regeneration stays on `scripts/run-job.sh`.
 - **Authz**: Source update/delete/category listing are scoped to the authenticated user. Shared content `POST`/`PUT`/`DELETE` endpoints return 403 (content is URL-deduped across users; writes go through owned-source ingestion). `GET /users/{id}` is self-only (profiles include email and sources). X selected-account updates must reference the caller's own followed accounts. Ingestion URL fetches reject non-public targets (SSRF guard).
 - **Backups**: no automated Postgres snapshot/PITR is configured in-repo; treat DB backup as an operational gap.
+- **Local development login**: `dotnet run --project src/Crs.Web` loads `wwwroot/appsettings.Development.json`, which sets `DevelopmentLogin:Enabled`. The landing page then shows **Use development login**. A published production build does not load that file, so the button is absent even when the site is opened on localhost, and `ApiBaseUrl` stays the deployed API. The session stores a local user in the browser and never calls the API. Feeds, sources, preferences, and votes live under the `crs_dev_data` localStorage key; the first visit copies the in-memory seed. **Reset local data** in the user menu clears that key and reloads the seed. Real sign-in still uses the API and Postgres.
 
 ## Critical Config Conventions
 

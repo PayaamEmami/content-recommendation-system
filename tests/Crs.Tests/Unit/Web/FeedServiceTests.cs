@@ -188,7 +188,6 @@ public sealed class FeedServiceTests
             authHttpClient,
             localStorage.Object,
             configuration,
-            new TestNavigationManager(),
             NullLogger<AuthService>.Instance);
     }
 }

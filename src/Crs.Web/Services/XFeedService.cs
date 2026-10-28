@@ -66,6 +66,15 @@ public class XFeedService
     {
         try
         {
+            if (_authService.CurrentState.IsDevelopmentLogin)
+            {
+                return new XCallbackResult
+                {
+                    Success = false,
+                    ErrorMessage = "X connection is unavailable in local development."
+                };
+            }
+
             var request = new XCallbackRequest
             {
                 Code = code,
@@ -160,7 +169,7 @@ public class XFeedService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.GetFollowedAccounts();
+                return await _developmentData.ReadAsync(() => _developmentData.GetFollowedAccounts());
             }
 
             var response = await _api.SendAsync(() =>
@@ -204,7 +213,7 @@ public class XFeedService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.UpdateSelectedAccounts(followedAccountIds);
+                return await _developmentData.WriteAsync(() => _developmentData.UpdateSelectedAccounts(followedAccountIds));
             }
 
             var request = new XSelectedAccountsRequest
@@ -253,7 +262,7 @@ public class XFeedService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.GetPosts(limit);
+                return await _developmentData.ReadAsync(() => _developmentData.GetPosts(limit));
             }
 
             var response = await _api.SendAsync(() =>

@@ -39,6 +39,12 @@ public sealed class AuthorizedApiClient
     /// </summary>
     public async Task<HttpResponseMessage?> SendAsync(Func<Task<HttpResponseMessage>> requestFactory)
     {
+        await _authService.InitializeAsync();
+        if (_authService.CurrentState.IsDevelopmentLogin)
+        {
+            return null;
+        }
+
         if (!await _authService.EnsureAuthenticatedAsync())
         {
             return null;

@@ -1,28 +1,60 @@
+using Blazored.LocalStorage;
 using Crs.Core.Enums;
 
 namespace Crs.Web.Services;
 
 public sealed class DevelopmentDataStore
 {
+    public const string StorageKey = "crs_dev_data";
+
     private static readonly Guid DevUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly Guid PaperId = Guid.Parse("10000000-0000-0000-0000-000000000001");
     private static readonly Guid VideoId = Guid.Parse("10000000-0000-0000-0000-000000000002");
     private static readonly Guid BlogId = Guid.Parse("10000000-0000-0000-0000-000000000003");
 
-    private readonly List<ContentItem> _content;
-    private readonly List<SourceItem> _sources;
-    private readonly List<PreferenceItem> _preferences;
-    private readonly List<XFollowedAccountItem> _followedAccounts;
-    private readonly List<XPostItem> _xPosts;
-    private readonly Dictionary<Guid, VoteType> _votes = new()
-    {
-        [PaperId] = VoteType.Upvote,
-        [BlogId] = VoteType.Downvote
-    };
+    private readonly ILocalStorageService? _localStorage;
+    private List<ContentItem> _content = [];
+    private List<SourceItem> _sources = [];
+    private List<PreferenceItem> _preferences = [];
+    private List<XFollowedAccountItem> _followedAccounts = [];
+    private List<XPostItem> _xPosts = [];
+    private readonly Dictionary<Guid, VoteType> _votes = [];
+    private Task? _loadTask;
 
-    public DevelopmentDataStore()
+    public DevelopmentDataStore(ILocalStorageService? localStorage = null)
+    {
+        _localStorage = localStorage;
+        Seed();
+    }
+
+    public Task EnsureLoadedAsync() => _loadTask ??= LoadCoreAsync();
+
+    public async Task<T> ReadAsync<T>(Func<T> read)
+    {
+        await EnsureLoadedAsync();
+        return read();
+    }
+
+    public async Task<T> WriteAsync<T>(Func<T> write)
+    {
+        await EnsureLoadedAsync();
+        var result = write();
+        await PersistAsync();
+        return result;
+    }
+
+    public async Task ResetAsync()
+    {
+        Seed();
+        await PersistAsync();
+    }
+
+    private void Seed()
     {
         var now = DateTime.UtcNow;
+        _votes.Clear();
+        _votes[PaperId] = VoteType.Upvote;
+        _votes[BlogId] = VoteType.Downvote;
 
         _content =
         [
@@ -156,6 +188,76 @@ public sealed class DevelopmentDataStore
                 QuoteCount = 2
             }
         ];
+    }
+
+    private async Task LoadCoreAsync()
+    {
+        if (_localStorage == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var stored = await _localStorage.GetItemAsync<DevelopmentDataSnapshot>(StorageKey);
+            if (stored?.Content is { Count: > 0 })
+            {
+                Replace(stored);
+                return;
+            }
+
+            await PersistAsync();
+        }
+        catch
+        {
+            // Keep the in-memory seed when browser storage is unavailable.
+        }
+    }
+
+    private async Task PersistAsync()
+    {
+        if (_localStorage == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _localStorage.SetItemAsync(StorageKey, Snapshot());
+        }
+        catch
+        {
+            // Edits stay in memory for this tab when storage cannot be written.
+        }
+    }
+
+    private DevelopmentDataSnapshot Snapshot() => new()
+    {
+        Content = _content.Select(Clone).ToList(),
+        Sources = _sources.Select(Clone).ToList(),
+        Preferences = _preferences.Select(Clone).ToList(),
+        FollowedAccounts = _followedAccounts.Select(Clone).ToList(),
+        XPosts = _xPosts.Select(Clone).ToList(),
+        Votes = new Dictionary<Guid, VoteType>(_votes)
+    };
+
+    private void Replace(DevelopmentDataSnapshot snapshot)
+    {
+        _content = snapshot.Content ?? [];
+        _sources = snapshot.Sources ?? [];
+        _preferences = snapshot.Preferences ?? [];
+        _followedAccounts = snapshot.FollowedAccounts ?? [];
+        _xPosts = snapshot.XPosts ?? [];
+        _votes.Clear();
+        if (snapshot.Votes == null)
+        {
+            return;
+        }
+
+        foreach (var pair in snapshot.Votes)
+        {
+            _votes[pair.Key] = pair.Value;
+        }
     }
 
     public List<ContentItem> GetFeed(ContentType? type = null)
@@ -413,5 +515,15 @@ public sealed class DevelopmentDataStore
         RepostCount = item.RepostCount,
         QuoteCount = item.QuoteCount
     };
+}
+
+public sealed class DevelopmentDataSnapshot
+{
+    public List<ContentItem> Content { get; set; } = [];
+    public List<SourceItem> Sources { get; set; } = [];
+    public List<PreferenceItem> Preferences { get; set; } = [];
+    public List<XFollowedAccountItem> FollowedAccounts { get; set; } = [];
+    public List<XPostItem> XPosts { get; set; } = [];
+    public Dictionary<Guid, VoteType> Votes { get; set; } = [];
 }
 

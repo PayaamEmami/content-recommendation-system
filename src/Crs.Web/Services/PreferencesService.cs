@@ -33,7 +33,7 @@ public class PreferencesService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.GetPreferences();
+                return await _developmentData.ReadAsync(() => _developmentData.GetPreferences());
             }
 
             var response = await _api.SendAsync(() => _httpClient.GetAsync("/api/v1/preferences"));
@@ -58,7 +58,7 @@ public class PreferencesService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.CreatePreference(request);
+                return await _developmentData.WriteAsync(() => _developmentData.CreatePreference(request));
             }
 
             var response = await _api.SendAsync(() =>
@@ -83,7 +83,7 @@ public class PreferencesService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.UpdatePreference(id, request);
+                return await _developmentData.WriteAsync(() => _developmentData.UpdatePreference(id, request));
             }
 
             var response = await _api.SendAsync(() =>
@@ -108,7 +108,7 @@ public class PreferencesService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.DeletePreference(id);
+                return await _developmentData.WriteAsync(() => _developmentData.DeletePreference(id));
             }
 
             var response = await _api.SendAsync(() => _httpClient.DeleteAsync($"/api/v1/preferences/{id}"));

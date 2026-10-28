@@ -1,4 +1,5 @@
 @inject AuthService AuthService
+@inject DevelopmentDataStore DevelopmentData
 @inject IJSRuntime JSRuntime
 @inject NavigationManager NavigationManager
 
@@ -20,6 +21,10 @@
                     <div class="user-menu-dropdown" role="menu">
                         <a href="/preferences" class="user-menu-item" @onclick="CloseUserMenu">Preferences</a>
                         <a href="/settings" class="user-menu-item" @onclick="CloseUserMenu">Settings</a>
+                        @if (AuthService.CurrentState.IsDevelopmentLogin)
+                        {
+                            <button class="user-menu-item" @onclick="HandleResetLocalData">Reset local data</button>
+                        }
                         <button class="user-menu-item" @onclick="HandleLogout">Logout</button>
                     </div>
                 }
@@ -72,6 +77,13 @@
         _isUserMenuOpen = false;
         await AuthService.LogoutAsync();
         NavigationManager.NavigateTo("/", forceLoad: true);
+    }
+
+    private async Task HandleResetLocalData()
+    {
+        _isUserMenuOpen = false;
+        await DevelopmentData.ResetAsync();
+        NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true);
     }
 
     private static string GetInitial(string? value)

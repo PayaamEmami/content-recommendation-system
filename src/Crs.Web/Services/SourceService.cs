@@ -54,7 +54,7 @@ public class SourceService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.GetSources();
+                return await _developmentData.ReadAsync(() => _developmentData.GetSources());
             }
 
             var response = await _api.SendAsync(() => _httpClient.GetAsync("/api/v1/sources"));
@@ -107,7 +107,7 @@ public class SourceService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.AddSource(name, url, category, description);
+                return await _developmentData.WriteAsync(() => _developmentData.AddSource(name, url, category, description));
             }
 
             var request = new CreateSourceRequest
@@ -147,7 +147,7 @@ public class SourceService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.DeleteSource(sourceId);
+                return await _developmentData.WriteAsync(() => _developmentData.DeleteSource(sourceId));
             }
 
             var response = await _api.SendAsync(() => _httpClient.DeleteAsync($"/api/v1/sources/{sourceId}"));
@@ -179,7 +179,7 @@ public class SourceService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.ToggleSource(sourceId);
+                return await _developmentData.WriteAsync(() => _developmentData.ToggleSource(sourceId));
             }
 
             // First, get the current source to determine its state
@@ -241,7 +241,7 @@ public class SourceService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.UpdateSource(sourceId, name, url, category, description);
+                return await _developmentData.WriteAsync(() => _developmentData.UpdateSource(sourceId, name, url, category, description));
             }
 
             // First get the current source to preserve its IsActive state
@@ -302,7 +302,7 @@ public class SourceService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.ImportSources(json);
+                return await _developmentData.WriteAsync(() => _developmentData.ImportSources(json));
             }
 
             var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");

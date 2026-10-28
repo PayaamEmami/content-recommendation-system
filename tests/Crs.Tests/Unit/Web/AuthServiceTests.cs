@@ -164,23 +164,21 @@ public sealed class AuthServiceTests
     }
 
     [TestMethod]
-    public void IsDevelopmentLoginEnabled_WhenRunningOnLocalhost_ReturnsTrue()
+    public void IsDevelopmentLoginEnabled_WhenFlagIsFalse_IgnoresLocalhost()
     {
         var localStorage = new Mock<ILocalStorageService>(MockBehavior.Strict);
         var authService = CreateAuthService(
             localStorage,
-            new HttpTestHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)),
-            navigationManager: new TestNavigationManager("http://localhost:5250/"));
+            new HttpTestHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
 
-        Assert.IsTrue(authService.IsDevelopmentLoginEnabled);
+        Assert.IsFalse(authService.IsDevelopmentLoginEnabled);
     }
 
     private static AuthService CreateAuthService(
         Mock<ILocalStorageService> localStorage,
         HttpTestHandler handler,
         ILogger<AuthService>? logger = null,
-        Dictionary<string, string?>? configurationValues = null,
-        TestNavigationManager? navigationManager = null)
+        Dictionary<string, string?>? configurationValues = null)
     {
         var values = new Dictionary<string, string?>
         {
@@ -209,7 +207,6 @@ public sealed class AuthServiceTests
             httpClient,
             localStorage.Object,
             configuration,
-            navigationManager ?? new TestNavigationManager(),
             logger ?? NullLogger<AuthService>.Instance);
     }
 

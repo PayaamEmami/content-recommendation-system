@@ -70,6 +70,7 @@
         <button type="button" class="btn-secondary landing-dev-login" @onclick="HandleDevelopmentLogin" disabled="@_isLoading">
           Use development login
         </button>
+        <p class="landing-dev-note">Uses sample data stored in this browser.</p>
       }
 
     </section>
@@ -81,7 +82,7 @@
   private string? _errorMessage;
   private bool _isLoading;
   private ElementReference _formHost;
-  private bool ShowDevelopmentLogin => AuthService.IsDevelopmentLoginEnabled || IsLocalBrowser();
+  private bool ShowDevelopmentLogin => AuthService.IsDevelopmentLoginEnabled;
 
   protected override async Task OnInitializedAsync()
   {
@@ -192,18 +193,6 @@
     }
 
     _isLoading = false;
-  }
-
-  private bool IsLocalBrowser()
-  {
-    if (!Uri.TryCreate(Navigation.Uri, UriKind.Absolute, out var uri))
-    {
-      return false;
-    }
-
-    return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-           uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
-           uri.Host.Equals("[::1]", StringComparison.OrdinalIgnoreCase);
   }
 
   private sealed class LoginDomFields

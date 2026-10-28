@@ -77,6 +77,39 @@ public sealed class XFeedServiceTests
         Assert.AreEqual("X authorized the app, but rejected a follow-up API request.", result.ErrorMessage);
     }
 
+    [TestMethod]
+    public async Task HandleCallbackAsync_WhenDevelopmentLogin_DoesNotSendHttp()
+    {
+        var localStorage = new Mock<ILocalStorageService>(MockBehavior.Strict);
+        localStorage.Setup(store => store.SetItemAsync(It.IsAny<string>(), It.IsAny<AuthState>()))
+            .Returns(ValueTask.CompletedTask);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["DevelopmentLogin:Enabled"] = "true"
+            })
+            .Build();
+        var authHandler = new HttpTestHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var authService = new AuthService(
+            new HttpClient(authHandler) { BaseAddress = new Uri("https://example.com") },
+            localStorage.Object,
+            configuration,
+            NullLogger<AuthService>.Instance);
+        await authService.UseDevelopmentLoginAsync();
+
+        var handler = new HttpTestHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var service = new XFeedService(
+            new HttpClient(handler) { BaseAddress = new Uri("https://example.com") },
+            authService,
+            NullLogger<XFeedService>.Instance);
+
+        var result = await service.HandleCallbackAsync("code", "state");
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("X connection is unavailable in local development.", result.ErrorMessage);
+        Assert.HasCount(0, handler.Requests);
+    }
+
     private static AuthService CreateAuthService(Mock<ILocalStorageService> localStorage)
     {
         var configuration = new ConfigurationBuilder().Build();
@@ -87,7 +120,6 @@ public sealed class XFeedServiceTests
             authHttpClient,
             localStorage.Object,
             configuration,
-            new TestNavigationManager(),
             NullLogger<AuthService>.Instance);
     }
 }

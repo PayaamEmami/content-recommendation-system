@@ -133,7 +133,6 @@ public sealed class SourceServiceTests
             authHttpClient,
             localStorage.Object,
             configuration,
-            new TestNavigationManager(),
             NullLogger<AuthService>.Instance);
     }
 }

@@ -36,7 +36,7 @@ public class FeedService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.GetFeed(type);
+                return await _developmentData.ReadAsync(() => _developmentData.GetFeed(type));
             }
 
             var response = await _api.SendAsync(() => _httpClient.GetAsync("/api/v1/recommendations"));
@@ -97,7 +97,7 @@ public class FeedService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.GetVotes();
+                return await _developmentData.ReadAsync(() => _developmentData.GetVotes());
             }
 
             var response = await _api.SendAsync(() => _httpClient.GetAsync("/api/v1/users/me/votes"));
@@ -128,7 +128,7 @@ public class FeedService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.GetVoteHistory();
+                return await _developmentData.ReadAsync(() => _developmentData.GetVoteHistory());
             }
 
             var response = await _api.SendAsync(() => _httpClient.GetAsync("/api/v1/users/me/vote-history"));
@@ -172,7 +172,7 @@ public class FeedService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.Vote(contentId, voteType);
+                return await _developmentData.WriteAsync(() => _developmentData.Vote(contentId, voteType));
             }
 
             var request = new { voteType = voteType };
@@ -206,7 +206,7 @@ public class FeedService
         {
             if (_authService.CurrentState.IsDevelopmentLogin && _developmentData != null)
             {
-                return _developmentData.RemoveVote(contentId);
+                return await _developmentData.WriteAsync(() => _developmentData.RemoveVote(contentId));
             }
 
             var response = await _api.SendAsync(() =>

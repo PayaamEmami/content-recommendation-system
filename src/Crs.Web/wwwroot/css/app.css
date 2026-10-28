@@ -946,6 +946,14 @@ textarea.form-input {
     border-style: dashed;
 }
 
+.landing-dev-note {
+    margin: var(--space-3) 0 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    text-align: center;
+}
+
 /* Blazor Error UI */
 #blazor-error-ui {
     background: var(--error-bg);
