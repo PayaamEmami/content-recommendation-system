@@ -3,78 +3,66 @@
 @inject AuthService AuthService
 @inject IJSRuntime JSRuntime
 
-<PageTitle>Welcome - CRS</PageTitle>
+<PageTitle>Sign in - CRS</PageTitle>
 
 <div class="landing-container">
-  <div class="landing-grid">
-    <section class="landing-card landing-copy-card">
-      <p class="landing-eyebrow">Content Recommendation System</p>
-      <h1 class="landing-title">Welcome</h1>
-      <p class="landing-description">
-        Sign in to discover papers, videos, blogs, and more from your favorite sources,
-        all in one private personalized feed.
-      </p>
-    </section>
+  <section class="landing-card landing-auth-card">
+    <h1 class="landing-eyebrow">Sign in</h1>
 
-    <section class="landing-card landing-auth-card">
-      <p class="landing-eyebrow">Sign in</p>
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+      <AlertMessage Variant="AlertVariant.Error">@_errorMessage</AlertMessage>
+    }
 
-      @if (!string.IsNullOrEmpty(_errorMessage))
-      {
-        <AlertMessage Variant="AlertVariant.Error">@_errorMessage</AlertMessage>
-      }
+    <div @ref="_formHost">
+      <EditForm Model="@_model" OnSubmit="HandleLogin" method="post" class="landing-login-form">
+        <DataAnnotationsValidator />
 
-      <div @ref="_formHost">
-        <EditForm Model="@_model" OnSubmit="HandleLogin" method="post" class="landing-login-form">
-          <DataAnnotationsValidator />
+        <div class="form-group">
+          <label for="home-email">Email</label>
+          <input id="home-email"
+                 class="form-input"
+                 type="email"
+                 name="email"
+                 autocomplete="username"
+                 autocapitalize="none"
+                 autocorrect="off"
+                 spellcheck="false"
+                 inputmode="email"
+                 placeholder="you@example.com"
+                 @oninput="OnEmailInput" />
+          <ValidationMessage For="@(() => _model.Email)" />
+        </div>
 
-          <div class="form-group">
-            <label for="home-email">Email</label>
-            <input id="home-email"
-                   class="form-input"
-                   type="email"
-                   name="email"
-                   autocomplete="username"
-                   autocapitalize="none"
-                   autocorrect="off"
-                   spellcheck="false"
-                   inputmode="email"
-                   placeholder="you@example.com"
-                   @oninput="OnEmailInput" />
-            <ValidationMessage For="@(() => _model.Email)" />
-          </div>
+        <div class="form-group">
+          <label for="home-password">Password</label>
+          <input id="home-password"
+                 class="form-input"
+                 type="password"
+                 name="password"
+                 autocomplete="current-password"
+                 autocapitalize="none"
+                 autocorrect="off"
+                 spellcheck="false"
+                 placeholder="••••••••"
+                 @oninput="OnPasswordInput" />
+          <ValidationMessage For="@(() => _model.Password)" />
+        </div>
 
-          <div class="form-group">
-            <label for="home-password">Password</label>
-            <input id="home-password"
-                   class="form-input"
-                   type="password"
-                   name="password"
-                   autocomplete="current-password"
-                   autocapitalize="none"
-                   autocorrect="off"
-                   spellcheck="false"
-                   placeholder="••••••••"
-                   @oninput="OnPasswordInput" />
-            <ValidationMessage For="@(() => _model.Password)" />
-          </div>
-
-          <button type="submit" class="btn-primary landing-submit" disabled="@_isLoading">
-            @(_isLoading ? "Working..." : "Sign in")
-          </button>
-        </EditForm>
-      </div>
-
-      @if (ShowDevelopmentLogin)
-      {
-        <button type="button" class="btn-secondary landing-dev-login" @onclick="HandleDevelopmentLogin" disabled="@_isLoading">
-          Use development login
+        <button type="submit" class="btn-primary landing-submit" disabled="@_isLoading">
+          @(_isLoading ? "Working..." : "Sign in")
         </button>
-        <p class="landing-dev-note">Uses sample data stored in this browser.</p>
-      }
-
-    </section>
+      </EditForm>
     </div>
+
+    @if (ShowDevelopmentLogin)
+    {
+      <button type="button" class="btn-secondary landing-dev-login" @onclick="HandleDevelopmentLogin" disabled="@_isLoading">
+        Use development login
+      </button>
+    }
+
+  </section>
 </div>
 
 @code {

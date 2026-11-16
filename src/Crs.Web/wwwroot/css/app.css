@@ -888,14 +888,6 @@ textarea.form-input {
     background: var(--bg-secondary);
 }
 
-.landing-grid {
-    display: grid;
-    width: 100%;
-    max-width: 64rem;
-    gap: var(--space-8);
-    grid-template-columns: minmax(0, 1.1fr) minmax(22rem, 0.9fr);
-}
-
 .landing-card {
     padding: var(--space-12);
     border: 1px solid var(--border-color);
@@ -905,6 +897,8 @@ textarea.form-input {
 }
 
 .landing-auth-card {
+    width: 100%;
+    max-width: 28rem;
     padding: var(--space-8);
 }
 
@@ -915,21 +909,6 @@ textarea.form-input {
     font-weight: 600;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-}
-
-.landing-title {
-    margin: var(--space-4) 0 0;
-    font-size: clamp(2.25rem, 5vw, 2.5rem);
-    font-weight: 650;
-    letter-spacing: -0.04em;
-}
-
-.landing-description {
-    max-width: 36rem;
-    margin: var(--space-4) 0 0;
-    color: var(--text-secondary);
-    font-size: 1rem;
-    line-height: 1.75;
 }
 
 .landing-login-form {
@@ -944,14 +923,6 @@ textarea.form-input {
 .landing-dev-login {
     margin-top: var(--space-4);
     border-style: dashed;
-}
-
-.landing-dev-note {
-    margin: var(--space-3) 0 0;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    line-height: 1.5;
-    text-align: center;
 }
 
 /* Blazor Error UI */
@@ -1015,14 +986,6 @@ textarea.form-input {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-    .landing-title {
-        font-size: 2rem;
-    }
-
-    .landing-grid {
-        grid-template-columns: 1fr;
-    }
-
     .landing-card,
     .landing-auth-card {
         padding: var(--space-6);
